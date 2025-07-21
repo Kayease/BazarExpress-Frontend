@@ -1,9 +1,12 @@
 "use client"
 
 import { useState } from "react"
-import { FileText, Calendar, Scale, Shield, Truck, CreditCard, RefreshCw, AlertTriangle, CheckCircle, Download, ExternalLink } from "lucide-react"
+import { useRouter } from "next/navigation"
+import Link from "next/link"
+import { FileText, Calendar, Scale, Shield, Truck, CreditCard, RefreshCw, AlertTriangle, CheckCircle, Download, ExternalLink, Phone } from "lucide-react"
 
 export default function TermsPage() {
+  const router = useRouter();
   const [activeSection, setActiveSection] = useState<string | null>(null)
 
   const toggleSection = (section: string) => {
@@ -274,6 +277,25 @@ Business Hours: Monday to Sunday, 9:00 AM to 9:00 PM IST`
           <p className="text-green-800 mb-4">
             Your continued use of our platform constitutes acceptance of these terms and conditions.
           </p>
+        </div>
+
+        {/* Contact for Support */}
+        <div className="mt-8 bg-gradient-to-r from-blue-50 to-green-50 rounded-2xl p-8 text-center">
+          <div className="max-w-2xl mx-auto">
+            <h2 className="text-2xl font-bold text-gray-900 mb-3">
+              Questions About Our Terms?
+            </h2>
+            <p className="text-gray-600 mb-6">
+              Our customer support team is available to help you understand our terms and conditions.
+            </p>  
+            <button 
+              onClick={() => router.push('/contact')}
+              className="bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 transition font-medium flex items-center justify-center mx-auto space-x-2"
+            >
+              <Phone className="w-4 h-4 mr-2" />
+              <span>Contact Support</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

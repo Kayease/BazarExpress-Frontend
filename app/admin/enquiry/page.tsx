@@ -2,10 +2,18 @@
 
 import { useState, useEffect } from "react"
 import AdminLayout from "../../../components/AdminLayout"
-import { Eye, Trash2, CheckCircle2, Clock, MessageCircle } from "lucide-react"
-import { useAppSelector } from '../../../lib/store';
-import { useRouter } from 'next/navigation';
-import toast from "react-hot-toast";
+import { 
+  Eye, 
+  Trash2, 
+  CheckCircle2, 
+  Clock, 
+  MessageCircle, 
+  Filter, 
+  RefreshCw 
+} from "lucide-react"
+import { useAppSelector } from '../../../lib/store'
+import { useRouter } from 'next/navigation'
+import toast from "react-hot-toast"
 
 interface Contact {
   _id: string;
@@ -13,6 +21,8 @@ interface Contact {
   email: string;
   subject: string;
   message: string;
+  category?: string;
+  categoryLabel?: string;
   status: 'new' | 'read' | 'replied';
   createdAt: string;
   ipAddress?: string;
@@ -43,12 +53,18 @@ export default function AdminEnquiry() {
   }
 
   const [contacts, setContacts] = useState<Contact[]>([])
+  const [filteredContacts, setFilteredContacts] = useState<Contact[]>([])
   const [loading, setLoading] = useState(false)
   const [viewing, setViewing] = useState<Contact | null>(null)
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [contactToDelete, setContactToDelete] = useState<Contact | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
+  
+  // Filters
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [searchTerm, setSearchTerm] = useState<string>("");
 
   const fetchContacts = async () => {
     setLoading(true);
@@ -57,12 +73,41 @@ export default function AdminEnquiry() {
       if (!res.ok) throw new Error("Failed to fetch contacts");
       const data = await res.json();
       setContacts(data);
+      setFilteredContacts(data);
     } catch (err) {
       toast.error("Could not load contacts");
     } finally {
       setLoading(false);
     }
   };
+
+  // Apply filters whenever filter state changes
+  useEffect(() => {
+    let result = [...contacts];
+    
+    // Apply status filter
+    if (statusFilter !== "all") {
+      result = result.filter(contact => contact.status === statusFilter);
+    }
+    
+    // Apply category filter
+    if (categoryFilter !== "all") {
+      result = result.filter(contact => contact.category === categoryFilter);
+    }
+    
+    // Apply search term
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      result = result.filter(contact => 
+        contact.name.toLowerCase().includes(term) || 
+        contact.email.toLowerCase().includes(term) || 
+        contact.subject.toLowerCase().includes(term) ||
+        contact.message.toLowerCase().includes(term)
+      );
+    }
+    
+    setFilteredContacts(result);
+  }, [statusFilter, categoryFilter, searchTerm, contacts]);
 
   const handleStatusUpdate = async (contactId: string, newStatus: 'new' | 'read' | 'replied') => {
     try {
@@ -134,12 +179,83 @@ export default function AdminEnquiry() {
     }
   };
 
+  const getCategoryColor = (category?: string) => {
+    switch (category) {
+      case 'general':
+        return 'bg-purple-100 text-purple-800';
+      case 'order':
+        return 'bg-green-100 text-green-800';
+      case 'technical':
+        return 'bg-blue-100 text-blue-800';
+      case 'feedback':
+        return 'bg-orange-100 text-orange-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
   return (
     <AdminLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
           <div className="font-semibold text-lg">Enquiries</div>
+          
+          {/* Filters */}
+          <div className="flex flex-col md:flex-row gap-3 items-start md:items-center">
+            <div className="flex items-center">
+              <input
+                type="text"
+                placeholder="Search enquiries..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-1 focus:ring-brand-primary"
+              />
+              <button 
+                onClick={() => setSearchTerm("")}
+                className={`px-2 py-2 bg-gray-100 border-y border-r border-gray-300 rounded-r-md ${searchTerm ? 'text-gray-700' : 'text-gray-400'}`}
+                disabled={!searchTerm}
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <select 
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-brand-primary"
+              >
+                <option value="all">All Status</option>
+                <option value="new">New</option>
+                <option value="read">Read</option>
+                <option value="replied">Replied</option>
+              </select>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <select 
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-brand-primary"
+              >
+                <option value="all">All Categories</option>
+                <option value="general">General Inquiry</option>
+                <option value="order">Order Support</option>
+                <option value="technical">Technical Issue</option>
+                <option value="feedback">Feedback</option>
+              </select>
+            </div>
+            
+            <button 
+              onClick={fetchContacts}
+              className="inline-flex items-center justify-center px-4 py-2 bg-brand-primary hover:bg-brand-primary-dark text-white rounded-md"
+            >
+              <RefreshCw className="h-4 w-4 mr-1" />
+              Refresh
+            </button>
+          </div>
         </div>
+        
         <div className="bg-white rounded-lg shadow p-6">
           <table className="w-full text-left border-separate border-spacing-y-2">
             <thead>
@@ -147,6 +263,7 @@ export default function AdminEnquiry() {
                 <th className="py-3 px-4 font-semibold">Name</th>
                 <th className="py-3 px-4 font-semibold">Email</th>
                 <th className="py-3 px-4 font-semibold">Subject</th>
+                <th className="py-3 px-4 font-semibold hidden md:table-cell">Category</th>
                 <th className="py-3 px-4 font-semibold">Date</th>
                 <th className="py-3 px-4 font-semibold">Status</th>
                 <th className="py-3 px-4 font-semibold text-center">Actions</th>
@@ -155,27 +272,48 @@ export default function AdminEnquiry() {
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center">
+                  <td colSpan={7} className="py-8 text-center">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-primary mx-auto"></div>
                   </td>
                 </tr>
               )}
-              {!loading && contacts.length === 0 && (
+              {!loading && filteredContacts.length === 0 && (
                 <tr>
-                  <td colSpan={6}>
+                  <td colSpan={7}>
                     <div className="flex flex-col items-center justify-center py-16">
                       <MessageCircle className="h-12 w-12 text-brand-primary mb-4" />
-                      <div className="text-lg text-gray-500 mb-2">No enquiries yet.</div>
-                      <div className="text-sm text-gray-400 mb-6">All customer enquiries will appear here.</div>
+                      <div className="text-lg text-gray-500 mb-2">No enquiries found.</div>
+                      <div className="text-sm text-gray-400 mb-6">
+                        {(statusFilter !== "all" || categoryFilter !== "all" || searchTerm) 
+                          ? "Try adjusting your filters or search term."
+                          : "All customer enquiries will appear here."}
+                      </div>
+                      {(statusFilter !== "all" || categoryFilter !== "all" || searchTerm) && (
+                        <button
+                          onClick={() => {
+                            setStatusFilter("all");
+                            setCategoryFilter("all");
+                            setSearchTerm("");
+                          }}
+                          className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-md text-sm"
+                        >
+                          Clear Filters
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
               )}
-              {contacts.map(contact => (
+              {filteredContacts.map(contact => (
                 <tr key={contact._id} className="bg-white border-b">
                   <td className="py-3 px-4 align-middle font-semibold text-brand-primary">{contact.name}</td>
                   <td className="py-3 px-4 align-middle">{contact.email}</td>
                   <td className="py-3 px-4 align-middle">{contact.subject}</td>
+                  <td className="py-3 px-4 align-middle hidden md:table-cell">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getCategoryColor(contact.category)}`}>
+                      {contact.categoryLabel || 'General Inquiry'}
+                    </span>
+                  </td>
                   <td className="py-3 px-4 align-middle">{new Date(contact.createdAt).toLocaleDateString()}</td>
                   <td className="py-3 px-4 align-middle">
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(contact.status)}`}>
@@ -213,6 +351,7 @@ export default function AdminEnquiry() {
               <div className="mb-2"><span className="font-semibold">Name:</span> {viewing.name}</div>
               <div className="mb-2"><span className="font-semibold">Email:</span> {viewing.email}</div>
               <div className="mb-2"><span className="font-semibold">Subject:</span> {viewing.subject}</div>
+              <div className="mb-2"><span className="font-semibold">Category:</span> {viewing.categoryLabel || 'General Inquiry'}</div>
               <div className="mb-2"><span className="font-semibold">Date:</span> {new Date(viewing.createdAt).toLocaleString()}</div>
               <div className="mb-4">
                 <span className="font-semibold">Message:</span>

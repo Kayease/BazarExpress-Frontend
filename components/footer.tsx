@@ -25,8 +25,56 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { useState } from "react";
+import toast from "react-hot-toast";
+import { API_URL } from "../lib/config";
 
 export default function Footer() {
+  const [email, setEmail] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleNewsletterSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      toast.error("Please enter a valid email address");
+      return;
+    }
+    
+    setIsSubmitting(true);
+    
+    try {
+      // Use API_URL from config
+      const response = await fetch(`${API_URL}/newsletter/subscribe`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, source: "footer" }),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to subscribe");
+      }
+      
+      toast.success(data.message || "Thank you for subscribing to our newsletter!");
+      setEmail("");
+    } catch (error) {
+      console.error("Newsletter subscription error:", error);
+      toast.error(
+        typeof error === "object" && error !== null && "message" in error
+          ? (error as { message?: string }).message || "Failed to subscribe. Please try again."
+          : "Failed to subscribe. Please try again."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const quickLinks = [
     { name: "Blog", href: "/blog", icon: HelpCircle },
     { name: "FAQs", href: "/faq", icon: HelpCircle },
@@ -188,16 +236,28 @@ export default function Footer() {
             {/* Newsletter Signup - Visible on all screens */}
             <div className="space-y-3">
               <h5 className="font-medium text-white">Stay Updated</h5>
-              <div className="flex">
+              <form onSubmit={handleNewsletterSubmit} className="flex">
                 <input
                   type="email"
                   placeholder="Enter your email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded-l-lg text-white text-sm focus:outline-none focus:border-green-400 transition-colors"
+                  required
+                  disabled={isSubmitting}
                 />
-                <button className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-r-lg transition-colors">
-                  <Send size={16} />
+                <button 
+                  type="submit" 
+                  className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-r-lg transition-colors flex items-center justify-center"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    <Send size={16} />
+                  )}
                 </button>
-              </div>
+              </form>
             </div>
           </div>
         </div>

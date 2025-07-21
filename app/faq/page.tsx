@@ -1,36 +1,41 @@
 "use client"
 
 import { ChevronDown, ChevronUp, Search, MessageCircle, Phone, Mail, Clock, Star, Shield, Truck, CreditCard, RefreshCw, Smartphone, Globe, HelpCircle } from "lucide-react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
+import Link from "next/link"
 
 export default function FAQPage() {
+  const router = useRouter();
   const [expandedItems, setExpandedItems] = useState<number[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
+  const [filteredResults, setFilteredResults] = useState<any[]>([])
 
   const faqs = [
-    // Orders & Delivery
-    {
-      id: 1,
-      category: "Orders & Delivery",
-      question: "How fast is the delivery?",
-      answer: "We deliver groceries in 8-12 minutes on average. Our delivery partners are strategically located to ensure quick delivery to your doorstep. During peak hours or adverse weather conditions, delivery might take up to 15-20 minutes.",
-      icon: Truck,
-    },
-    {
-      id: 2,
-      category: "Orders & Delivery",
-      question: "What are the delivery charges?",
-      answer: "Delivery is free on orders above ₹99. For orders below ₹99, a delivery charge of ₹25 applies. We also offer BazarXpress Plus membership for unlimited free deliveries.",
-      icon: Truck,
-    },
-    {
-      id: 3,
-      category: "Orders & Delivery",
-      question: "What are your delivery hours?",
-      answer: "We deliver 24/7 in most areas. However, some locations have specific delivery windows from 6 AM to 11 PM. You can check your area's delivery hours in the app.",
-      icon: Clock,
-    },
+
+   // General
+   {
+    id: 1,
+    category: "General",
+    question: "Which areas do you deliver to?",
+    answer: "We currently deliver to 50+ cities across India. You can check if we deliver to your area by entering your pincode on our app or website.",
+    icon: Globe,
+  },
+  {
+    id: 2,
+    category: "General",
+    question: "How do you ensure product quality?",
+    answer: "We have strict quality checks at our warehouses, temperature-controlled storage for fresh items, and regular audits of our supply chain to ensure you get the best quality products.",
+    icon: Shield,
+  },
+  {
+    id: 3,
+    category: "General",
+    question: "Do you have customer support?",
+    answer: "Yes, we have 24/7 customer support available through chat, email, and phone. You can reach us through the app, website, or call our helpline.",
+    icon: HelpCircle,
+  },
     {
       id: 4,
       category: "Orders & Delivery",
@@ -181,58 +186,65 @@ export default function FAQPage() {
       answer: "Coupons may not work due to expiry, minimum order requirements, product restrictions, or if you've already used it. Check the coupon terms and conditions.",
       icon: Star,
     },
-
-    // General
+    // Orders & Delivery
     {
       id: 24,
-      category: "General",
-      question: "Which areas do you deliver to?",
-      answer: "We currently deliver to 50+ cities across India. You can check if we deliver to your area by entering your pincode on our app or website.",
-      icon: Globe,
+      category: "Orders & Delivery",
+      question: "How fast is the delivery?",
+      answer: "We deliver groceries in 8-12 minutes on average. Our delivery partners are strategically located to ensure quick delivery to your doorstep. During peak hours or adverse weather conditions, delivery might take up to 15-20 minutes.",
+      icon: Truck,
     },
     {
       id: 25,
-      category: "General",
-      question: "How do you ensure product quality?",
-      answer: "We have strict quality checks at our warehouses, temperature-controlled storage for fresh items, and regular audits of our supply chain to ensure you get the best quality products.",
-      icon: Shield,
+      category: "Orders & Delivery",
+      question: "What are the delivery charges?",
+      answer: "Delivery is free on orders above ₹99. For orders below ₹99, a delivery charge of ₹25 applies. We also offer BazarXpress Plus membership for unlimited free deliveries.",
+      icon: Truck,
     },
     {
       id: 26,
-      category: "General",
-      question: "Do you have customer support?",
-      answer: "Yes, we have 24/7 customer support available through chat, email, and phone. You can reach us through the app, website, or call our helpline.",
-      icon: HelpCircle,
+      category: "Orders & Delivery",
+      question: "What are your delivery hours?",
+      answer: "We deliver 24/7 in most areas. However, some locations have specific delivery windows from 6 AM to 11 PM. You can check your area's delivery hours in the app.",
+      icon: Clock,
     },
   ]
+
+  // Filter FAQs whenever search query or category changes
+  useEffect(() => {
+    const results = faqs.filter((faq) => {
+      const matchesSearch = 
+        searchQuery === "" || 
+        faq.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        faq.answer.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        faq.category.toLowerCase().includes(searchQuery.toLowerCase())
+      
+      const matchesCategory = selectedCategory === "all" || faq.category === selectedCategory
+      
+      return matchesSearch && matchesCategory
+    })
+    
+    setFilteredResults(results)
+  }, [searchQuery, selectedCategory])
 
   const toggleExpanded = (id: number) => {
     setExpandedItems((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]))
   }
 
-  const filteredFAQs = faqs.filter((faq) => {
-    const matchesSearch = 
-      faq.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      faq.answer.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      faq.category.toLowerCase().includes(searchQuery.toLowerCase())
-    
-    const matchesCategory = selectedCategory === "all" || faq.category === selectedCategory
-    
-    return matchesSearch && matchesCategory
-  })
-
   const categories = [...new Set(faqs.map((faq) => faq.category))]
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-6xl mx-auto px-4 py-12">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {/* Header */}
         <div className="text-center mb-12">
-          <div className="flex items-center justify-center space-x-3 mb-4">
-            <HelpCircle className="w-12 h-12 text-green-600" />
-            <h1 className="text-4xl font-bold text-gray-900">Frequently Asked Questions</h1>
+          <div className="flex flex-col md:flex-row items-center justify-center md:space-x-3 mb-4">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4 md:mb-0">
+              <HelpCircle className="w-8 h-8 text-green-600" />
+            </div>
+            <h1 className="text-3xl md:text-4xl font-bold text-gray-900">Frequently Asked Questions</h1>
           </div>
-          <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+          <p className="text-lg md:text-xl text-gray-600 max-w-3xl mx-auto">
             Find answers to common questions about BazarXpress. Can't find what you're looking for? Contact our support team.
           </p>
         </div>
@@ -250,7 +262,7 @@ export default function FAQPage() {
         </div>
 
         {/* Categories */}
-        <div className="flex flex-wrap justify-center gap-3 mb-12">
+        <div className="flex flex-wrap justify-center gap-4 mb-12">
           <button
             onClick={() => setSelectedCategory("all")}
             className={`px-6 py-3 rounded-full text-sm font-medium transition-all ${
@@ -278,7 +290,7 @@ export default function FAQPage() {
 
         {/* FAQ Items */}
         <div className="grid gap-6 max-w-4xl mx-auto">
-          {filteredFAQs.map((faq) => {
+          {filteredResults.map((faq) => {
             const IconComponent = faq.icon
             return (
               <div key={faq.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
@@ -314,52 +326,56 @@ export default function FAQPage() {
           })}
         </div>
 
-        {filteredFAQs.length === 0 && (
-          <div className="text-center py-16">
+        {/* No Results Found - Contact Support */}
+        {filteredResults.length === 0 && (
+          <div className="bg-white rounded-xl shadow-md p-8 text-center max-w-4xl mx-auto my-8">
             <Search className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">No FAQs found</h3>
-            <p className="text-gray-500 mb-6">Try adjusting your search or browse different categories.</p>
-            <button
-              onClick={() => {
-                setSearchQuery("")
-                setSelectedCategory("all")
-              }}
-              className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition"
-            >
-              Clear Filters
-            </button>
-          </div>
-        )}
-
-        {/* Contact Support */}
-        <div className="mt-16 bg-gradient-to-r from-green-50 to-blue-50 rounded-2xl p-8 text-center">
-          <div className="max-w-2xl mx-auto">
-            <h2 className="text-2xl font-bold text-gray-900 mb-3">Still have questions?</h2>
-            <p className="text-gray-600 mb-6">Our support team is here to help you 24/7. Get in touch with us through any of these channels.</p>
-            
-            <div className="grid md:grid-cols-3 gap-4 mb-6">
-              <div className="bg-white rounded-lg p-4 shadow-sm">
-                <MessageCircle className="w-8 h-8 text-green-600 mx-auto mb-2" />
-                <h3 className="font-semibold text-gray-900 mb-1">Live Chat</h3>
-                <p className="text-sm text-gray-600">Available 24/7</p>
-              </div>
-              <div className="bg-white rounded-lg p-4 shadow-sm">
-                <Phone className="w-8 h-8 text-green-600 mx-auto mb-2" />
-                <h3 className="font-semibold text-gray-900 mb-1">Call Us</h3>
-                <p className="text-sm text-gray-600">1800-123-4567</p>
-              </div>
-              <div className="bg-white rounded-lg p-4 shadow-sm">
-                <Mail className="w-8 h-8 text-green-600 mx-auto mb-2" />
-                <h3 className="font-semibold text-gray-900 mb-1">Email</h3>
-                <p className="text-sm text-gray-600">support@bazarxpress.com</p>
-              </div>
+            <h3 className="text-2xl font-semibold text-gray-900 mb-2">No results found</h3>
+            <p className="text-gray-600 mb-6 max-w-lg mx-auto">
+              We couldn't find any FAQs matching "{searchQuery}". Please try different keywords or contact our support team for assistance.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <button
+                onClick={() => {
+                  setSearchQuery("")
+                  setSelectedCategory("all")
+                }}
+                className="bg-gray-200 text-gray-800 px-6 py-3 rounded-lg hover:bg-gray-300 transition"
+              >
+                Clear Search
+              </button>
+              <button
+                onClick={() => router.push('/contact')}
+                className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition flex items-center justify-center space-x-2"
+              >
+                <Phone className="w-4 h-4" />
+                <span>Contact Support</span>
+              </button>
             </div>
             
-            <button className="bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 transition font-medium">
-              Contact Support
-            </button>
+            {/* Contact Options */}
+            <div className="mt-10 border-t border-gray-200 pt-8">
+              <h4 className="text-lg font-medium text-gray-900 mb-4">Other ways to get help</h4>
+              <div className="grid md:grid-cols-3 gap-4">
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <MessageCircle className="w-8 h-8 text-green-600 mx-auto mb-2" />
+                  <h5 className="font-semibold text-gray-900 mb-1">Live Chat</h5>
+                  <p className="text-sm text-gray-600">Available 24/7</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <Phone className="w-8 h-8 text-green-600 mx-auto mb-2" />
+                  <h5 className="font-semibold text-gray-900 mb-1">Call Us</h5>
+                  <p className="text-sm text-gray-600">1800-123-4567</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <Mail className="w-8 h-8 text-green-600 mx-auto mb-2" />
+                  <h5 className="font-semibold text-gray-900 mb-1">Email</h5>
+                  <p className="text-sm text-gray-600">support@bazarxpress.com</p>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   )

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import AdminLayout from "../../../components/AdminLayout"
 import { useAppSelector } from '../../../lib/store'
-import { BarChart3, TrendingUp, TrendingDown, DollarSign, Users, ShoppingCart, Calendar } from "lucide-react"
+import { BarChart3, TrendingUp, TrendingDown, IndianRupee, Users, ShoppingCart, Calendar } from "lucide-react"
 
 export default function AdminReports() {
   const user = useAppSelector((state) => state.auth.user)
@@ -74,7 +74,7 @@ export default function AdminReports() {
                 </p>
               </div>
               <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                <DollarSign className="h-6 w-6 text-green-600" />
+                <IndianRupee className="h-6 w-6 text-green-600" />
               </div>
             </div>
           </div>

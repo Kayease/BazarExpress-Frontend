@@ -1,6 +1,8 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { 
   Cookie, 
   Calendar, 
@@ -15,10 +17,12 @@ import {
   AlertTriangle,
   CheckCircle,
   X,
-  Info
+  Info,
+  Phone
 } from "lucide-react"
 
 export default function CookiePolicyPage() {
+  const router = useRouter();
   const [expandedSections, setExpandedSections] = useState<string[]>([])
   const [cookieSettings, setCookieSettings] = useState({
     essential: true,
@@ -347,8 +351,12 @@ These third parties have their own privacy policies and cookie practices. We rec
           <p className="text-gray-600 mb-6">
             If you have any questions about our cookie policy or need help managing your preferences, contact us.
           </p>
-          <button className="bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 transition font-medium">
-            Contact Support
+          <button 
+            onClick={() => router.push('/contact')}
+            className="bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 transition font-medium flex items-center justify-center mx-auto space-x-2"
+          >
+            <Phone className="w-4 h-4 mr-2" />
+            <span>Contact Support</span>
           </button>
         </div>
       </div>

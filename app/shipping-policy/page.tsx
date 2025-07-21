@@ -1,6 +1,8 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { 
   Truck, 
   Calendar, 
@@ -20,6 +22,7 @@ import {
 } from "lucide-react"
 
 export default function ShippingPolicyPage() {
+  const router = useRouter();
   const [expandedSections, setExpandedSections] = useState<string[]>([])
 
   const toggleSection = (sectionId: string) => {
@@ -395,8 +398,12 @@ Subscription Delivery:
           <p className="text-gray-600 mb-6">
           Need help with your delivery? Our support team is available 24/7 to assist you.
           </p>
-          <button className="bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 transition font-medium">
-            Contact Support
+          <button 
+            onClick={() => router.push('/contact')}
+            className="bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 transition font-medium flex items-center justify-center mx-auto space-x-2"
+          >
+            <Phone className="w-4 h-4 mr-2" />
+            <span>Contact Support</span>
           </button>
         </div>
 

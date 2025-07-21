@@ -64,8 +64,6 @@ const AnimatedCounter: React.FC<AnimatedCounterProps> = ({
   duration = 2000,
   suffix = "",
 }) => {
-
-
   const [count, setCount] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
   const [ref, isIntersecting] = useIntersectionObserver({ 
@@ -114,7 +112,7 @@ const AnimatedCounter: React.FC<AnimatedCounterProps> = ({
       <div
         className={`text-3xl md:text-4xl font-bold mb-2 transition-all duration-500 ${
           isAnimating
-            ? "text-green-600 animate-glow"
+            ? "text-green-600"
             : "text-gray-900 hover:text-green-600"
         } hover:scale-105 transform`}
       >
@@ -128,17 +126,6 @@ const AnimatedCounter: React.FC<AnimatedCounterProps> = ({
           {formatNumber(count)}
         </span>
       </div>
-
-      {/* Animated background glow effect */}
-      {isIntersecting && (
-        <div
-          className={`absolute inset-0 rounded-lg blur-xl transition-opacity duration-1000 ${
-            isAnimating
-              ? "bg-green-400/30 opacity-70 animate-pulse"
-              : "bg-green-400/10 opacity-30"
-          }`}
-        ></div>
-      )}
 
       {/* Sparkle effects during animation */}
       {isAnimating && (
@@ -172,7 +159,7 @@ const AnimatedSection: React.FC<AnimatedSectionProps> = ({
       className={`transition-all duration-1000 ease-out ${
         isIntersecting ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
       } ${className}`}
-      style={{ transitionDelay: `${delay}ms` }}
+      style={{ transitionDelay: isIntersecting ? `${delay}ms` : "0ms" }}
     >
       {children}
     </div>
@@ -288,44 +275,6 @@ export default function AboutPage() {
     },
   ];
 
-  const milestones: MilestoneItem[] = [
-    {
-      year: "2020",
-      title: "The Beginning",
-      description:
-        "BazarXpress was founded with a simple mission: make shopping effortless and instant.",
-      icon: Lightbulb,
-    },
-    {
-      year: "2021",
-      title: "Rapid Growth",
-      description:
-        "Expanded to 10 cities and reached 1 million customers with our innovative delivery model.",
-      icon: TrendingUp,
-    },
-    {
-      year: "2022",
-      title: "Technology Revolution",
-      description:
-        "Launched AI-powered recommendations and predictive inventory management.",
-      icon: Zap,
-    },
-    {
-      year: "2023",
-      title: "Market Leader",
-      description:
-        "Became India's fastest-growing quick commerce platform with 10M+ users.",
-      icon: Award,
-    },
-    {
-      year: "2024",
-      title: "Global Vision",
-      description:
-        "Expanding internationally while maintaining our commitment to speed and quality.",
-      icon: Globe,
-    },
-  ];
-
   const team: TeamMember[] = [
     {
       name: "Rajesh Kumar",
@@ -427,16 +376,16 @@ export default function AboutPage() {
           <AnimatedSection className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
             <div className="animate-fade-in-up">
               <h1 className="text-5xl md:text-6xl font-bold mb-6 leading-tight">
-                <span className="inline-block animate-slide-in-left">
+                <span className="inline-block">
                   Revolutionizing
                 </span>
-                <span className="block text-yellow-300 animate-slide-in-right">
+                <span className="block text-yellow-300">
                   Quick Commerce
                 </span>
               </h1>
             </div>
 
-            <div className="animate-fade-in-up animation-delay-300">
+            <div className="animate-fade-in-up">
               <p className="text-xl md:text-2xl mb-8 max-w-3xl mx-auto leading-relaxed opacity-90">
                 We're not just delivering products – we're delivering
                 convenience, speed, and reliability to millions of customers
@@ -699,116 +648,6 @@ export default function AboutPage() {
                 </div>
               )}
             </AnimatedSection>
-          </AnimatedSection>
-        </section>
-
-        {/* Journey Timeline */}
-        <section
-          id="journey"
-          className="py-12 md:py-16 bg-white relative overflow-hidden"
-        >
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-50/30 to-purple-50/30"></div>
-          <AnimatedSection className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-8 md:mb-12">
-              <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4 animate-fade-in-up">
-                Our Journey
-              </h2>
-              <p className="text-lg md:text-xl text-gray-600 max-w-2xl mx-auto animate-fade-in-up animation-delay-200">
-                From a simple idea to India's fastest-growing quick commerce
-                platform
-              </p>
-            </div>
-
-            <div className="relative">
-              {/* Animated Timeline Line - Responsive */}
-              <div className="absolute left-8 md:left-1/2 transform md:-translate-x-1/2 w-1 h-full bg-gradient-to-b from-green-200 via-green-400 to-green-600 animate-pulse"></div>
-
-              {milestones.map((milestone, index) => {
-                const IconComponent = milestone.icon;
-                return (
-                  <AnimatedSection
-                    key={index}
-                    delay={index * 300}
-                    className={`relative flex items-center mb-8 md:mb-12 ${
-                      // Mobile: always left-aligned, Desktop: alternating
-                      "flex-row md:" + (index % 2 === 0 ? "flex-row" : "flex-row-reverse")
-                    }`}
-                  >
-                    {/* Content - Responsive Layout */}
-                    <div className={`
-                      w-full pl-16 md:w-5/12 md:pl-0 ${
-                        // Mobile: always left-aligned, Desktop: alternating alignment
-                        "text-left md:" + (index % 2 === 0 ? "text-right md:pr-8" : "text-left md:pl-8")
-                      }
-                    `}>
-                      <div className="group bg-white rounded-xl shadow-lg p-4 md:p-6 border border-gray-200 hover:shadow-2xl hover:scale-105 transition-all duration-500 hover:border-green-300 relative timeline-mobile-enter">
-                        {/* Year Badge */}
-                        <div className="inline-block bg-gradient-to-r from-green-500 to-green-600 text-white px-3 py-1 rounded-full text-sm font-bold mb-3 group-hover:animate-pulse">
-                          {milestone.year}
-                        </div>
-                        
-                        <h3 className="text-lg md:text-xl font-bold text-gray-900 mb-2 md:mb-3 group-hover:text-green-600 transition-colors duration-300">
-                          {milestone.title}
-                        </h3>
-                        
-                        <p className="text-sm md:text-base text-gray-600 group-hover:text-gray-700 transition-colors duration-300 leading-relaxed">
-                          {milestone.description}
-                        </p>
-
-                        {/* Mobile: Arrow pointing to timeline */}
-                        <div className="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-full md:hidden">
-                          <div className="w-0 h-0 border-t-8 border-b-8 border-r-8 border-t-transparent border-b-transparent border-r-white"></div>
-                        </div>
-
-                        {/* Hover Effect Decoration */}
-                        <div className="absolute -top-2 -right-2 w-4 h-4 bg-yellow-400 rounded-full opacity-0 group-hover:opacity-100 group-hover:animate-ping transition-all duration-300"></div>
-                        
-                        {/* Mobile: Gradient border effect */}
-                        <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-green-400/20 to-blue-400/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500 md:hidden"></div>
-                      </div>
-                    </div>
-
-                    {/* Timeline Node - Responsive Position */}
-                    <div className={`
-                      absolute w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-green-500 to-green-700 rounded-full 
-                      flex items-center justify-center z-10 shadow-lg hover:scale-125 hover:rotate-180 
-                      transition-all duration-500 group
-                      left-3 md:left-1/2 transform md:-translate-x-1/2
-                    `}>
-                      <IconComponent className="w-4 h-4 md:w-6 md:h-6 text-white group-hover:animate-spin" />
-                      <div className="absolute inset-0 rounded-full bg-green-400 animate-ping opacity-30"></div>
-                      
-                      {/* Mobile: Enhanced glow effect */}
-                      <div className="absolute inset-0 rounded-full bg-green-400/50 blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-500 md:hidden animate-pulse"></div>
-                    </div>
-
-                    {/* Spacer - Hidden on mobile, visible on desktop */}
-                    <div className="hidden md:block md:w-5/12"></div>
-                    
-                    {/* Mobile: Progress indicator */}
-                    <div className="absolute left-8 -bottom-4 md:hidden">
-                      <div className="flex space-x-1">
-                        {Array.from({ length: milestones.length }).map((_, i) => (
-                          <div
-                            key={i}
-                            className={`w-2 h-2 rounded-full transition-all duration-300 ${
-                              i <= index ? 'bg-green-500' : 'bg-gray-300'
-                            }`}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  </AnimatedSection>
-                );
-              })}
-              
-              {/* Mobile: Timeline completion indicator */}
-              <div className="md:hidden absolute left-8 -bottom-8 transform -translate-x-1/2">
-                <div className="w-6 h-6 bg-gradient-to-br from-green-500 to-green-700 rounded-full flex items-center justify-center shadow-lg">
-                  <CheckCircle className="w-4 h-4 text-white" />
-                </div>
-              </div>
-            </div>
           </AnimatedSection>
         </section>
 

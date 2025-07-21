@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import AdminLayout from "../../components/AdminLayout"
 import { useAppSelector } from '../../lib/store'
-import { Users, ShoppingCart, Package, DollarSign, TrendingUp, Eye } from "lucide-react"
+import { Users, ShoppingCart, Package, IndianRupee, TrendingUp, Eye } from "lucide-react"
 
 // Mock data for dashboard
 const dashboardStats = {
@@ -115,14 +115,14 @@ export default function AdminDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Total Revenue</p>
-                <p className="text-2xl font-bold text-codGray">${dashboardStats.totalRevenue.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-codGray">₹{dashboardStats.totalRevenue.toLocaleString()}</p>
                 <p className="text-sm text-green-600 flex items-center mt-1">
                   <TrendingUp className="h-4 w-4 mr-1" />
-                  +${dashboardStats.revenueToday.toLocaleString()} today
+                  +₹{dashboardStats.revenueToday.toLocaleString()} today
                 </p>
               </div>
               <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                <DollarSign className="h-6 w-6 text-yellow-600" />
+                <IndianRupee className="h-6 w-6 text-yellow-600" />
               </div>
             </div>
           </div>
@@ -148,7 +148,7 @@ export default function AdminDashboard() {
                     <tr key={order.id} className="border-b border-gray-100">
                       <td className="py-2 font-medium">{order.id}</td>
                       <td className="py-2">{order.customer}</td>
-                      <td className="py-2">${order.amount}</td>
+                      <td className="py-2">₹{order.amount}</td>
                       <td className="py-2">
                         <span
                           className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -180,7 +180,7 @@ export default function AdminDashboard() {
                     <p className="text-sm text-gray-500">{product.sales} sales</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-semibold text-spectra">${product.revenue.toLocaleString()}</p>
+                    <p className="font-semibold text-spectra">₹{product.revenue.toLocaleString()}</p>
                   </div>
                 </div>
               ))}

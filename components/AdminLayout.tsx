@@ -32,6 +32,7 @@ import {
   Menu,
   ChevronLeft,
   LogOut,
+  Send,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useAppSelector, useAppDispatch } from '../lib/store'
@@ -101,7 +102,8 @@ const menuItems = [
     title: "OTHER",
     items: [
       { name: "Banners", href: "/admin/banners", icon: ImageIcon },
-      { name: "Blogs", href: "/admin/blog", icon: BookOpen },
+      { name: "Blog", href: "/admin/blog", icon: BookOpen },
+      { name: "Newsletter", href: "/admin/newsletter", icon: Send },
       { name: "Enquiry", href: "/admin/enquiry", icon: Mail },
       { name: "Rating & Reviews", href: "/admin/reviews", icon: Star },
     ],

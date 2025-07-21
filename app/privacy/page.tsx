@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Shield,
   Eye,
@@ -24,6 +26,7 @@ import {
 } from "lucide-react";
 
 export default function PrivacyPage() {
+  const router = useRouter();
   const [expandedSections, setExpandedSections] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<"policy" | "rights" | "settings">(
     "policy"
@@ -331,8 +334,12 @@ We will notify you of any significant changes to our data transfer practices and
               Our privacy team is here to help you understand how we protect
               your information and exercise your rights.
             </p>
-            <button className="bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 transition font-medium">
-              Contact Support
+            <button 
+              onClick={() => router.push('/contact')}
+              className="bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 transition font-medium flex items-center justify-center mx-auto space-x-2"
+            >
+              <Phone className="w-4 h-4 mr-2" />
+              <span>Contact Support</span>
             </button>
           </div>
         </div>

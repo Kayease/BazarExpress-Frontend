@@ -1,6 +1,8 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { 
   AlertTriangle, 
   Calendar, 
@@ -19,6 +21,7 @@ import {
 } from "lucide-react"
 
 export default function DisclaimerPage() {
+  const router = useRouter();
   const [expandedSections, setExpandedSections] = useState<string[]>([])
 
   const toggleSection = (sectionId: string) => {
@@ -424,8 +427,12 @@ Fair Use and Attribution:
           <p className="text-gray-600 mb-6">
           If you need clarification on any aspect of this disclaimer or have legal questions, contact our team.
           </p>
-          <button className="bg-orange-600 text-white px-8 py-3 rounded-lg hover:bg-orange-700 transition font-medium">
-            Contact Support
+          <button 
+            onClick={() => router.push('/contact')}
+            className="bg-orange-600 text-white px-8 py-3 rounded-lg hover:bg-orange-700 transition font-medium flex items-center justify-center mx-auto space-x-2"
+          >
+            <Phone className="w-4 h-4 mr-2" />
+            <span>Contact Support</span>
           </button>
         </div>
 

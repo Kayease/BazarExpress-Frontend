@@ -239,7 +239,8 @@ export default function Navbar() {
                   onClick={() => setShowLocationModal(true)}
                   className="flex flex-col text-left"
                 >
-                  <div className="text-sm font-medium text-gray-900">
+                  <div className="text-md
+                   font-extrabold text-gray-900">
                     Delivery in {currentLocation.deliveryTime}
                     </div>
                   <div className="flex items-center text-xs text-gray-500 max-w-[200px] truncate">

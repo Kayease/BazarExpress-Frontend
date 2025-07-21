@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   RefreshCw,
   Calendar,
@@ -15,10 +17,11 @@ import {
   ChevronUp,
   ArrowRight,
   Shield,
-  DollarSign,
+  IndianRupee,
 } from "lucide-react";
 
 export default function RefundPolicyPage() {
+  const router = useRouter();
   const [expandedSections, setExpandedSections] = useState<string[]>([]);
 
   const toggleSection = (sectionId: string) => {
@@ -156,7 +159,7 @@ Cash on Delivery:
     {
       id: "partial-refunds",
       title: "Partial Refunds",
-      icon: DollarSign,
+      icon: IndianRupee,
       content: `When partial refunds apply:
 
 Mixed Order Issues:
@@ -377,8 +380,12 @@ Technical Issues:
               Our customer support team is available 24/7 to help you with
               refunds and returns.
             </p>  
-            <button className="bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 transition font-medium">
-              Contact Support
+            <button 
+              onClick={() => router.push('/contact')}
+              className="bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 transition font-medium flex items-center justify-center mx-auto space-x-2"
+            >
+              <Phone className="w-4 h-4 mr-2" />
+              <span>Contact Support</span>
             </button>
           </div>
         </div>
