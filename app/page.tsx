@@ -5,7 +5,6 @@ import HeroSection from "@/components/hero-section"
 import CategorySection from "@/components/category-section"
 import ProductSection from "@/components/product-section"
 import CartDrawer from "@/components/cart-drawer"
-import LoginModal from "@/components/login-modal"
 import { useToast } from "@/hooks/use-toast"
 
 export default function Home() {
@@ -40,8 +39,6 @@ export default function Home() {
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
       />
-
-      <LoginModal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} />
     </div>
   )
 }

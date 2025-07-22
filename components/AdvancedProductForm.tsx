@@ -423,7 +423,7 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
         variants: updatedVariants,
         attributes: attributes !== undefined ? attributes : [],
       };
-      console.log("Submitting payload:", payload);
+      // Submitting product data
       const url = mode === "edit" ? `${API_URL}/products/${productId}` : `${API_URL}/products`;
       const method = mode === "edit" ? "PUT" : "POST";
       const res = await fetch(url, {

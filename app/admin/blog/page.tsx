@@ -8,8 +8,7 @@ import { useRouter } from 'next/navigation'
 import toast from "react-hot-toast"
 import { uploadToCloudinary } from "../../../lib/uploadToCloudinary"
 import dynamic from 'next/dynamic'
-import MDEditor from '@uiw/react-md-editor';
-import MarkdownPreview from '@uiw/react-markdown-preview';
+import { Editor } from '@tinymce/tinymce-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL
 
@@ -531,39 +530,29 @@ export default function AdminBlog() {
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="block font-medium">Content *</label>
-                    <button
-                      type="button"
-                      onClick={() => setShowPreview(!showPreview)}
-                      className="text-sm text-brand-primary hover:text-brand-primary-dark font-medium"
-                    >
-                      {showPreview ? 'Hide Preview' : 'Show Preview'}
-                    </button>
                   </div>
-                  {showPreview ? (
-                    <div className="border border-gray-300 rounded-lg p-4 bg-white min-h-[300px]">
-                      <MarkdownPreview source={form.content || ''} style={{ background: 'transparent' }} />
-                      {!form.content && (
-                        <p className="text-gray-400 italic">No content to preview</p>
-                      )}
-                    </div>
-                  ) : (
-                    <div data-color-mode="light">
-                      <MDEditor
-                        value={form.content}
-                        onChange={val => setForm({ ...form, content: val || '' })}
-                        height={300}
-                        preview="edit"
-                        textareaProps={{
-                          placeholder: 'Write your blog content here...'
-                        }}
-                      />
-                    </div>
-                  )}
+                  <div>
+                    <Editor
+                      apiKey="yapzaxocernrvcfg37vobqi7uk31wza7hii4fhsgi6j2838d"
+                      value={form.content}
+                      onEditorChange={(val: string) => setForm({ ...form, content: val ?? "" })}
+                      init={{
+                        height: 300,
+                        menubar: false,
+                        plugins: [
+                          'advlist', 'autolink', 'lists', 'link', 'image', 'charmap', 'preview', 'anchor',
+                          'searchreplace', 'visualblocks', 'code', 'fullscreen',
+                          'insertdatetime', 'media', 'table', 'help', 'wordcount'
+                        ],
+                        toolbar:
+                          'undo redo | formatselect | bold italic underline | ' +
+                          'alignleft aligncenter alignright alignjustify | ' +
+                          'bullist numlist outdent indent | removeformat | help'
+                      }}
+                    />
+                  </div>
                   <p className="text-sm text-gray-500 mt-2">
-                    {showPreview 
-                      ? 'Preview mode - click "Hide Preview" to edit'
-                      : 'Use the toolbar above to format your content with headings, lists, links, and more!'
-                    }
+                    Use the toolbar above to format your content with headings, lists, links, and more!
                   </p>
                 </div>
 

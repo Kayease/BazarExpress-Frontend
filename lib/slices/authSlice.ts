@@ -70,13 +70,13 @@ export const register = createAsyncThunk(
 export const updateProfile = createAsyncThunk(
   'auth/updateProfile',
   async (
-    data: { name?: string; phone?: string; dateOfBirth?: string; address?: Address },
+    data: { name?: string; email?: string; phone?: string; dateOfBirth?: string; address?: Address },
     { getState, rejectWithValue }
   ) => {
     try {
       const state = getState() as { auth: AuthState };
       const token = state.auth.token;
-      // Correct endpoint: /api/auth/profile
+      // Use the same endpoint style as other code
       const res = await axios.put(`${API}/auth/profile`, data, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -94,10 +94,11 @@ export const fetchProfile = createAsyncThunk(
     try {
       const state = getState() as { auth: AuthState };
       const token = state.auth.token;
-      const res = await axios.get(`${API}/auth/profile`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      return res.data; // Should be { user, ...stats }
+            // Token sent to backend
+            const res = await axios.get(`${API}/auth/profile`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            return res.data; // Should be { user, ...stats }
     } catch (err: any) {
       return rejectWithValue(err.response?.data?.error || 'Failed to fetch profile');
     }
@@ -116,6 +117,10 @@ const authSlice = createSlice({
     },
     clearError(state) {
       state.error = null;
+    },
+    setToken(state, action) {
+      state.token = action.payload;
+      if (typeof window !== 'undefined') localStorage.setItem('token', action.payload);
     },
   },
   extraReducers: (builder) => {
@@ -186,5 +191,5 @@ const authSlice = createSlice({
   },
 });
 
-export const { logout, clearError } = authSlice.actions;
-export default authSlice.reducer; 
+export const { logout, clearError, setToken } = authSlice.actions;
+export default authSlice.reducer;

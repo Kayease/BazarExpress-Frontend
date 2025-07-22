@@ -2,301 +2,225 @@
 
 import type React from "react"
 
-import { X, Mail, Lock, Eye, EyeOff, User as UserIcon, Calendar } from "lucide-react"
-import { useState, useEffect, useRef } from "react"
-import { useAppDispatch, useAppSelector } from "../lib/store"
-import { register, login, clearError } from "../lib/slices/authSlice"
-import toast from "react-hot-toast"
-import type { RootState } from "../lib/store"
+import { useState, useRef } from "react";
+import { X } from "lucide-react";
+import toast from "react-hot-toast";
+import CompleteProfileModal from "./CompleteProfileModal";
+import OTPInput from "./OTPInput";
+import { useAppDispatch } from '../lib/store';
+import { fetchProfile, setToken } from '../lib/slices/authSlice';
 
 interface LoginModalProps {
-  isOpen: boolean
-  onClose: () => void
+  isOpen: boolean;
+  onClose: () => void;
 }
 
 export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
-  const [isLogin, setIsLogin] = useState(true);
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    password: "",
-    confirmPassword: "",
-    phone: "",
-    dateOfBirth: "",
-  });
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [localError, setLocalError] = useState("");
-  const dispatch = useAppDispatch()
-  const { user, error, loading } = useAppSelector((state: RootState) => state.auth)
-  const wasOpen = useRef(false)
+  const [step, setStep] = useState<'phone' | 'otp'>("phone");
+  const [phone, setPhone] = useState("");
+  const [otp, setOtp] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [serverOtp, setServerOtp] = useState(""); // For demo, in real app, don't store OTP on frontend
+  const [sessionId, setSessionId] = useState(""); // For backend session/OTP tracking
+  const [showCompleteProfile, setShowCompleteProfile] = useState(false);
+  const [loggedInUser, setLoggedInUser] = useState<any>(null);
+  const dispatch = useAppDispatch();
 
-  useEffect(() => {
-    if (isOpen) {
-      wasOpen.current = true;
-    } else {
-      wasOpen.current = false;
+  if (!isOpen) return null;
+
+  // For testing, use full backend URL (remember to revert to relative URLs for production)
+  const API_URL = "http://localhost:4000/api/auth";
+
+  // Send OTP handler
+  const handleSendOtp = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!/^\d{10}$/.test(phone)) {
+      toast.error("Please enter a valid 10-digit phone number");
+      return;
     }
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (error) {
-      toast.error(error);
-      dispatch(clearError());
-    }
-  }, [error, dispatch]);
-
-  useEffect(() => {
-    if (user && wasOpen.current) {
-      // toast.success(isLogin ? "Login Successful!" : "Registration Successful!");
-      onClose();
-      setFormData({
-        name: "",
-        email: "",
-        password: "",
-        confirmPassword: "",
-        phone: "",
-        dateOfBirth: "",
+    setLoading(true);
+    try {
+      // Call backend to generate and send OTP
+      const res = await fetch(`${API_URL}/send-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone }),
       });
-      setIsLogin(true);
-      wasOpen.current = false;
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to send OTP");
+      setStep("otp");
+      setOtp(""); // Clear OTP field when resending
+      setSessionId(data.sessionId || "");
+      toast.success("OTP sent to your phone");
+      // For demo: setServerOtp(data.otp) if you want to show OTP for testing
+    } catch (err: any) {
+      toast.error(err.message || "Failed to send OTP");
+    } finally {
+      setLoading(false);
     }
-  }, [user, onClose, isLogin]);
+  };
 
-  if (!isOpen) return null
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-    setLocalError("");
-  }
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isLogin) {
-      dispatch(login({ email: formData.email, password: formData.password }))
-        .unwrap()
-        .then((res) => {
-          toast.success("Login Successful!");
-        });
-    } else {
-      if (formData.password !== formData.confirmPassword) {
-        toast.error("Passwords do not match");
-        return;
-      }
-      if (formData.password.length < 6) {
-        toast.error("Password must be at least 6 characters long");
-        return;
-      }
-      dispatch(register({
-        name: formData.name,
-        email: formData.email,
-        password: formData.password,
-        phone: formData.phone,
-        dateOfBirth: formData.dateOfBirth,
-      }))
-        .unwrap()
-        .then((res) => {
-          toast.success("Registration Successful!");
-        });
+  // Verify OTP handler
+  const handleVerifyOtp = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    
+    // Prevent multiple submissions
+    if (loading) return;
+    
+    // Validate OTP format
+    if (!/^\d{6}$/.test(otp)) {
+      toast.error("Please enter a valid 6-digit OTP");
+      return;
     }
-  }
+    
+    setLoading(true);
+    try {
+      // Call backend to verify OTP
+      const res = await fetch(`${API_URL}/verify-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone, otp, sessionId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Invalid OTP");
+      
+      // Set the token in Redux store
+      dispatch(setToken(data.token));
+      
+      toast.success("Login successful!");
+      setStep("phone");
+      setPhone("");
+      setOtp("");
+      setSessionId("");
+      // Check if user needs to complete profile
+      if (!data.user?.name || !data.user?.email) {
+        setLoggedInUser(data.user);
+        setShowCompleteProfile(true);
+        if (data.token) {
+          localStorage.setItem("token", data.token);
+        }
+      } else {
+        if (data.token) {
+          localStorage.setItem("token", data.token);
+        }
+        // Fetch and update user profile in Redux
+        dispatch(fetchProfile());
+        onClose();
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Invalid OTP");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      className="fixed inset-0 flex items-center justify-center bg-black/50 z-50"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div className="bg-surface-primary rounded-lg p-6 w-11/12 max-w-md relative" onClick={(e) => e.stopPropagation()}>
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-text-secondary hover:text-text-primary"
-          aria-label="Close modal"
-        >
-          <X size={20} />
-        </button>
-
-        <div className="mb-6">
-          <h2 className="text-2xl font-bold text-text-primary mb-2">{isLogin ? "Welcome Back" : "Create Account"}</h2>
-          <p className="text-text-secondary">{isLogin ? "Sign in to your account" : "Join BazarXpress today"}</p>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {!isLogin && (
-            <div>
-              <label htmlFor="name" className="block text-sm font-medium text-text-primary mb-1">
-                Full Name
-              </label>
-              <div className="relative">
-                <input
-                  id="name"
-                  name="name"
-                  type="text"
-                  required
-                  value={formData.name}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 pl-12 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-accent focus:border-transparent"
-                  placeholder="Enter your full name"
-                />
-                <UserIcon className="absolute left-4 top-3.5 h-5 w-5 text-gray-400" />
-              </div>
-            </div>
-          )}
-
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-text-primary mb-1">
-              Email Address
-            </label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-text-tertiary" size={16} />
-              <input
-                type="email"
-                id="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                className="w-full pl-10 pr-3 py-2 border border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-accent focus:border-transparent"
-                placeholder="Enter your email"
-                required
-              />
-            </div>
+    <>
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="fixed inset-0 flex items-center justify-center bg-black/50 z-50"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
+      >
+        <div className="bg-surface-primary rounded-lg p-6 w-11/12 max-w-md relative" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 text-text-secondary hover:text-text-primary"
+            aria-label="Close modal"
+          >
+            <X size={20} />
+          </button>
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold text-text-primary mb-2">Sign In</h2>
+            <p className="text-text-secondary">Sign in with your phone number</p>
           </div>
-
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-text-primary mb-1">
-              Password
-            </label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-text-tertiary" size={16} />
-              <input
-                type={showPassword ? "text" : "password"}
-                id="password"
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                className="w-full pl-10 pr-10 py-2 border border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-accent focus:border-transparent"
-                placeholder={isLogin ? "Enter your password" : "Create a password"}
-                required
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-text-tertiary hover:text-text-primary"
-              >
-                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </div>
-          </div>
-
-          {!isLogin && (
-            <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-text-primary mb-1">
-                Confirm Password
-              </label>
-              <div className="relative">
-                <input
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  type={showConfirmPassword ? "text" : "password"}
-                  required
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 pl-12 pr-12 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-accent focus:border-transparent"
-                  placeholder="Confirm your password"
-                />
-                <Lock className="absolute left-4 top-3.5 h-5 w-5 text-gray-400" />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-4 top-3.5 text-gray-400 hover:text-gray-600"
-                >
-                  {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {!isLogin && (
-            <div>
-              <label htmlFor="phone" className="block text-sm font-medium text-text-primary mb-1">
-                Phone Number (optional)
-              </label>
-              <div className="relative">
+          {step === "phone" && (
+            <form onSubmit={handleSendOtp} className="space-y-4">
+              <div>
+                <label htmlFor="phone" className="block text-sm font-medium text-text-primary mb-1">
+                  Phone Number
+                </label>
                 <input
                   id="phone"
                   name="phone"
                   type="tel"
-                  value={formData.phone}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 pl-12 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-accent focus:border-transparent"
-                  placeholder="Enter your phone number"
+                  value={phone}
+                  onChange={e => setPhone(e.target.value.replace(/[^\d]/g, ""))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-accent focus:border-transparent"
+                  placeholder="Enter your 10-digit phone number"
+                  maxLength={10}
+                  required
                 />
-                <UserIcon className="absolute left-4 top-3.5 h-5 w-5 text-gray-400" />
               </div>
-            </div>
-          )}
-
-          {!isLogin && (
-            <div>
-              <label htmlFor="dateOfBirth" className="block text-sm font-medium text-text-primary mb-1">
-                Date of Birth (optional)
-              </label>
-              <div className="relative">
-                <input
-                  id="dateOfBirth"
-                  name="dateOfBirth"
-                  type="date"
-                  value={formData.dateOfBirth}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 pl-12 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-accent focus:border-transparent"
-                />
-                <Calendar className="absolute left-4 top-3.5 h-5 w-5 text-gray-400" />
-              </div>
-            </div>
-          )}
-
-          {isLogin && (
-            <div className="flex items-center justify-between">
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  className="rounded border-border-primary text-brand-accent focus:ring-brand-accent"
-                />
-                <span className="ml-2 text-sm text-text-secondary">Remember me</span>
-              </label>
-              <button type="button" className="text-sm text-brand-accent hover:text-brand-primary">
-                Forgot password?
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-brand-primary text-inverse py-2 rounded-lg hover:bg-brand-primary-dark transition duration-200 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? "Sending OTP..." : "Send OTP"}
               </button>
-            </div>
+            </form>
           )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-brand-primary text-inverse py-2 rounded-lg hover:bg-brand-primary-dark transition duration-200 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? (isLogin ? "Signing in..." : "Creating account...") : (isLogin ? "Sign In" : "Create Account")}
-          </button>
-        </form>
-
-        <div className="mt-6 text-center">
-          <p className="text-text-secondary">
-            {isLogin ? "Don't have an account?" : "Already have an account?"}
-            <button
-              onClick={() => setIsLogin(!isLogin)}
-              className="ml-1 text-brand-accent hover:text-brand-primary font-medium"
-            >
-              {isLogin ? "Sign up" : "Sign in"}
-            </button>
-          </p>
+          {step === "otp" && (
+            <form onSubmit={handleVerifyOtp} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-text-primary mb-3">
+                  Enter 6-digit OTP
+                </label>
+                <OTPInput
+                  value={otp}
+                  onChange={(value) => {
+                    setOtp(value);
+                    // Only trigger auto-submit if we have all 6 digits and not already loading
+                    if (value.length === 6 && !loading) {
+                      // Small delay to ensure state is updated
+                      setTimeout(() => handleVerifyOtp(), 100);
+                    }
+                  }}
+                  disabled={loading}
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-brand-primary text-inverse py-2 rounded-lg hover:bg-brand-primary-dark transition duration-200 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? "Verifying..." : "Verify & Sign In"}
+              </button>
+              <button
+                type="button"
+                className="w-full mt-2 text-brand-primary hover:underline text-sm"
+                onClick={handleSendOtp}
+                disabled={loading}
+              >
+                Resend OTP
+              </button>
+              <button
+                type="button"
+                className="w-full mt-2 text-brand-primary hover:underline text-sm"
+                onClick={() => { setStep("phone"); setOtp(""); }}
+                disabled={loading}
+              >
+                Change phone number
+              </button>
+            </form>
+          )}
         </div>
       </div>
-    </div>
-  )
+      <CompleteProfileModal
+        isOpen={showCompleteProfile}
+        onClose={() => { setShowCompleteProfile(false); onClose(); }}
+        user={loggedInUser}
+        onProfileUpdated={(updated) => {
+          setShowCompleteProfile(false);
+          setLoggedInUser(null);
+          // Fetch and update user profile in Redux
+          dispatch(fetchProfile());
+          onClose();
+        }}
+      />
+    </>
+  );
 }
