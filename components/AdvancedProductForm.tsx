@@ -1,9 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import AdminLayout from "@/components/AdminLayout";
 import { uploadToCloudinary } from "@/lib/uploadToCloudinary";
 import toast from "react-hot-toast";
 import { Plus, Layers, IndianRupee, Ruler, Package, Image as ImageIcon, Camera, Globe, Shield, Star, ChevronDown } from "lucide-react";
+import { Editor } from '@tinymce/tinymce-react';
+import CategoryFormModal from "./CategoryFormModal";
+import BrandFormModal from "./BrandFormModal";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -121,6 +124,86 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
   // --- Add state for gallery image files ---
   const [galleryImageFiles, setGalleryImageFiles] = useState<(File | string)[]>([]);
 
+  // --- Add state for modal open/close ---
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [showSubcategoryModal, setShowSubcategoryModal] = useState(false);
+  const [showBrandModal, setShowBrandModal] = useState(false);
+
+  // Add state for search inputs and focus
+  const [categorySearch, setCategorySearch] = useState("");
+  const [subcategorySearch, setSubcategorySearch] = useState("");
+  const [brandSearch, setBrandSearch] = useState("");
+  const [categoryFocused, setCategoryFocused] = useState(false);
+  const [subcategoryFocused, setSubcategoryFocused] = useState(false);
+  const [brandFocused, setBrandFocused] = useState(false);
+
+  // Variants state and utilities
+  const [attributes, setAttributes] = useState<{ name: string; values: string[] }[]>([]);
+  const [attributeInput, setAttributeInput] = useState("");
+  const [attributeValueInputs, setAttributeValueInputs] = useState<{ [attr: string]: string }>({});
+  const [variants, setVariants] = useState<{ [key: string]: any }>({});
+  const [autoSku, setAutoSku] = useState(true);
+  const [bulkPrice, setBulkPrice] = useState("");
+  const [bulkStock, setBulkStock] = useState("");
+
+  function cartesian(arr: string[][]): string[][] {
+    return arr.reduce((a, b) => a.flatMap(d => b.map(e => [...d, e])), [[]] as string[][]);
+  }
+  function getVariantKey(combo: string[]): string {
+    return combo.join("::");
+  }
+  function regenerateVariants(newAttributes = attributes) {
+    // Only generate variants if there is at least one attribute with values
+    if (!newAttributes.length || newAttributes.every(a => !a.values.length)) {
+      setVariants({});
+      return;
+    }
+    const combos = cartesian(newAttributes.map(a => a.values.length ? a.values : [""]));
+    setVariants(prev => {
+      const newVariants: { [key: string]: any } = {};
+      combos.forEach(combo => {
+        const key = getVariantKey(combo);
+        newVariants[key] = prev[key] || { sku: "", price: "", stock: "", image: null };
+      });
+      return newVariants;
+    });
+  }
+  useEffect(() => { regenerateVariants(); }, [attributes]);
+
+  // Restore advanced section toggles
+  const [showInventory, setShowInventory] = useState(false);
+  const [showPricing, setShowPricing] = useState(false);
+  const [showPhysical, setShowPhysical] = useState(false);
+  const [showVariants, setShowVariants] = useState(false);
+  const [showMedia, setShowMedia] = useState(false);
+  const [showSEO, setShowSEO] = useState(false);
+  const [showLegal, setShowLegal] = useState(false);
+
+  // Fetch categories, brands, warehouses, and taxes
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [categoriesRes, brandsRes, warehousesRes, taxesRes] = await Promise.all([
+          fetch(`${API_URL}/categories`),
+          fetch(`${API_URL}/brands`),
+          fetch(`${API_URL}/warehouses`),
+          fetch(`${API_URL}/taxes`),
+        ]);
+        const categoriesData = await categoriesRes.json();
+        const brandsData = await brandsRes.json();
+        const warehousesData = await warehousesRes.json();
+        const taxesData = await taxesRes.json();
+        setCategories(categoriesData);
+        setBrands(brandsData);
+        setWarehouses(warehousesData);
+        setTaxes(taxesData);
+      } catch (error) {
+        console.error("Error fetching data:", error);
+      }
+    };
+    fetchData();
+  }, [API_URL]);
+
   useEffect(() => {
     if (initialProduct) {
       setProduct((prev: any) => ({
@@ -168,72 +251,6 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
       setVariants(initialProduct.variants || {});
     }
   }, [initialProduct]);
-
-  const [showInventory, setShowInventory] = useState(false);
-  const [showPricing, setShowPricing] = useState(false);
-  const [showPhysical, setShowPhysical] = useState(false);
-  const [showVariants, setShowVariants] = useState(false);
-  const [showMedia, setShowMedia] = useState(false);
-  const [showSEO, setShowSEO] = useState(false);
-  const [showLegal, setShowLegal] = useState(false);
-
-  // Variants state and utilities
-  const [attributes, setAttributes] = useState<{ name: string; values: string[] }[]>([]);
-  const [attributeInput, setAttributeInput] = useState("");
-  const [attributeValueInputs, setAttributeValueInputs] = useState<{ [attr: string]: string }>({});
-  const [variants, setVariants] = useState<{ [key: string]: any }>({});
-  const [autoSku, setAutoSku] = useState(true);
-  const [bulkPrice, setBulkPrice] = useState("");
-  const [bulkStock, setBulkStock] = useState("");
-
-  function cartesian(arr: string[][]): string[][] {
-    return arr.reduce((a, b) => a.flatMap(d => b.map(e => [...d, e])), [[]] as string[][]);
-  }
-  function getVariantKey(combo: string[]): string {
-    return combo.join("::");
-  }
-  function regenerateVariants(newAttributes = attributes) {
-    // Only generate variants if there is at least one attribute with values
-    if (!newAttributes.length || newAttributes.every(a => !a.values.length)) {
-      setVariants({});
-      return;
-    }
-    const combos = cartesian(newAttributes.map(a => a.values.length ? a.values : [""]));
-    setVariants(prev => {
-      const newVariants: { [key: string]: any } = {};
-      combos.forEach(combo => {
-        const key = getVariantKey(combo);
-        newVariants[key] = prev[key] || { sku: "", price: "", stock: "", image: null };
-      });
-      return newVariants;
-    });
-  }
-  useEffect(() => { regenerateVariants(); }, [attributes]);
-
-  // Fetch categories, brands, warehouses, and taxes
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [categoriesRes, brandsRes, warehousesRes, taxesRes] = await Promise.all([
-          fetch(`${API_URL}/categories`),
-          fetch(`${API_URL}/brands`),
-          fetch(`${API_URL}/warehouses`),
-          fetch(`${API_URL}/taxes`),
-        ]);
-        const categoriesData = await categoriesRes.json();
-        const brandsData = await brandsRes.json();
-        const warehousesData = await warehousesRes.json();
-        const taxesData = await taxesRes.json();
-        setCategories(categoriesData);
-        setBrands(brandsData);
-        setWarehouses(warehousesData);
-        setTaxes(taxesData);
-      } catch (error) {
-        console.error("Error fetching data:", error);
-      }
-    };
-    fetchData();
-  }, [API_URL]);
 
   // Fetch subcategories when category changes
   useEffect(() => {
@@ -457,6 +474,10 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
     { key: 'Legal', open: showLegal, setOpen: setShowLegal, icon: <Shield className="text-brand-primary" /> },
   ];
 
+  const categoryInputRef = useRef<HTMLInputElement>(null);
+  const subcategoryInputRef = useRef<HTMLInputElement>(null);
+  const brandInputRef = useRef<HTMLInputElement>(null);
+
   return (
     <AdminLayout>
       <div className="space-y-6">
@@ -488,7 +509,7 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                 </label>
                 <input
                   type="text"
-                  value={product.name}
+                  value={product.name ?? ""}
                   onChange={(e) => setProduct({ ...product, name: e.target.value })}
                   className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
                   placeholder="Enter product name"
@@ -501,7 +522,7 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                 </label>
                 <input
                   type="text"
-                  value={product.sku}
+                  value={product.sku ?? ""}
                   onChange={(e) => setProduct({ ...product, sku: e.target.value })}
                   className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
                   placeholder="Enter SKU"
@@ -511,66 +532,185 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Category <span className="text-red-500">*</span>
                 </label>
-                <select
-                  value={product.category}
-                  onChange={(e) => setProduct({ ...product, category: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                  required
-                >
-                  <option value="">Select Category</option>
-                  {categories.filter(cat => !cat.parentId).map((cat: any) => (
-                    <option key={cat._id} value={cat._id}>
-                      {cat.name}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex items-stretch gap-2 relative">
+                  <input
+                    ref={categoryInputRef}
+                    type="text"
+                    value={categorySearch}
+                    onChange={e => setCategorySearch(e.target.value)}
+                    placeholder="Search or select category"
+                    className="w-full border border-gray-300 rounded-l-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                    style={{ height: "48px" }}
+                    onFocus={() => setCategoryFocused(true)}
+                    onBlur={() => setTimeout(() => setCategoryFocused(false), 100)}
+                  />
+                  <button
+                    type="button"
+                    className="ml-0 h-[48px] px-4 bg-brand-primary text-white rounded-r-lg text-lg flex items-center justify-center"
+                    style={{ minWidth: "48px" }}
+                    onClick={() => setShowCategoryModal(true)}
+                  >
+                    +
+                  </button>
+                  {categoryFocused && (
+                    <div className="absolute left-0 top-full z-10 bg-white border border-gray-200 rounded w-full max-h-48 overflow-y-auto shadow-lg">
+                      {categories.filter(cat => !cat.parentId && cat.name.toLowerCase().includes(categorySearch.toLowerCase())).map(cat => (
+                        <div
+                          key={cat._id}
+                          className={`px-3 py-2 cursor-pointer hover:bg-brand-primary/10 ${product.category === cat._id ? 'bg-brand-primary/10 font-semibold' : ''}`}
+                          onMouseDown={() => {
+                            setProduct({ ...product, category: cat._id });
+                            setCategorySearch(cat.name);
+                            setCategoryFocused(false);
+                            if (categoryInputRef.current) categoryInputRef.current.blur();
+                          }}
+                        >
+                          {cat.name}
+                        </div>
+                      ))}
+                      {categories.filter(cat => !cat.parentId && cat.name.toLowerCase().includes(categorySearch.toLowerCase())).length === 0 && (
+                        <div className="px-3 py-2 text-gray-400">No results</div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
+              {/* CategoryFormModal */}
+              <CategoryFormModal
+                open={showCategoryModal}
+                onClose={() => setShowCategoryModal(false)}
+                onSuccess={cat => {
+                  setCategories((prev: any[]) => [...prev, cat]);
+                  setProduct((prev: any) => ({ ...prev, category: cat._id }));
+                }}
+                categories={categories}
+              />
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Subcategory
                 </label>
-                <select
-                  value={product.subcategory}
-                  onChange={(e) => setProduct({ ...product, subcategory: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                  disabled={!product.category || subcategories.length === 0}
-                >
-                  <option value="">Select Subcategory</option>
-                  {subcategories.map((subcat: any) => (
-                    <option key={subcat._id} value={subcat._id}>
-                      {subcat.name}
-                    </option>
-                  ))}
-                </select>
-                {product.category && subcategories.length === 0 && (
-                  <p className="text-xs text-gray-500 mt-1">No subcategories available for this category</p>
-                )}
+                <div className="flex items-stretch gap-2 relative">
+                  <input
+                    ref={subcategoryInputRef}
+                    type="text"
+                    value={subcategorySearch}
+                    onChange={e => setSubcategorySearch(e.target.value)}
+                    placeholder="Search or select subcategory"
+                    className="w-full border border-gray-300 rounded-l-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                    style={{ height: "48px" }}
+                    onFocus={() => setSubcategoryFocused(true)}
+                    onBlur={() => setTimeout(() => setSubcategoryFocused(false), 100)}
+                    disabled={!product.category || subcategories.length === 0}
+                  />
+                  <button
+                    type="button"
+                    className="ml-0 h-[48px] px-4 bg-brand-primary text-white rounded-r-lg text-lg flex items-center justify-center"
+                    style={{ minWidth: "48px" }}
+                    onClick={() => setShowSubcategoryModal(true)}
+                    disabled={!product.category}
+                  >
+                    +
+                  </button>
+                  {subcategoryFocused && (
+                    <div className="absolute left-0 top-full z-10 bg-white border border-gray-200 rounded w-full max-h-48 overflow-y-auto shadow-lg">
+                      {subcategories.filter(subcat => subcat.name.toLowerCase().includes(subcategorySearch.toLowerCase())).map(subcat => (
+                        <div
+                          key={subcat._id}
+                          className={`px-3 py-2 cursor-pointer hover:bg-brand-primary/10 ${product.subcategory === subcat._id ? 'bg-brand-primary/10 font-semibold' : ''}`}
+                          onMouseDown={() => {
+                            setProduct({ ...product, subcategory: subcat._id });
+                            setSubcategorySearch(subcat.name);
+                            setSubcategoryFocused(false);
+                            if (subcategoryInputRef.current) subcategoryInputRef.current.blur();
+                          }}
+                        >
+                          {subcat.name}
+                        </div>
+                      ))}
+                      {subcategories.filter(subcat => subcat.name.toLowerCase().includes(subcategorySearch.toLowerCase())).length === 0 && (
+                        <div className="px-3 py-2 text-gray-400">No results</div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
+              {/* CategoryFormModal */}
+              <CategoryFormModal
+                open={showSubcategoryModal}
+                onClose={() => setShowSubcategoryModal(false)}
+                onSuccess={subcat => {
+                  setSubcategories((prev: any[]) => [...prev, subcat]);
+                  setProduct((prev: any) => ({ ...prev, subcategory: subcat._id }));
+                }}
+                categories={categories}
+                parentId={product.category}
+              />
+              {product.category && subcategories.length === 0 && (
+                <p className="text-xs text-gray-500 mt-1">No subcategories available for this category</p>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Brand <span className="text-red-500">*</span>
                 </label>
-                <select
-                  value={product.brand}
-                  onChange={(e) => setProduct({ ...product, brand: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                  required
-                >
-                  <option value="">Select Brand</option>
-                  {brands.map((brand: any) => (
-                    <option key={brand._id} value={brand._id}>
-                      {brand.name}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex items-stretch gap-2 relative">
+                  <input
+                    ref={brandInputRef}
+                    type="text"
+                    value={brandSearch}
+                    onChange={e => setBrandSearch(e.target.value)}
+                    placeholder="Search or select brand"
+                    className="w-full border border-gray-300 rounded-l-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                    style={{ height: "48px" }}
+                    onFocus={() => setBrandFocused(true)}
+                    onBlur={() => setTimeout(() => setBrandFocused(false), 100)}
+                  />
+                  <button
+                    type="button"
+                    className="ml-0 h-[48px] px-4 bg-brand-primary text-white rounded-r-lg text-lg flex items-center justify-center"
+                    style={{ minWidth: "48px" }}
+                    onClick={() => setShowBrandModal(true)}
+                  >
+                    +
+                  </button>
+                  {brandFocused && (
+                    <div className="absolute left-0 top-full z-10 bg-white border border-gray-200 rounded w-full max-h-48 overflow-y-auto shadow-lg">
+                      {brands.filter(brand => brand.name.toLowerCase().includes(brandSearch.toLowerCase())).map(brand => (
+                        <div
+                          key={brand._id}
+                          className={`px-3 py-2 cursor-pointer hover:bg-brand-primary/10 ${product.brand === brand._id ? 'bg-brand-primary/10 font-semibold' : ''}`}
+                          onMouseDown={() => {
+                            setProduct({ ...product, brand: brand._id });
+                            setBrandSearch(brand.name);
+                            setBrandFocused(false);
+                            if (brandInputRef.current) brandInputRef.current.blur();
+                          }}
+                        >
+                          {brand.name}
+                        </div>
+                      ))}
+                      {brands.filter(brand => brand.name.toLowerCase().includes(brandSearch.toLowerCase())).length === 0 && (
+                        <div className="px-3 py-2 text-gray-400">No results</div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
+              {/* BrandFormModal */}
+              <BrandFormModal
+                open={showBrandModal}
+                onClose={() => setShowBrandModal(false)}
+                onSuccess={brand => {
+                  setBrands((prev: any[]) => [...prev, brand]);
+                  setProduct((prev: any) => ({ ...prev, brand: brand._id }));
+                }}
+              />
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Selling Price <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="number"
-                  value={product.price}
+                  value={product.price ?? ""}
                   onChange={(e) => setProduct({ ...product, price: e.target.value })}
                   className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
                   placeholder="0.00"
@@ -585,7 +725,7 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                 </label>
                 <input
                   type="number"
-                  value={product.mrp}
+                  value={product.mrp ?? ""}
                   onChange={(e) => setProduct({ ...product, mrp: e.target.value })}
                   className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
                   placeholder="0.00"
@@ -612,7 +752,7 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                   Warehouse <span className="text-red-500">*</span>
                 </label>
                 <select
-                  value={product.warehouse}
+                  value={product.warehouse ?? ""}
                   onChange={(e) => setProduct({ ...product, warehouse: e.target.value })}
                   className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
                   required
@@ -630,7 +770,7 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                   Status
                 </label>
                 <select
-                  value={product.status}
+                  value={product.status ?? ""}
                   onChange={(e) => setProduct({ ...product, status: e.target.value })}
                   className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
                 >
@@ -644,7 +784,7 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                 </label>
                 <input
                   type="text"
-                  value={product.unit}
+                  value={product.unit ?? ""}
                   onChange={e => setProduct({ ...product, unit: e.target.value })}
                   className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
                   placeholder="1 L, 500 ml, 200 g, etc."
@@ -657,14 +797,26 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Description <span className="text-red-500">*</span>
               </label>
-              <textarea
-                value={product.description}
-                onChange={(e) => setProduct({ ...product, description: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                rows={4}
-                placeholder="Enter product description"
-                required
-              />
+              <div className="w-full bg-white border border-gray-300 rounded-lg p-2">
+                <Editor
+                  apiKey="yapzaxocernrvcfg37vobqi7uk31wza7hii4fhsgi6j2838d"
+                  value={product.description ?? ""}
+                  onEditorChange={(val: string) => setProduct({ ...product, description: val ?? "" })}
+                  init={{
+                    height: 250,
+                    menubar: false,
+                    plugins: [
+                      'advlist', 'autolink', 'lists', 'link', 'image', 'charmap', 'preview', 'anchor',
+                      'searchreplace', 'visualblocks', 'code', 'fullscreen',
+                      'insertdatetime', 'media', 'table', 'help', 'wordcount'
+                    ],
+                    toolbar:
+                      'undo redo | formatselect | bold italic underline | ' +
+                      'alignleft aligncenter alignright alignjustify | ' +
+                      'bullist numlist outdent indent | removeformat | help'
+                  }}
+                />
+              </div>
             </div>
             {/* Product Image */}
             <div>
@@ -1151,6 +1303,34 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
               </button>
             </div>
           </form>
+          {/* Move modals here, outside the form to avoid nested form error */}
+          <CategoryFormModal
+            open={showCategoryModal}
+            onClose={() => setShowCategoryModal(false)}
+            onSuccess={cat => {
+              setCategories((prev: any[]) => [...prev, cat]);
+              setProduct((prev: any) => ({ ...prev, category: cat._id }));
+            }}
+            categories={categories}
+          />
+          <CategoryFormModal
+            open={showSubcategoryModal}
+            onClose={() => setShowSubcategoryModal(false)}
+            onSuccess={subcat => {
+              setSubcategories((prev: any[]) => [...prev, subcat]);
+              setProduct((prev: any) => ({ ...prev, subcategory: subcat._id }));
+            }}
+            categories={categories}
+            parentId={product.category}
+          />
+          <BrandFormModal
+            open={showBrandModal}
+            onClose={() => setShowBrandModal(false)}
+            onSuccess={brand => {
+              setBrands((prev: any[]) => [...prev, brand]);
+              setProduct((prev: any) => ({ ...prev, brand: brand._id }));
+            }}
+          />
         </div>
       </div>
     </AdminLayout>

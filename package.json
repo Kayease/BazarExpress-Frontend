@@ -39,6 +39,7 @@
         "@radix-ui/react-toggle-group": "^1.1.2",
         "@radix-ui/react-tooltip": "^1.1.9",
         "@reduxjs/toolkit": "^2.2.3",
+        "@tinymce/tinymce-react": "^6.2.1",
         "@tiptap/react": "^2.19.2",
         "@tiptap/starter-kit": "^2.19.2",
         "@uiw/react-markdown-preview": "^5.1.4",
