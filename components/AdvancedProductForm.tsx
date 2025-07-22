@@ -553,7 +553,7 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                     +
                   </button>
                   {categoryFocused && (
-                    <div className="absolute left-0 top-full z-10 bg-white border border-gray-200 rounded w-full max-h-48 overflow-y-auto shadow-lg">
+                    <div className="absolute left-0 top-full z-10 bg-white border border-gray-200 rounded w-full max-w-[calc(100%-56px)] max-h-48 overflow-y-auto shadow-lg">
                       {categories.filter(cat => !cat.parentId && cat.name.toLowerCase().includes(categorySearch.toLowerCase())).map(cat => (
                         <div
                           key={cat._id}
@@ -612,7 +612,7 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                     +
                   </button>
                   {subcategoryFocused && (
-                    <div className="absolute left-0 top-full z-10 bg-white border border-gray-200 rounded w-full max-h-48 overflow-y-auto shadow-lg">
+                    <div className="absolute left-0 top-full z-10 bg-white border border-gray-200 rounded w-full max-w-[calc(100%-56px)] max-h-48 overflow-y-auto shadow-lg">
                       {subcategories.filter(subcat => subcat.name.toLowerCase().includes(subcategorySearch.toLowerCase())).map(subcat => (
                         <div
                           key={subcat._id}
@@ -673,7 +673,7 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                     +
                   </button>
                   {brandFocused && (
-                    <div className="absolute left-0 top-full z-10 bg-white border border-gray-200 rounded w-full max-h-48 overflow-y-auto shadow-lg">
+                    <div className="absolute left-0 top-full z-10 bg-white border border-gray-200 rounded w-full max-w-[calc(100%-56px)] max-h-48 overflow-y-auto shadow-lg">
                       {brands.filter(brand => brand.name.toLowerCase().includes(brandSearch.toLowerCase())).map(brand => (
                         <div
                           key={brand._id}
