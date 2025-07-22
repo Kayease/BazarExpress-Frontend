@@ -85,9 +85,10 @@ type PromoForm = {
   description: string
 }
 
-const API = process.env.NEXT_PUBLIC_API_URL + "/promocodes"
-const CATEGORY_API = process.env.NEXT_PUBLIC_API_URL + "/categories"
-const PRODUCT_API = process.env.NEXT_PUBLIC_API_URL + "/products"
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
+const API = `${API_URL}/promocodes`;
+const CATEGORY_API = `${API_URL}/categories`;
+const PRODUCT_API = `${API_URL}/products`;
 
 // --- Main Page ---
 export default function PromoCodesPage() {

@@ -5,6 +5,8 @@ import { uploadToCloudinary } from "@/lib/uploadToCloudinary";
 import toast from "react-hot-toast";
 import { Plus, Layers, IndianRupee, Ruler, Package, Image as ImageIcon, Camera, Globe, Shield, Star, ChevronDown } from "lucide-react";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
 function base64ToFile(base64: string, filename: string): File {
   const arr = base64.split(",");
   const match = arr[0].match(/:(.*?);/);
@@ -208,8 +210,6 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
   }
   useEffect(() => { regenerateVariants(); }, [attributes]);
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL;
-
   // Fetch categories, brands, warehouses, and taxes
   useEffect(() => {
     const fetchData = async () => {
@@ -285,8 +285,8 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
   // --- Update handleGalleryImagesChange ---
   const handleGalleryImagesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    setGalleryImageFiles(prev => [...prev, ...files]);
-    setProduct(prev => ({
+    setGalleryImageFiles((prev: (File | string)[]) => [...prev, ...files]);
+    setProduct((prev: any) => ({
       ...prev,
       galleryImages: [...(prev.galleryImages || []), ...files.map(f => URL.createObjectURL(f))],
     }));
@@ -1155,4 +1155,4 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
       </div>
     </AdminLayout>
   );
-} 
+}

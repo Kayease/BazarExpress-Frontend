@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
 interface Banner {
   _id: string;
   image: string;
@@ -33,7 +35,6 @@ export default function HeroSection() {
   const [error, setError] = useState<string | null>(null);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
   const router = useRouter();
-  const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
   useEffect(() => {
     const fetchBanners = async () => {

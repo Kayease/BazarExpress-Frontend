@@ -27,7 +27,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import toast from "react-hot-toast";
-import { API_URL } from "../lib/config";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 export default function Footer() {
   const [email, setEmail] = useState("");

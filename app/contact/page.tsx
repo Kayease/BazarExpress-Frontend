@@ -22,6 +22,8 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
 export default function ContactPage() {
   const router = useRouter();
   const [formData, setFormData] = useState({
@@ -54,10 +56,6 @@ export default function ContactPage() {
     console.log("Form submission data:", submissionData);
 
     try {
-      // Get the API URL from environment variables or use a default
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.bazarxpress.com";
-      
-      // Actual API call
       const response = await fetch(`${API_URL}/contacts/submit`, {
         method: "POST",
         headers: {
