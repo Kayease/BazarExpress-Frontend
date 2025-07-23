@@ -296,12 +296,24 @@ export default function AddressesPage() {
 
   const handleSetDefault = async (addressId: number) => {
     if (isUpdating) return;
-    
     try {
       setIsUpdating(true);
-      console.log('Setting default for address ID:', addressId);
       setTokenCookie();
-      
+
+      // First, reset all addresses to not be default
+      const resetResponse = await fetch(`/api/user/addresses/reset-default`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include'
+      });
+      if (!resetResponse.ok) {
+        const errorData = await resetResponse.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || 'Failed to reset default addresses');
+      }
+
+      // Then set the selected address as default (only send isDefault field)
       const response = await fetch(`/api/user/addresses?id=${addressId}`, {
         method: 'PUT',
         headers: {
@@ -310,28 +322,19 @@ export default function AddressesPage() {
         credentials: 'include',
         body: JSON.stringify({ isDefault: true })
       });
-
-      console.log('Set default response status:', response.status);
-
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        console.error('Set default error:', errorData);
         throw new Error(errorData.error || 'Failed to set default address');
       }
-
-      const result = await response.json().catch(() => ({ success: true }));
-      console.log('Set default success:', result);
-
       toast.success('Address set as default successfully!');
-      await fetchUserAddresses(); // Refresh addresses
+      await fetchUserAddresses();
+      setActiveAddressMenu(null);
     } catch (error) {
-      console.error('Error setting default address:', error);
-      const errorMsg = typeof error === "object" && error !== null && "message" in error ? (error as any).message : String(error);
+      const errorMsg = typeof error === 'object' && error !== null && 'message' in error ? (error as any).message : String(error);
       toast.error(`Failed to set default address: ${errorMsg}`);
     } finally {
       setIsUpdating(false);
     }
-    setActiveAddressMenu(null);
   };
 
   const handleSaveAddressEdit = async () => {
@@ -718,7 +721,7 @@ export default function AddressesPage() {
                           <span className="font-semibold capitalize text-sm sm:text-base">{address.type}</span>
                         </div>
                         
-                        {/* Edit and Delete Buttons + Three Dots Menu */}
+                        {/* Edit and Delete Buttons */}
                         <div className="flex space-x-1 sm:space-x-2">
                           <button
                             onClick={() => handleEditAddress(address)}
@@ -734,54 +737,6 @@ export default function AddressesPage() {
                           >
                             <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                           </button>
-                          
-                          {/* Three Dots Menu for Additional Options */}
-                          <div className="relative">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleAddressMenuClick(address.id.toString());
-                              }}
-                              className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-full transition-colors"
-                              title="More Options"
-                            >
-                              <MoreVertical className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-600" />
-                            </button>
-                            
-                            {/* Dropdown Menu */}
-                            {activeAddressMenu === address.id.toString() && (
-                              <div
-                                className="absolute right-0 top-8 sm:top-10 bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-[180px] sm:min-w-[200px]"
-                                onMouseDown={e => e.stopPropagation()}
-                              >
-                                <div className="py-1">
-                                  <button
-                                    onClick={() => handleEditInstruction(address)}
-                                    className="w-full px-3 sm:px-4 py-1.5 sm:py-2 text-left text-xs sm:text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-2"
-                                  >
-                                    <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                                    <span>Add Additional Instruction</span>
-                                  </button>
-                                  <button
-                                    onClick={() => handleEditLabel(address)}
-                                    className="w-full px-3 sm:px-4 py-1.5 sm:py-2 text-left text-xs sm:text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-2"
-                                  >
-                                    <Tag className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                                    <span>Address Label</span>
-                                  </button>
-                                  {!address.isDefault && (
-                                    <button
-                                      onClick={() => handleSetDefault(address.id)}
-                                      className="w-full px-3 sm:px-4 py-1.5 sm:py-2 text-left text-xs sm:text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-2"
-                                    >
-                                      <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                                      <span>Set as Default</span>
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                          </div>
                         </div>
                       </div>
                       
@@ -810,14 +765,28 @@ export default function AddressesPage() {
                           )}
                         </div>
                         
-                        {/* Address Label - Bottom Right Corner */}
-                        {address.addressLabel && (
-                          <div className="absolute bottom-0 right-0">
+                        {/* Address Label and Set as Default button */}
+                        <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
+                          {address.addressLabel && (
                             <span className="px-1.5 sm:px-2 py-0.5 sm:py-1 bg-blue-50 text-blue-600 text-xs rounded border border-blue-200 font-medium">
                               {address.addressLabel}
                             </span>
-                          </div>
-                        )}
+                          )}
+                          {!address.isDefault && (
+                            <button
+                              onClick={() => handleSetDefault(address.id)}
+                              disabled={isUpdating}
+                              className={`text-xs sm:text-sm flex items-center gap-1 ${
+                                isUpdating 
+                                  ? 'text-gray-400 cursor-not-allowed' 
+                                  : 'text-brand-primary hover:text-brand-primary-dark'
+                              }`}
+                            >
+                              <Check className="w-3 h-3 sm:w-4 sm:h-4" />
+                              <span>{isUpdating ? 'Setting...' : 'Set as Default'}</span>
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -1042,21 +1011,8 @@ export default function AddressesPage() {
                         />
                       </div>
                       
-                      <div className="mt-2 mb-3">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            name="isDefault"
-                            checked={addressForm.isDefault || false}
-                            onChange={e => setAddressForm(prev => ({ ...prev, isDefault: e.target.checked }))}
-                            className="w-4 h-4 text-brand-primary border-gray-300 rounded focus:ring-brand-primary"
-                          />
-                          <span className="text-xs sm:text-sm text-gray-700">Make this my default address</span>
-                        </label>
-                      </div>
-                      
                       {/* Sticky Save/Update Button */}
-                      <div className="sticky bottom-0 bg-white pt-3 pb-3 z-10 mt-2 sm:mt-4 border-t border-gray-100">
+                      <div className="sticky -bottom-4 bg-white pt-3 pb-3 z-10 mt-2 sm:mt-4 border-t border-gray-100">
                         <div className="flex gap-2 sm:gap-3">
                           <button
                             type="button"
