@@ -171,12 +171,53 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                 </label>
                 <OTPInput
                   value={otp}
-                  onChange={(value) => {
+                  onChange={async (value) => {
                     setOtp(value);
                     // Only trigger auto-submit if we have all 6 digits and not already loading
                     if (value.length === 6 && !loading) {
-                      // Small delay to ensure state is updated
-                      setTimeout(() => handleVerifyOtp(), 100);
+                      // Use the new value directly instead of relying on state
+                      const verifyOtp = async () => {
+                        if (loading) return;
+                        
+                        setLoading(true);
+                        try {
+                          const res = await fetch(`${API_URL}/verify-otp`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ phone, otp: value, sessionId }),
+                          });
+                          const data = await res.json();
+                          if (!res.ok) throw new Error(data.error || "Invalid OTP");
+                          
+                          dispatch(setToken(data.token));
+                          toast.success("Login successful!");
+                          setStep("phone");
+                          setPhone("");
+                          setOtp("");
+                          setSessionId("");
+                          
+                          if (!data.user?.name || !data.user?.email) {
+                            setLoggedInUser(data.user);
+                            setShowCompleteProfile(true);
+                            if (data.token) {
+                              localStorage.setItem("token", data.token);
+                            }
+                          } else {
+                            if (data.token) {
+                              localStorage.setItem("token", data.token);
+                            }
+                            dispatch(fetchProfile());
+                            onClose();
+                          }
+                        } catch (err: any) {
+                          toast.error(err.message || "Invalid OTP");
+                          setOtp("");  // Clear OTP on error
+                        } finally {
+                          setLoading(false);
+                        }
+                      };
+                      
+                      verifyOtp();
                     }
                   }}
                   disabled={loading}

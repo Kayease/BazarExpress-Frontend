@@ -100,7 +100,7 @@ export default function Profile() {
 
   useEffect(() => {
     if (!user) {
-      router.push("/auth/login");
+      router.push("/");
     } else {
       setFormData({
         name: user.name ?? "",

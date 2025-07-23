@@ -4,6 +4,7 @@ import { Provider, useSelector, useDispatch } from "react-redux";
 import { store, persistor, RootState } from "../lib/store";
 import { PersistGate } from "redux-persist/integration/react";
 import { logout as reduxLogout } from "../lib/slices/authSlice";
+import { useRouter } from "next/navigation";
 import { getCartItems, setCartItems as persistCartItems } from "../lib/cart";
 import toast from "react-hot-toast";
 
@@ -39,6 +40,7 @@ function AppProviderInner({ children }: { children: ReactNode }) {
   const reduxUser = useSelector((state: RootState) => state.auth.user);
   const isLoggedIn = !!reduxUser;
   const dispatch = useDispatch();
+  const router = useRouter();
 
   // Load cart and wishlist from localStorage on mount
   useEffect(() => {
@@ -149,6 +151,10 @@ function AppProviderInner({ children }: { children: ReactNode }) {
 
   const handleLogout = () => {
     dispatch(reduxLogout());
+    // Clear any stored tokens
+    localStorage.removeItem("token");
+    // Navigate to home page using Next.js router
+    router.push("/");
   };
 
   return (

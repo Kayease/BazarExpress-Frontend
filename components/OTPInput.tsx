@@ -79,7 +79,7 @@ export default function OTPInput({ value, onChange, length = 6, disabled = false
       {Array.from({ length }, (_, i) => (
         <input
           key={i}
-          ref={el => inputRefs.current[i] = el}
+          ref={el => { inputRefs.current[i] = el; }}
           type="text"
           inputMode="numeric"
           maxLength={1}
