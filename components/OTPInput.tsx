@@ -75,7 +75,7 @@ export default function OTPInput({ value, onChange, length = 6, disabled = false
   };
 
   return (
-    <div className="flex gap-2 justify-center" onPaste={handlePaste}>
+    <div className="flex gap-3 justify-center" onPaste={handlePaste}>
       {Array.from({ length }, (_, i) => (
         <input
           key={i}
@@ -87,11 +87,12 @@ export default function OTPInput({ value, onChange, length = 6, disabled = false
           onChange={e => handleInput(i, e)}
           onKeyDown={e => handleKeyDown(i, e)}
           disabled={disabled}
-          className="w-12 h-14 text-2xl text-center border-2 rounded-lg focus:border-brand-accent focus:outline-none disabled:bg-gray-100 disabled:cursor-not-allowed"
+          className="w-12 h-14 text-2xl text-center border-2 rounded-lg focus:border-brand-primary focus:outline-none disabled:bg-gray-100 disabled:cursor-not-allowed bg-gray-50"
           style={{
             caretColor: 'transparent',
             WebkitAppearance: 'none',
             MozAppearance: 'textfield',
+            boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.05)'
           }}
         />
       ))}

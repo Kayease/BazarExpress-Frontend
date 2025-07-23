@@ -2,8 +2,8 @@
 
 import type React from "react"
 
-import { useState, useRef } from "react";
-import { X } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { X, ChevronLeft } from "lucide-react";
 import toast from "react-hot-toast";
 import CompleteProfileModal from "./CompleteProfileModal";
 import OTPInput from "./OTPInput";
@@ -24,7 +24,17 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
   const [sessionId, setSessionId] = useState(""); // For backend session/OTP tracking
   const [showCompleteProfile, setShowCompleteProfile] = useState(false);
   const [loggedInUser, setLoggedInUser] = useState<any>(null);
+  const [seconds, setSeconds] = useState(0);
   const dispatch = useAppDispatch();
+
+  useEffect(() => {
+    if (step === "otp" && seconds > 0) {
+      const timer = setInterval(() => {
+        setSeconds(s => s - 1);
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [step, seconds]);
 
   if (!isOpen) return null;
 
@@ -50,7 +60,8 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
       setStep("otp");
       setOtp(""); // Clear OTP field when resending
       setSessionId(data.sessionId || "");
-      toast.success("OTP sent to your phone");
+      setSeconds(30); // Start 30-second countdown
+      toast.success("OTP sent successfully");
       // For demo: setServerOtp(data.otp) if you want to show OTP for testing
     } catch (err: any) {
       toast.error(err.message || "Failed to send OTP");
@@ -123,54 +134,72 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
           if (e.target === e.currentTarget) onClose();
         }}
       >
-        <div className="bg-surface-primary rounded-lg p-6 w-11/12 max-w-md relative" onClick={(e) => e.stopPropagation()}>
+        <div className="bg-white rounded-xl p-6 w-11/12 max-w-md relative shadow-xl" onClick={(e) => e.stopPropagation()}>
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 text-text-secondary hover:text-text-primary"
+            className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
             aria-label="Close modal"
           >
             <X size={20} />
           </button>
-          <div className="mb-6">
-            <h2 className="text-2xl font-bold text-text-primary mb-2">Sign In</h2>
-            <p className="text-text-secondary">Sign in with your phone number</p>
+          
+          <div className="mb-8 text-center">
+            <img 
+              src="/logo.png" 
+              alt="BazarXpress" 
+              className="h-14 mx-auto mb-4"
+            />
+            <h2 className="text-2xl font-bold text-gray-800 mb-2">
+              {step === "phone" ? "India's last minute app" : "OTP Verification"}
+            </h2>
+            <p className="text-gray-600">
+              {step === "phone" 
+                ? "Log in or Sign up" 
+                : `We have sent a verification code to +91-${phone}`}
+            </p>
           </div>
           {step === "phone" && (
             <form onSubmit={handleSendOtp} className="space-y-4">
               <div>
-                <label htmlFor="phone" className="block text-sm font-medium text-text-primary mb-1">
-                  Phone Number
-                </label>
-                <input
-                  id="phone"
-                  name="phone"
-                  type="tel"
-                  value={phone}
-                  onChange={e => setPhone(e.target.value.replace(/[^\d]/g, ""))}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-accent focus:border-transparent"
-                  placeholder="Enter your 10-digit phone number"
-                  maxLength={10}
-                  required
-                />
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <span className="text-gray-500">+91</span>
+                  </div>
+                  <input
+                    id="phone"
+                    name="phone"
+                    type="tel"
+                    value={phone}
+                    onChange={e => setPhone(e.target.value.replace(/[^\d]/g, ""))}
+                    className="w-full pl-12 pr-4 py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent text-gray-800 text-lg"
+                    placeholder="Enter mobile number"
+                    maxLength={10}
+                    required
+                  />
+              </div>
               </div>
               <button
                 type="submit"
-                disabled={loading}
-                className="w-full bg-brand-primary text-inverse py-2 rounded-lg hover:bg-brand-primary-dark transition duration-200 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={loading || phone.length !== 10}
+                className="w-full bg-brand-primary text-white py-4 rounded-lg hover:bg-brand-primary-dark transition duration-200 font-semibold text-lg disabled:opacity-50 disabled:cursor-not-allowed mt-4"
               >
-                {loading ? "Sending OTP..." : "Send OTP"}
+                {loading ? "Sending..." : "Continue"}
               </button>
+              <p className="text-xs text-gray-500 text-center mt-4">
+                By continuing, you agree to our{" "}
+                <a href="/terms" className="text-brand-primary hover:underline">Terms of service</a>
+                {" "}& {" "}
+                <a href="/privacy" className="text-brand-primary hover:underline">Privacy policy</a>
+              </p>
             </form>
           )}
           {step === "otp" && (
             <form onSubmit={handleVerifyOtp} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-text-primary mb-3">
-                  Enter 6-digit OTP
-                </label>
-                <OTPInput
-                  value={otp}
-                  onChange={async (value) => {
+                <div className="flex flex-col items-center space-y-4">
+                  <OTPInput
+                    value={otp}
+                    onChange={async (value) => {
                     setOtp(value);
                     // Only trigger auto-submit if we have all 6 digits and not already loading
                     if (value.length === 6 && !loading) {
@@ -221,30 +250,31 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                   }}
                   disabled={loading}
                 />
+                </div>
+                
+                <div className="text-center space-y-4 mt-6">
+                  <button
+                    type="button"
+                    className="text-brand-primary hover:text-brand-primary-dark text-sm font-medium"
+                    onClick={handleSendOtp}
+                    disabled={loading}
+                  >
+                    Resend Code {seconds > 0 && `(${seconds}s)`}
+                  </button>
+                  
+                  <div>
+                    <button
+                      type="button"
+                      className="text-gray-600 hover:text-gray-700 text-sm font-medium flex items-center justify-center w-full"
+                      onClick={() => { setStep("phone"); setOtp(""); }}
+                      disabled={loading}
+                    >
+                      <ChevronLeft size={16} className="mr-1" />
+                      Change phone number
+                    </button>
+                  </div>
+                </div>
               </div>
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-brand-primary text-inverse py-2 rounded-lg hover:bg-brand-primary-dark transition duration-200 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? "Verifying..." : "Verify & Sign In"}
-              </button>
-              <button
-                type="button"
-                className="w-full mt-2 text-brand-primary hover:underline text-sm"
-                onClick={handleSendOtp}
-                disabled={loading}
-              >
-                Resend OTP
-              </button>
-              <button
-                type="button"
-                className="w-full mt-2 text-brand-primary hover:underline text-sm"
-                onClick={() => { setStep("phone"); setOtp(""); }}
-                disabled={loading}
-              >
-                Change phone number
-              </button>
             </form>
           )}
         </div>

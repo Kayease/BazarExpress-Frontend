@@ -239,10 +239,9 @@ export default function Navbar() {
                   onClick={() => setShowLocationModal(true)}
                   className="flex flex-col text-left"
                 >
-                  <div className="text-md
-                   font-extrabold text-gray-900">
-                    Delivery in {currentLocation.deliveryTime}
-                    </div>
+                  <div className="text-md font-extrabold text-green-600">
+                    Delivery in {currentLocation.deliveryTime || "8 minutes"}
+                  </div>
                   <div className="flex items-center text-xs text-gray-500 max-w-[200px] truncate">
                     <span className="truncate">{currentLocation.address}</span>
                     <ChevronDown size={14} className="ml-1 flex-shrink-0" />
@@ -361,13 +360,23 @@ export default function Navbar() {
                         <div className="space-y-1">
                             <Link
                             href="/account"
+                            onClick={() => setShowAccountDropdown(false)}
                             className="flex items-center space-x-3 px-3 py-2 text-gray-700 hover:bg-gray-50 rounded-lg"
                           >
                             <User size={16} />
                             <span>My Account</span>
                             </Link>
                             <Link
+                            href="/addresses"
+                            onClick={() => setShowAccountDropdown(false)}
+                            className="flex items-center space-x-3 px-3 py-2 text-gray-700 hover:bg-gray-50 rounded-lg"
+                          >
+                            <MapPin size={16} />
+                            <span>Saved Addresses</span>
+                            </Link>
+                            <Link
                             href="/orders"
+                            onClick={() => setShowAccountDropdown(false)}
                             className="flex items-center space-x-3 px-3 py-2 text-gray-700 hover:bg-gray-50 rounded-lg"
                           >
                             <ShoppingCart size={16} />
@@ -386,7 +395,10 @@ export default function Navbar() {
                               </Link>
                           )}
                           <button
-                            onClick={handleLogoutRedux}
+                            onClick={() => {
+                              handleLogoutRedux();
+                              setShowAccountDropdown(false);
+                            }}
                             className="w-full flex items-center space-x-3 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg"
                           >
                             <LogOutIcon size={16} className="text-red-500" />
@@ -496,6 +508,16 @@ export default function Navbar() {
                   >
                     <User size={18} className="mr-3" />
                     <span className="font-medium">My Account</span>
+                  </Link>
+                  
+                  {/* Saved Addresses */}
+                  <Link
+                    href="/addresses"
+                    className="w-full flex items-center p-3 bg-white border border-gray-200 rounded-lg"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    <MapPin size={18} className="mr-3" />
+                    <span className="font-medium">Saved Addresses</span>
                   </Link>
 
                   {/* Wishlist */}

@@ -31,6 +31,46 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+// ModalProvider for global modal scroll lock
+interface ModalContextType {
+  modalCount: number;
+  openModal: () => void;
+  closeModal: () => void;
+}
+const ModalContext = createContext<ModalContextType | undefined>(undefined);
+
+function ModalProvider({ children }: { children: ReactNode }) {
+  const [modalCount, setModalCount] = useState(0);
+
+  useEffect(() => {
+    if (modalCount > 0) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [modalCount]);
+
+  const openModal = () => setModalCount((c) => c + 1);
+  const closeModal = () => setModalCount((c) => Math.max(0, c - 1));
+
+  return (
+    <ModalContext.Provider value={{ modalCount, openModal, closeModal }}>
+      {children}
+    </ModalContext.Provider>
+  );
+}
+
+export function useModal() {
+  const context = useContext(ModalContext);
+  if (context === undefined) {
+    throw new Error('useModal must be used within a ModalProvider');
+  }
+  return context;
+}
+
 function AppProviderInner({ children }: { children: ReactNode }) {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
@@ -158,30 +198,32 @@ function AppProviderInner({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AppContext.Provider
-      value={{
-        isCartOpen,
-        setIsCartOpen,
-        isLoginOpen,
-        setIsLoginOpen,
-        cartItems,
-        setCartItems,
-        searchQuery,
-        setSearchQuery,
-        isLoggedIn,
-        user: reduxUser,
-        addToCart,
-        updateCartItem,
-        cartTotal,
-        handleLogout,
-        wishlistItems,
-        addToWishlist,
-        removeFromWishlist,
-        isInWishlist,
-      }}
-    >
-      {children}
-    </AppContext.Provider>
+    <ModalProvider>
+      <AppContext.Provider
+        value={{
+          isCartOpen,
+          setIsCartOpen,
+          isLoginOpen,
+          setIsLoginOpen,
+          cartItems,
+          setCartItems,
+          searchQuery,
+          setSearchQuery,
+          isLoggedIn,
+          user: reduxUser,
+          addToCart,
+          updateCartItem,
+          cartTotal,
+          handleLogout,
+          wishlistItems,
+          addToWishlist,
+          removeFromWishlist,
+          isInWishlist,
+        }}
+      >
+        {children}
+      </AppContext.Provider>
+    </ModalProvider>
   );
 }
 

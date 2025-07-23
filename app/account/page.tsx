@@ -1,7 +1,8 @@
 "use client";
 
 import type React from "react";
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Layout from "../../components/Layout";
 import {
@@ -18,16 +19,23 @@ import {
   Package,
   TrendingUp,
   Star,
-  Trash2,
+  Home,
+  Briefcase,
+  Hotel,
+  MapPinOff,
   Plus,
+  Trash2,
   Minus,
   Eye,
   ArrowRight,
   Gift,
   Award,
   Clock,
+  MoreVertical,
+  FileText,
+  Tag,
+  Check,
 } from "lucide-react";
-import Link from "next/link";
 import { useAppSelector, useAppDispatch } from "../../lib/store";
 import { updateProfile, fetchProfile } from "../../lib/slices/authSlice";
 import {
@@ -50,38 +58,26 @@ import Image from "next/image";
 
 export default function Profile() {
   const user = useAppSelector((state) => state.auth.user);
+  const token = useAppSelector((state) => state.auth.token);
   const cartItems = useAppSelector(selectCartItems);
   const cartCount = useAppSelector(selectCartCount);
   const cartTotal = useAppSelector(selectCartTotal);
   const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([]);
   const [isEditing, setIsEditing] = useState(false);
+  const [savedAddresses, setSavedAddresses] = useState<any[]>([]);
+  const [isLoadingAddresses, setIsLoadingAddresses] = useState(false);
   const [activeTab, setActiveTab] = useState<
-    "profile" | "cart" | "wishlist" | "orders"
+    "profile" | "cart" | "wishlist" | "orders" | "addresses"
   >("profile");
   const [formData, setFormData] = useState({
     name: user?.name ?? "",
     email: user?.email ?? "",
     phone: user?.phone ?? "",
-    address: user?.address ?? {
-      street: "",
-      landmark: "",
-      city: "",
-      state: "",
-      country: "",
-      pincode: "",
-    },
     dateOfBirth: user?.dateOfBirth ?? "",
   });
   const router = useRouter();
   const dispatch = useAppDispatch();
-  const [addressErrors, setAddressErrors] = useState({
-    street: "",
-    landmark: "",
-    city: "",
-    state: "",
-    country: "",
-    pincode: "",
-  });
+  // Address management moved to a separate page
   const countryOptions = [
     "India",
     "United States",
@@ -97,6 +93,8 @@ export default function Profile() {
     phone: "",
     dateOfBirth: "",
   });
+  
+
 
   useEffect(() => {
     if (!user) {
@@ -106,14 +104,6 @@ export default function Profile() {
         name: user.name ?? "",
         email: user.email ?? "",
         phone: user.phone ?? "",
-        address: user.address ?? {
-          street: "",
-          landmark: "",
-          city: "",
-          state: "",
-          country: "",
-          pincode: "",
-        },
         dateOfBirth: user.dateOfBirth ?? "",
       });
     }
@@ -132,77 +122,100 @@ export default function Profile() {
     };
   }, []);
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
-    const { name, value } = e.target;
-    if (name.startsWith("address.")) {
-      const key = name.split(".")[1];
-      setFormData({
-        ...formData,
-        address: {
-          ...formData.address,
-          [key]: value,
-        },
-      });
-    } else {
-      setFormData({
-        ...formData,
-        [name]: value,
-      });
+  // Utility function to set token as cookie (same as addresses page)
+  const setTokenCookie = () => {
+    if (token) {
+      document.cookie = `token=${token}; path=/; max-age=604800; SameSite=strict`;
     }
   };
 
-  const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    if (name.startsWith("address.")) {
-      const key = name.split(".")[1];
-      setFormData({
-        ...formData,
-        address: {
-          ...formData.address,
-          [key]: value,
+  const fetchUserAddresses = async () => {
+    try {
+      setIsLoadingAddresses(true);
+      // Set token as cookie before making the request
+      setTokenCookie();
+
+      const response = await fetch(`/api/user/addresses`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
         },
+        credentials: "include",
       });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to fetch addresses");
+      }
+
+      const data = await response.json();
+      if (Array.isArray(data.addresses)) {
+        // Filter out any addresses that are missing essential data
+        const validAddresses = data.addresses.filter((address: any) => 
+          address && 
+          address.building && 
+          address.area && 
+          address.city && 
+          address.state && 
+          address.pincode &&
+          address.name
+        );
+        setSavedAddresses(validAddresses);
+      } else {
+        setSavedAddresses([]);
+      }
+    } catch (error) {
+      console.error("Error fetching addresses:", error);
+      setSavedAddresses([]);
+    } finally {
+      setIsLoadingAddresses(false);
     }
+  };
+
+  // Fetch addresses when addresses tab is active
+  useEffect(() => {
+    if (activeTab === "addresses" && token) {
+      fetchUserAddresses();
+    }
+  }, [activeTab, token]);
+
+
+
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => {
+    const { name, value } = e.target;
+    setFormData({
+      ...formData,
+      [name]: value,
+    });
   };
 
   const handleSave = async () => {
-    // Address validation
-    const errors: typeof addressErrors = {
-      street: formData.address.street.trim() ? "" : "Street is required",
-      landmark: formData.address.landmark.trim() ? "" : "Landmark is required",
-      city: formData.address.city.trim() ? "" : "City is required",
-      state: formData.address.state.trim() ? "" : "State is required",
-      country: formData.address.country.trim() ? "" : "Country is required",
-      pincode: /^[0-9]{6}$/.test(formData.address.pincode.trim())
-        ? ""
-        : "Pincode must be 6 digits",
-    };
-    setAddressErrors(errors);
-    const hasAddressError = Object.values(errors).some(Boolean);
-
-    // Phone validation (10 digits)
-    const phoneError =
-      formData.phone.trim() && !/^\d{10}$/.test(formData.phone.trim())
+    // Basic form validation
+    const nameError = !formData.name.trim() ? "Name is required" : "";
+    const emailError = !formData.email.trim()
+      ? "Email is required"
+      : !/^\S+@\S+\.\S+$/.test(formData.email.trim())
+      ? "Invalid email format"
+      : "";
+    const phoneError = formData.phone.trim()
+      ? !/^\d{10}$/.test(formData.phone.trim())
         ? "Phone must be 10 digits"
-        : "";
-    // Email validation (basic)
-    const emailError =
-      formData.email.trim() && !/^\S+@\S+\.\S+$/.test(formData.email.trim())
-        ? "Invalid email format"
-        : "";
+        : ""
+      : "";
+
     setFieldErrors({
       email: emailError,
       phone: phoneError,
       dateOfBirth: "",
     });
-    const hasFieldError = [emailError, phoneError].some(Boolean);
 
-    if (hasAddressError || hasFieldError) {
+    if (nameError || emailError || phoneError) {
       toast.error("Please fix the errors in the form.");
       return;
     }
+
     try {
       await dispatch(updateProfile(formData)).unwrap();
       await dispatch(fetchProfile());
@@ -219,14 +232,6 @@ export default function Profile() {
         name: user.name ?? "",
         email: user.email ?? "",
         phone: user.phone ?? "",
-        address: user.address ?? {
-          street: "",
-          landmark: "",
-          city: "",
-          state: "",
-          country: "",
-          pincode: "",
-        },
         dateOfBirth: user.dateOfBirth ?? "",
       });
     }
@@ -251,20 +256,9 @@ export default function Profile() {
     toast.success("Item removed from wishlist");
   };
 
-  // Helper to format address
-  const formatAddress = (address: typeof formData.address) => {
-    if (!address) return "Not provided";
-    return [
-      address.street,
-      address.landmark,
-      address.city,
-      address.state,
-      address.country,
-      address.pincode,
-    ]
-      .filter(Boolean)
-      .join(", ");
-  };
+
+
+  // Address management moved to separate page
 
   if (!user) {
     return (
@@ -302,10 +296,6 @@ export default function Profile() {
                         ? "Administrator"
                         : "Premium Customer"}
                     </span>
-                    <span className="inline-flex items-center bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full text-sm font-medium border border-white/30">
-                      <Clock className="w-4 h-4 mr-2" />
-                      Member since 2024
-                    </span>
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-4 text-center">
@@ -333,6 +323,11 @@ export default function Profile() {
             <div className="flex flex-wrap border-b border-gray-200">
               {[
                 { id: "profile", label: "Profile", icon: UserIcon },
+                {
+                  id: "addresses",
+                  label: "Saved Addresses",
+                  icon: MapPin,
+                },
                 {
                   id: "cart",
                   label: `Cart (${cartCount})`,
@@ -496,127 +491,7 @@ export default function Profile() {
                     )}
                   </div>
 
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-codGray mb-2">
-                      <MapPin className="inline h-4 w-4 mr-2" />
-                      Address
-                    </label>
-                    {isEditing ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                          <label className="block text-sm font-medium text-codGray mb-2">
-                            Street
-                          </label>
-                          <input
-                            type="text"
-                            name="address.street"
-                            value={formData.address.street}
-                            onChange={handleChange}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                          />
-                          {addressErrors.street && (
-                            <p className="text-red-500 text-xs mt-1">
-                              {addressErrors.street}
-                            </p>
-                          )}
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-codGray mb-2">
-                            Landmark
-                          </label>
-                          <input
-                            type="text"
-                            name="address.landmark"
-                            value={formData.address.landmark}
-                            onChange={handleChange}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                          />
-                          {addressErrors.landmark && (
-                            <p className="text-red-500 text-xs mt-1">
-                              {addressErrors.landmark}
-                            </p>
-                          )}
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-codGray mb-2">
-                            City
-                          </label>
-                          <input
-                            type="text"
-                            name="address.city"
-                            value={formData.address.city}
-                            onChange={handleChange}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                          />
-                          {addressErrors.city && (
-                            <p className="text-red-500 text-xs mt-1">
-                              {addressErrors.city}
-                            </p>
-                          )}
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-codGray mb-2">
-                            State
-                          </label>
-                          <input
-                            type="text"
-                            name="address.state"
-                            value={formData.address.state}
-                            onChange={handleChange}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                          />
-                          {addressErrors.state && (
-                            <p className="text-red-500 text-xs mt-1">
-                              {addressErrors.state}
-                            </p>
-                          )}
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-codGray mb-2">
-                            Country
-                          </label>
-                          <select
-                            name="address.country"
-                            value={formData.address.country}
-                            onChange={handleSelectChange}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                          >
-                            {countryOptions.map((country) => (
-                              <option key={country} value={country}>
-                                {country}
-                              </option>
-                            ))}
-                          </select>
-                          {addressErrors.country && (
-                            <p className="text-red-500 text-xs mt-1">
-                              {addressErrors.country}
-                            </p>
-                          )}
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-codGray mb-2">
-                            Pincode
-                          </label>
-                          <input
-                            type="text"
-                            name="address.pincode"
-                            value={formData.address.pincode}
-                            onChange={handleChange}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                          />
-                          {addressErrors.pincode && (
-                            <p className="text-red-500 text-xs mt-1">
-                              {addressErrors.pincode}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="px-4 py-3 bg-gray-50 rounded-lg text-codGray">
-                        {formatAddress(formData.address)}
-                      </p>
-                    )}
-                  </div>
+                  {/* Address section removed and moved to a separate tab */}
                 </div>
               </div>
             )}
@@ -845,6 +720,109 @@ export default function Profile() {
                       ))}
                     </div>
                   )}
+                </div>
+              </div>
+            )}
+
+            {/* Addresses Tab */}
+            {activeTab === "addresses" && (
+              <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+                <div className="p-8">
+                  <div className="flex items-center justify-between mb-8">
+                    <h2 className="text-2xl font-bold text-codGray flex items-center">
+                      <MapPin className="w-6 h-6 mr-3" />
+                      Saved Addresses{" "}
+                      {!isLoadingAddresses && `(${savedAddresses.length})`}
+                    </h2>
+                    <Link
+                      href="/addresses"
+                      className="flex items-center space-x-2 bg-gradient-to-r from-brand-primary to-brand-primary-dark text-white px-6 py-3 rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                    >
+                      <Plus className="h-4 w-4" />
+                      <span>Manage Addresses</span>
+                    </Link>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {isLoadingAddresses ? (
+                      <div className="col-span-2 text-center py-16">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-primary mx-auto mb-4"></div>
+                        <p className="text-gray-500">Loading addresses...</p>
+                      </div>
+                    ) : savedAddresses?.length > 0 ? (
+                      savedAddresses.map((address) => (
+                        <div
+                          key={address.id}
+                          className="p-6 border border-gray-200 rounded-xl hover:border-brand-primary transition-colors"
+                        >
+                          <div className="flex items-start justify-between mb-4">
+                            <div className="flex items-center space-x-3">
+                              {(address.type === "Home" || address.type === "home") && (
+                                <Home className="w-5 h-5 text-brand-primary" />
+                              )}
+                              {(address.type === "Office" || address.type === "work") && (
+                                <Briefcase className="w-5 h-5 text-brand-primary" />
+                              )}
+                              {(address.type === "Hotel" || address.type === "hotel") && (
+                                <Hotel className="w-5 h-5 text-brand-primary" />
+                              )}
+                              {(address.type === "Other" || address.type === "other") && (
+                                <MapPinOff className="w-5 h-5 text-brand-primary" />
+                              )}
+                              <span className="font-semibold capitalize">
+                                {address.type}
+                              </span>
+                              {address.isDefault && (
+                                <span className="px-2 py-1 bg-green-100 text-green-600 text-xs rounded font-medium">Default</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            {/* Name and Address Label */}
+                            <div className="flex items-center gap-2 mb-2">
+                              {address.name && (
+                                <p className="text-gray-900 font-medium">{address.name}</p>
+                              )}
+                              {address.addressLabel && (
+                                <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded">{address.addressLabel}</span>
+                              )}
+                            </div>
+                            
+                            {/* Address Details */}
+                            <div className="text-gray-600 text-sm space-y-1">
+                              {address.building && <p>{address.building}{address.floor ? `, Floor ${address.floor}` : ''}</p>}
+                              {address.area && <p>{address.area}</p>}
+                              {address.landmark && <p>Near {address.landmark}</p>}
+                              <p>{`${address.city || ''}, ${address.state || ''} ${address.pincode || ''}`.trim()}</p>
+                              {address.phone && (
+                                <p className="text-gray-700">📞 {address.phone}</p>
+                              )}
+                              {address.additionalInstructions && (
+                                <p className="text-gray-500 italic">📝 {address.additionalInstructions}</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="col-span-2 text-center py-16">
+                        <MapPin className="w-24 h-24 text-gray-300 mx-auto mb-4" />
+                        <h3 className="text-xl font-semibold text-gray-600 mb-2">
+                          No addresses saved yet
+                        </h3>
+                        <p className="text-gray-500 mb-6">
+                          Add your delivery addresses to make checkout faster!
+                        </p>
+                        <Link
+                          href="/addresses"
+                          className="inline-flex items-center bg-gradient-to-r from-brand-primary to-brand-primary-dark text-white px-6 py-3 rounded-xl hover:shadow-lg transition-all duration-200"
+                        >
+                          <Plus className="w-4 h-4 mr-2" />
+                          Add New Address
+                        </Link>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}

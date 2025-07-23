@@ -109,3 +109,9 @@ body {
         /* Chrome, Safari, Opera */
     }
 }
+
+/* Ensure Google Maps Autocomplete dropdown stays above modals and does not scroll */
+.pac-container {
+  z-index: 99999 !important;
+  position: fixed !important;
+}
