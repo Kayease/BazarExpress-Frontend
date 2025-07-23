@@ -28,8 +28,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
 
   if (!isOpen) return null;
 
-  // For testing, use full backend URL (remember to revert to relative URLs for production)
-  const API_URL = "http://localhost:4000/api/auth";
+  const API_URL = `${process.env.NEXT_PUBLIC_API_URL}/auth`;
 
   // Send OTP handler
   const handleSendOtp = async (e?: React.FormEvent) => {

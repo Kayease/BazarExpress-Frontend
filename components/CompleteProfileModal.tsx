@@ -24,7 +24,7 @@ export default function CompleteProfileModal({ isOpen, onClose, user, onProfileU
     setLoading(true);
     try {
       const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-      const API_URL = "http://localhost:4000/api/auth";
+      const API_URL = `${process.env.NEXT_PUBLIC_API_URL}/auth`;
       const res = await fetch(`${API_URL}/profile`, {
         method: "PUT",
         headers: {
