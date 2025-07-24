@@ -109,15 +109,18 @@ export default function AddressesPage() {
       const data = await response.json();
       if (Array.isArray(data.addresses)) {
         // Filter out any addresses that are missing essential data
+        // Only filter out addresses that are completely invalid or missing critical fields
         const validAddresses = data.addresses.filter((address: any) => 
           address && 
-          address.building && 
-          address.area && 
+          address.id &&
+          (address.building || address.area) && // At least one location identifier
           address.city && 
           address.state && 
-          address.pincode &&
-          address.name
+          address.pincode
+          // Removed name requirement as it might be optional
         );
+        console.log('Fetched addresses:', data.addresses);
+        console.log('Valid addresses after filtering:', validAddresses);
         setSavedAddresses(validAddresses);
       } else {
         console.error('Invalid address data format:', data);
@@ -228,7 +231,7 @@ export default function AddressesPage() {
 
       console.log('Deleting address with ID:', addressId);
 
-      const response = await fetch(`/api/user/addresses?id=${addressId}`, {
+      const response = await fetch(`/api/user/addresses/${addressId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -300,36 +303,56 @@ export default function AddressesPage() {
       setIsUpdating(true);
       setTokenCookie();
 
-      // First, reset all addresses to not be default
-      const resetResponse = await fetch(`/api/user/addresses/reset-default`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include'
-      });
-      if (!resetResponse.ok) {
-        const errorData = await resetResponse.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(errorData.error || 'Failed to reset default addresses');
+      // Find the address to be set as default
+      const addressToUpdate = savedAddresses.find(addr => addr.id === addressId);
+      if (!addressToUpdate) {
+        throw new Error('Address not found');
       }
 
-      // Then set the selected address as default (only send isDefault field)
-      const response = await fetch(`/api/user/addresses?id=${addressId}`, {
+      console.log('Setting address as default:', addressId);
+      
+      // Create an update object with all current address data plus isDefault: true
+      const updateData = {
+        ...addressToUpdate,
+        isDefault: true,
+        updatedAt: Date.now()
+      };
+
+      console.log('Full update data:', updateData);
+
+      // Update the address with all its data, not just isDefault
+      const response = await fetch(`/api/user/addresses/${addressId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify({ isDefault: true })
+        body: JSON.stringify(updateData)
       });
+
+      console.log('Set default response status:', response.status);
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Set default error:', errorData);
         throw new Error(errorData.error || 'Failed to set default address');
       }
+
+      // Optimistically update the UI
+      setSavedAddresses(prev => 
+        prev.map(addr => ({
+          ...addr,
+          isDefault: addr.id === addressId
+        }))
+      );
+
       toast.success('Address set as default successfully!');
+      
+      // Refresh addresses to ensure consistency
       await fetchUserAddresses();
       setActiveAddressMenu(null);
     } catch (error) {
+      console.error('Error setting default address:', error);
       const errorMsg = typeof error === 'object' && error !== null && 'message' in error ? (error as any).message : String(error);
       toast.error(`Failed to set default address: ${errorMsg}`);
     } finally {
@@ -858,8 +881,8 @@ export default function AddressesPage() {
                       e.preventDefault();
                       
                       // Validate required fields
-                      if (!addressForm.building || !addressForm.area || !addressForm.city || !addressForm.state || !addressForm.pincode || !addressForm.name) {
-                        toast.error('Please fill in all required fields');
+                      if ((!addressForm.building && !addressForm.area) || !addressForm.city || !addressForm.state || !addressForm.pincode) {
+                        toast.error('Please fill in all required fields (at least building or area, city, state, and pincode)');
                         return;
                       }
                       
@@ -867,16 +890,16 @@ export default function AddressesPage() {
                       const addressData: Address = {
                         id: selectedAddress?.id || now,
                         type: (addressForm.type as Address['type']) || "Home",
-                        building: addressForm.building.trim(),
+                        building: addressForm.building?.trim() || "",
                         floor: addressForm.floor?.trim() || "",
-                        area: addressForm.area.trim(),
+                        area: addressForm.area?.trim() || "",
                         landmark: addressForm.landmark?.trim() || "",
-                        city: addressForm.city.trim(),
-                        state: addressForm.state.trim(),
+                        city: addressForm.city?.trim() || "",
+                        state: addressForm.state?.trim() || "",
                         country: addressForm.country?.trim() || "India",
-                        pincode: addressForm.pincode.trim(),
+                        pincode: addressForm.pincode?.trim() || "",
                         phone: addressForm.phone?.trim() || "",
-                        name: addressForm.name.trim(),
+                        name: addressForm.name?.trim() || "",
                         lat: addressForm.lat,
                         lng: addressForm.lng,
                         isDefault: addressForm.isDefault || false,
