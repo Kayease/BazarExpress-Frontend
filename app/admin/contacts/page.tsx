@@ -345,7 +345,7 @@ export default function AdminContacts() {
 
         {/* Delete Confirmation Modal */}
         {deleteModalOpen && contactToDelete && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
             <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-8 relative border-4 border-brand-error/20">
               {deleteLoading && (
                 <div className="absolute inset-0 bg-white/70 flex items-center justify-center z-50">

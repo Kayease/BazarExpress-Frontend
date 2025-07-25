@@ -24,6 +24,7 @@ interface Product {
   inStock?: boolean;
   stockCount?: number;
   originalPrice?: number;
+  subcategory?: string | { _id: string; name: string };
 }
 
 export default function AdminProducts() {
@@ -34,10 +35,13 @@ export default function AdminProducts() {
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [filterCategory, setFilterCategory] = useState("all")
   const [filterStatus, setFilterStatus] = useState("all")
+  const [filterSubcategory, setFilterSubcategory] = useState("all");
   const router = useRouter()
   const searchRef = useRef<HTMLDivElement>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const PRODUCTS_PER_PAGE = 15;
 
   const API = process.env.NEXT_PUBLIC_API_URL
 
@@ -77,15 +81,36 @@ export default function AdminProducts() {
 
   // Deduplicate categories by ID or value
   const categoryMap = new Map();
+  const subcategoryMap = new Map();
   productList.forEach((p) => {
     const cat = p.category;
-    if (typeof cat === "object" && cat && "_id" in cat) {
+    if (cat && typeof cat === "object" && "_id" in cat) {
       categoryMap.set(cat._id, cat);
     } else if (cat) {
       categoryMap.set(cat, cat);
     }
+    // Subcategory extraction
+    const subcat = p.subcategory;
+    if (subcat && typeof subcat === "object" && "_id" in subcat) {
+      subcategoryMap.set(subcat._id, subcat);
+    } else if (subcat) {
+      subcategoryMap.set(subcat, subcat);
+    }
   });
   const categories = ["all", ...Array.from(categoryMap.values())];
+  // Subcategories for selected category
+  const subcategories = [
+    "all",
+    ...Array.from(subcategoryMap.values()).filter((subcat: any) => {
+      if (filterCategory === "all") return true;
+      if (subcat && typeof subcat === "object" && subcat.category) {
+        const catId = subcat.category && typeof subcat.category === 'object' && '_id' in subcat.category ? subcat.category._id : subcat.category;
+        return catId === filterCategory;
+      }
+      // fallback: show all if no category linkage
+      return true;
+    })
+  ];
 
   const filteredProducts: Product[] = productList.filter((product) => {
     const name = typeof product.name === 'string' ? product.name : '';
@@ -93,13 +118,16 @@ export default function AdminProducts() {
     const matchesSearch =
       name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (brand && typeof brand === 'string' && brand.toLowerCase().includes(searchTerm.toLowerCase()));
-    const category = typeof product.category === 'object' && '_id' in product.category ? product.category._id : product.category;
+    const category = product.category && typeof product.category === 'object' && '_id' in product.category ? product.category._id : product.category;
     const matchesCategory = filterCategory === "all" || category === filterCategory;
+    // Subcategory filter
+    const subcategory = product.subcategory && typeof product.subcategory === 'object' && '_id' in product.subcategory ? product.subcategory._id : product.subcategory;
+    const matchesSubcategory = filterSubcategory === "all" || subcategory === filterSubcategory;
     const matchesStatus =
       filterStatus === "all" ||
       (filterStatus === "in-stock" && product.inStock) ||
       (filterStatus === "out-of-stock" && !product.inStock);
-    return matchesSearch && matchesCategory && matchesStatus;
+    return matchesSearch && matchesCategory && matchesSubcategory && matchesStatus;
   })
 
   const searchSuggestions = productList
@@ -125,6 +153,10 @@ export default function AdminProducts() {
     setDeleting(false);
     setConfirmDeleteId(null);
   }
+
+  // Calculate paginated products
+  const totalPages = Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE);
+  const paginatedProducts = filteredProducts.slice((currentPage - 1) * PRODUCTS_PER_PAGE, currentPage * PRODUCTS_PER_PAGE);
 
   if (!user || user.role !== "admin") {
     return (
@@ -244,12 +276,26 @@ export default function AdminProducts() {
             </div>
             <select
               value={filterCategory}
-              onChange={(e) => setFilterCategory(e.target.value)}
+              onChange={(e) => {
+                setFilterCategory(e.target.value);
+                setFilterSubcategory("all"); // Reset subcategory on category change
+              }}
               className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
             >
               {categories.map((category) => (
                 <option key={typeof category === 'object' && '_id' in category ? category._id : category} value={typeof category === 'object' && '_id' in category ? category._id : category}>
                   {category === "all" ? "All Categories" : typeof category === 'object' && 'name' in category ? category.name : category}
+                </option>
+              ))}
+            </select>
+            <select
+              value={filterSubcategory}
+              onChange={(e) => setFilterSubcategory(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+            >
+              {subcategories.map((subcategory) => (
+                <option key={typeof subcategory === 'object' && '_id' in subcategory ? subcategory._id : subcategory} value={typeof subcategory === 'object' && '_id' in subcategory ? subcategory._id : subcategory}>
+                  {subcategory === "all" ? "All Subcategories" : typeof subcategory === 'object' && 'name' in subcategory ? subcategory.name : subcategory}
                 </option>
               ))}
             </select>
@@ -284,20 +330,20 @@ export default function AdminProducts() {
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="text-left py-3 px-6 font-medium text-gray-700">Product<span className="text-red-500">*</span></th>
-                    <th className="text-left py-3 px-6 font-medium text-gray-700">Category<span className="text-red-500">*</span></th>
-                    <th className="text-left py-3 px-6 font-medium text-gray-700">Price<span className="text-red-500">*</span></th>
-                    <th className="text-left py-3 px-6 font-medium text-gray-700">Stock</th>
-                    <th className="text-left py-3 px-6 font-medium text-gray-700">Status</th>
-                    <th className="text-left py-3 px-6 font-medium text-gray-700">Actions</th>
+                    <th className="text-left py-2 px-3 font-medium text-sm">Product<span className="text-red-500">*</span></th>
+                    <th className="text-left py-2 px-3 font-medium text-sm">Category<span className="text-red-500">*</span></th>
+                    <th className="text-left py-2 px-3 font-medium text-sm">Price<span className="text-red-500">*</span></th>
+                    <th className="text-left py-2 px-3 font-medium text-sm">Stock</th>
+                    <th className="text-left py-2 px-3 font-medium text-sm">Status</th>
+                    <th className="text-left py-2 px-3 font-medium text-sm">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredProducts.map((product) => (
-                    <tr key={product._id} className="border-b border-gray-200 hover:bg-gray-50">
-                      <td className="py-4 px-6">
-                        <div className="flex items-center space-x-3">
-                          <div className="relative w-12 h-12 rounded-lg overflow-hidden">
+                  {paginatedProducts.map((product) => (
+                    <tr key={product._id} className="border-b border-gray-200 hover:bg-gray-50 transition group">
+                      <td className="py-2 px-3 max-w-xs align-middle">
+                        <div className="flex items-center space-x-2">
+                          <div className="relative w-10 h-10 rounded-lg overflow-hidden flex-shrink-0">
                             <Image
                               src={product.image || "/placeholder.svg"}
                               alt={product.name}
@@ -305,46 +351,42 @@ export default function AdminProducts() {
                               className="object-cover"
                             />
                           </div>
-                          <div>
-                            <p className="font-medium text-codGray">{product.name}</p>
-                            <p className="text-sm text-gray-500">{typeof product.brand === 'object' && 'name' in product.brand ? product.brand.name : product.brand}</p>
+                          <div className="min-w-0">
+                            <p className="font-medium text-xs text-codGray truncate" title={product.name}>{product.name}</p>
+                            <p className="text-xs text-gray-500 truncate">{typeof product.brand === 'object' && 'name' in product.brand ? product.brand.name : product.brand}</p>
                           </div>
                         </div>
                       </td>
-                      <td className="py-4 px-6">
+                      <td className="py-2 px-3 align-middle max-w-xs text-xs text-gray-700 truncate">
                         <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded-full text-xs font-medium">
                           {typeof product.category === 'object' && '_id' in product.category ? product.category.name : product.category}
                         </span>
                       </td>
-                      <td className="py-4 px-6">
+                      <td className="py-2 px-3 align-middle text-xs">
                         <div>
-                          <p className="font-semibold text-codGray flex items-center gap-1"><IndianRupee className="inline h-4 w-4" />{product.price}</p>
+                          <p className="font-semibold text-codGray flex items-center gap-1 text-xs"><IndianRupee className="inline h-4 w-4" />{product.price}</p>
                           {product.originalPrice && (
-                            <p className="text-sm text-gray-500 line-through flex items-center gap-1"><IndianRupee className="inline h-3 w-3" />{product.originalPrice}</p>
+                            <p className="text-xs text-gray-500 line-through flex items-center gap-1"><IndianRupee className="inline h-3 w-3" />{product.originalPrice}</p>
                           )}
                         </div>
                       </td>
-                      <td className="py-4 px-6">
-                        <p className="text-gray-600">{product.stockCount} units</p>
-                      </td>
-                      <td className="py-4 px-6">
+                      <td className="py-2 px-3 align-middle text-xs text-gray-600">{product.stockCount} units</td>
+                      <td className="py-2 px-3 align-middle">
                         <span
-                          className={`px-2 py-1 rounded-full text-xs font-medium ${product.inStock ? "bg-brand-primary/10 text-brand-primary" : "bg-red-100 text-red-800"
-                            }`}
+                          className={`px-2 py-1 rounded-full text-xs font-medium ${product.inStock ? "bg-brand-primary/10 text-brand-primary" : "bg-red-100 text-red-800"}`}
                         >
                           {product.inStock ? "In Stock" : "Out of Stock"}
                         </span>
                       </td>
-
-                      <td className="py-4 px-6">
-                        <div className="flex items-center space-x-2">
-                          <button className="p-1 text-text-tertiary hover:text-brand-primary transition-colors" onClick={() => router.push(`/products/${product._id}`)}>
+                      <td className="py-2 px-3 align-middle">
+                        <div className="flex items-center justify-center gap-2">
+                          <button className="p-1.5 text-xs text-text-tertiary hover:text-brand-primary transition-colors flex items-center justify-center" onClick={() => router.push(`/products/${product._id}`)}>
                             <Eye className="h-4 w-4" />
                           </button>
-                          <button className="p-1 text-text-tertiary hover:text-brand-primary transition-colors" onClick={() => router.push(`/admin/products/${product._id}/edit`)}>
+                          <button className="p-1.5 text-xs text-purple-600 hover:text-purple-800 transition-colors flex items-center justify-center" onClick={() => router.push(`/admin/products/${product._id}/edit`)}>
                             <Edit className="h-4 w-4" />
                           </button>
-                          <button className="p-1 text-text-tertiary hover:text-brand-error transition-colors" onClick={() => deleteProduct(product._id)}>
+                          <button className="p-1.5 text-xs text-red-500 hover:text-red-700 transition-colors flex items-center justify-center" onClick={() => deleteProduct(product._id)}>
                             <Trash2 className="h-4 w-4" />
                           </button>
                         </div>
@@ -354,27 +396,36 @@ export default function AdminProducts() {
                 </tbody>
               </table>
             </div>
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex justify-end items-center space-x-2 mt-6 mb-2 pr-2">
+                <button
+                  className="px-2 py-1 rounded border text-xs font-medium bg-gray-50 hover:bg-gray-100 disabled:opacity-50"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                >
+                  Previous
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                  <button
+                    key={page}
+                    className={`px-2 py-1 rounded text-xs font-medium border mx-0.5 ${currentPage === page ? 'bg-brand-primary text-white border-brand-primary' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
+                    onClick={() => setCurrentPage(page)}
+                  >
+                    {page}
+                  </button>
+                ))}
+                <button
+                  className="px-2 py-1 rounded border text-xs font-medium bg-gray-50 hover:bg-gray-100 disabled:opacity-50"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </div>
         )}
-
-        {/* Pagination */}
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-gray-600">
-            Showing {filteredProducts.length} of {productList.length} products
-          </p>
-          <div className="flex space-x-2">
-            <button className="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-50 transition-colors">
-              Previous
-            </button>
-            <button className="px-3 py-1 bg-brand-primary text-white rounded text-sm">1</button>
-            <button className="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-50 transition-colors">
-              2
-            </button>
-            <button className="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-50 transition-colors">
-              Next
-            </button>
-          </div>
-        </div>
 
       </div>
       <ConfirmDeleteModal

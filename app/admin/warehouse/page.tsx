@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import GoogleMapsModal from '../../../components/GoogleMapsModal';
 import toast from 'react-hot-toast';
 import ConfirmDeleteModal from '../../../components/ui/ConfirmDeleteModal';
+import WarehouseFormModal from '../../../components/WarehouseFormModal';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL
 
@@ -57,7 +58,7 @@ export default function AdminWarehouse() {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`${API_URL}/warehouses?userId=${user.id}`);
+      const res = await fetch(`${API_URL}/warehouses`);
       if (!res.ok) throw new Error('Failed to fetch warehouses');
       const data: Warehouse[] = await res.json();
       setWarehouses(data);
@@ -205,12 +206,12 @@ export default function AdminWarehouse() {
           <table className="w-full min-w-[700px] text-left border-separate border-spacing-y-2">
             <thead>
               <tr className="bg-gray-50">
-                <th className="py-3 px-4 font-semibold">Name</th>
-                <th className="py-3 px-4 font-semibold">Address</th>
-                <th className="py-3 px-4 font-semibold">Contact Phone</th>
-                <th className="py-3 px-4 font-semibold">Capacity</th>
-                <th className="py-3 px-4 font-semibold">Status</th>
-                <th className="py-3 px-4 font-semibold text-center">Action </th>
+                <th className="py-2 px-3 font-semibold text-sm">Name</th>
+                <th className="py-2 px-3 font-semibold text-sm">Address</th>
+                <th className="py-2 px-3 font-semibold text-sm">Contact Phone</th>
+                <th className="py-2 px-3 font-semibold text-sm">Capacity</th>
+                <th className="py-2 px-3 font-semibold text-sm">Status</th>
+                <th className="py-2 px-3 font-semibold text-sm text-center">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -234,34 +235,36 @@ export default function AdminWarehouse() {
                 </tr>
               )}
               {warehouses.map(w => (
-                <tr key={w._id} className="bg-white border-b">
-                  <td className="py-3 px-4 align-middle max-w-xl whitespace-pre-line">{w.name}</td>
-                  <td className="py-3 px-4 align-middle">{w.address}</td>
-                  <td className="py-3 px-4 align-middle">{w.contactPhone}</td>
-                  <td className="py-3 px-4 align-middle">{w.capacity}</td>
-                  <td className="py-3 px-4 align-middle">{capitalizeFirstLetter(w.status)}</td>
-                  <td className="py-3 flex px-4 align-middle text-center">
-                    <button
-                      className="inline-flex items-center justify-center bg-blue-600 hover:bg-blue-800 text-text-inverse rounded p-2 mr-2"
-                      onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(w.address)}`, '_blank')}
-                      aria-label="View Location"
-                    >
-                      <Eye className="h-5 w-5" />
-                    </button>
-                    <button
-                      className="inline-flex items-center justify-center bg-brand-primary hover:bg-brand-primary-dark text-text-inverse rounded p-2 mr-2"
-                      onClick={() => openEdit(w)}
-                      aria-label="Edit"
-                    >
-                      <Pencil className="h-5 w-5" />
-                    </button>
-                    <button
-                      className="inline-flex items-center justify-center bg-brand-error hover:bg-brand-error-dark text-text-inverse rounded p-2"
-                      onClick={() => setConfirmDeleteId(w._id)}
-                      aria-label="Delete"
-                    >
-                      <Trash2 className="h-5 w-5" />
-                    </button>
+                <tr key={w._id} className="bg-white border-b hover:bg-gray-50 transition group">
+                  <td className="py-2 px-3 align-middle max-w-xs whitespace-nowrap text-sm font-medium text-gray-900 truncate">{w.name}</td>
+                  <td className="py-2 px-3 align-middle max-w-sm whitespace-nowrap text-xs text-gray-700 truncate">{w.address}</td>
+                  <td className="py-2 px-3 align-middle text-xs text-gray-700">{w.contactPhone}</td>
+                  <td className="py-2 px-3 align-middle text-xs text-gray-700">{w.capacity}</td>
+                  <td className="py-2 px-3 align-middle text-xs font-semibold {w.status === 'active' ? 'text-green-600' : 'text-gray-400'}">{capitalizeFirstLetter(w.status)}</td>
+                  <td className="py-2 px-3 align-middle text-center">
+                    <div className="flex items-center justify-center gap-2">
+                      <button
+                        className="inline-flex items-center justify-center bg-blue-600 hover:bg-blue-800 text-white rounded p-1.5 text-xs"
+                        onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(w.address)}`, '_blank')}
+                        aria-label="View Location"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
+                      <button
+                        className="inline-flex items-center justify-center bg-purple-500 hover:bg-purple-700 text-white rounded p-1.5 text-xs"
+                        onClick={() => openEdit(w)}
+                        aria-label="Edit"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        className="inline-flex items-center justify-center bg-red-500 hover:bg-red-700 text-white rounded p-1.5 text-xs"
+                        onClick={() => setConfirmDeleteId(w._id)}
+                        aria-label="Delete"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -270,80 +273,15 @@ export default function AdminWarehouse() {
         </div>
         {/* Modal */}
         {showModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
-            <div className="bg-white rounded-lg shadow-lg max-w-md w-full mx-4 p-8 relative">
-              <div className="text-xl font-semibold mb-4">{editing ? "Edit" : "Add"} Warehouse</div>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="flex flex-col gap-2">
-                  <input
-                    className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                    placeholder="Address (Select from Map)"
-                    value={form.address}
-                    readOnly
-                    required
-                  />
-                  <button
-                    type="button"
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors"
-                    onClick={() => setShowMapModal(true)}
-                  >
-                    Select Location on Map
-                  </button>
-                </div>
-                <input
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                  placeholder="Warehouse Name"
-                  value={form.name}
-                  onChange={e => setForm({ ...form, name: e.target.value })}
-                  required
-                />
-                <input
-                  type="tel"
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                  placeholder="Contact Phone"
-                  value={form.contactPhone}
-                  onChange={e => setForm({ ...form, contactPhone: e.target.value })}
-                />
-                <input
-                  type="email"
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                  placeholder="Email"
-                  value={form.email}
-                  onChange={e => setForm({ ...form, email: e.target.value })}
-                />
-                <input
-                  type="number"
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                  placeholder="Product capacity"
-                  value={form.capacity || ''}
-                  onChange={e => setForm({ ...form, capacity: Number(e.target.value) })}
-                  min={0}
-                />
-                <select
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                  value={form.status}
-                  onChange={e => setForm({ ...form, status: e.target.value as 'active' | 'inactive' })}
-                >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                </select>
-                <div className="flex gap-2 mt-4">
-                  <button type="submit" className="bg-brand-primary hover:bg-brand-primary-dark text-white font-semibold py-2 px-6 rounded-lg transition-colors shadow-sm">Save</button>
-                  <button type="button" className="bg-surface-tertiary hover:bg-surface-tertiary-dark text-text-primary font-semibold py-2 px-6 rounded-lg transition-colors shadow-sm" onClick={() => setShowModal(false)}>Cancel</button>
-                </div>
-              </form>
-              <button className="absolute top-3 right-3 text-gray-400 hover:text-brand-error text-2xl transition-colors" onClick={() => setShowModal(false)} aria-label="Close">&times;</button>
-              {/* Google Maps Modal */}
-              <GoogleMapsModal
-                isOpen={showMapModal}
-                onClose={() => setShowMapModal(false)}
-                onLocationSelect={(location) => {
-                  handleLocationSelect(location);
-                  setShowMapModal(false);
-                }}
-              />
-            </div>
-          </div>
+          <WarehouseFormModal
+            open={showModal}
+            onClose={() => setShowModal(false)}
+            warehouse={editing}
+            onSuccess={async (newWarehouse) => {
+              setShowModal(false);
+              await fetchWarehouses();
+            }}
+          />
         )}
         {/* Confirm Delete Modal */}
         <ConfirmDeleteModal

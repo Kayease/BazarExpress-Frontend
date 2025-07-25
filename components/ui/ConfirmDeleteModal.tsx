@@ -23,7 +23,7 @@ export default function ConfirmDeleteModal({
 }: ConfirmDeleteModalProps) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
       <div className="bg-white rounded-lg shadow-lg p-8 max-w-sm w-full text-center animate-fadeIn">
         <h3 className="text-lg font-bold mb-2">{title}</h3>
         <div className="mb-4 text-gray-600">{description}</div>

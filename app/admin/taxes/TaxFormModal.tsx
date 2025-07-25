@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -22,10 +23,6 @@ interface Tax {
   id?: string;
   name: string;
   percentage: number;
-  isInclusive: boolean;
-  applicableFor: "product" | "shipping" | "both";
-  country?: string;
-  state?: string;
   description?: string;
   status: "active" | "inactive";
 }
@@ -34,53 +31,26 @@ interface TaxFormModalProps {
   open: boolean;
   onClose: () => void;
   tax: Tax | null;
-  onSuccess: () => void;
+  onSuccess: (tax?: Tax) => void;
 }
 
 export default function TaxFormModal({ open, onClose, tax, onSuccess }: TaxFormModalProps) {
   const token = useAppSelector((state: RootState) => state.auth.token);
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState<Tax>({
+  const formInitialState: Tax = {
     _id: "",
     name: "",
     percentage: 0,
-    isInclusive: false,
-    applicableFor: "product",
-    country: "India",
-    state: "",
     description: "",
     status: "active",
-  });
+  };
+  const [form, setForm] = useState<Tax>(formInitialState);
 
   useEffect(() => {
     if (tax) {
-      if (tax) {
-        setForm({ ...tax });
-      } else {
-        setForm({
-          _id: "",
-          name: "",
-          percentage: 0,
-          isInclusive: false,
-          applicableFor: "product",
-          country: "India",
-          state: "",
-          description: "",
-          status: "active",
-        });
-      }
+      setForm({ ...tax });
     } else {
-      setForm({
-        _id: "",
-        name: "",
-        percentage: 0,
-        isInclusive: false,
-        applicableFor: "product",
-        country: "India",
-        state: "",
-        description: "",
-        status: "active",
-      });
+      setForm(formInitialState);
     }
   }, [tax, open]);
 
@@ -115,8 +85,9 @@ export default function TaxFormModal({ open, onClose, tax, onSuccess }: TaxFormM
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error("Failed to save tax");
+      const data = await res.json();
       toast.success(tax ? "Tax updated successfully" : "Tax added successfully");
-      onSuccess();
+      onSuccess(data);
     } catch (err) {
       toast.error("Failed to save tax");
     } finally {
@@ -135,78 +106,17 @@ export default function TaxFormModal({ open, onClose, tax, onSuccess }: TaxFormM
         <form className="space-y-5 bg-white rounded-b-xl px-6 pb-6 pt-2" onSubmit={handleSubmit}>
           <div>
             <label className="block text-sm font-medium mb-1">Name</label>
-            <Input value={form.name} onChange={e => handleChange("name", e.target.value)} required maxLength={50} />
+            <Input value={String(form.name ?? "")} onChange={e => handleChange("name", e.target.value)} required maxLength={50} />
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Percentage (%)</label>
-            <Input type="number" value={form.percentage} onChange={e => handleChange("percentage", Number(e.target.value))} min={0} max={100} required />
+            <Input type="number" step="0.01" value={form.percentage === undefined || form.percentage === null ? "" : String(form.percentage)} onChange={e => handleChange("percentage", parseFloat(e.target.value))} min={0} max={100} required />
           </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Applicable For</label>
-            <Select value={form.applicableFor} onValueChange={v => handleChange("applicableFor", v)}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select method" />
-              </SelectTrigger>
-              <SelectContent className="bg-amber-50">
-                <SelectItem value="product">Product</SelectItem>
-                <SelectItem value="shipping">Shipping</SelectItem>
-                <SelectItem value="both">Both</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Country</label>
-            <Select value={form.country} onValueChange={v => handleChange("country", v)}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select country" />
-              </SelectTrigger>
-              <SelectContent className="bg-amber-50">
-                {COUNTRIES.map(c => (
-                  <SelectItem key={c} value={c}>{c}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {form.country === "India" && (
-            <div>
-              <label className="block text-sm font-medium mb-1">State</label>
-              <Select value={form.state} onValueChange={v => handleChange("state", v)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select state" />
-                </SelectTrigger>
-                <SelectContent className="bg-amber-50">
-                  {INDIAN_STATES.map(s => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
           <div>
             <label className="block text-sm font-medium mb-1">Description</label>
-            <Textarea value={form.description} onChange={e => handleChange("description", e.target.value)} maxLength={200} />
+            <Textarea value={String(form.description ?? "")} onChange={e => handleChange("description", e.target.value)} maxLength={200} />
           </div>
           <div className="flex flex-col sm:flex-row items-center gap-4 py-2 px-3 rounded-lg border border-gray-100 mt-2 mb-4">
-            <div className="flex items-center gap-3 flex-1">
-              <Switch
-                checked={form.isInclusive}
-                onCheckedChange={v => handleChange("isInclusive", v)}
-                id="inclusive-switch"
-                className={form.isInclusive ? "data-[state=checked]:bg-blue-600" : "data-[state=unchecked]:bg-gray-300"}
-              />
-              <label htmlFor="inclusive-switch" className="text-sm font-medium cursor-pointer select-none">
-                Inclusive
-              </label>
-              <span
-                className={`ml-2 px-2 py-0.5 rounded text-xs font-semibold transition-colors duration-200 ${
-                  form.isInclusive
-                    ? "bg-blue-50 text-blue-700 border border-blue-200"
-                    : "bg-gray-50 text-gray-400 border border-gray-200"
-                }`}
-              >
-                {form.isInclusive ? "Tax is included in price" : "Tax is added on top"}
-              </span>
-            </div>
             <div className="flex items-center gap-3 flex-1">
               <Switch
                 checked={form.status === "active"}

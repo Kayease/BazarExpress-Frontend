@@ -341,7 +341,7 @@ const AddCategoryPage = () => {
                           alt="Thumbnail Preview"
                           className="w-full h-full object-cover rounded-lg"
                         />
-                        <span className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg">
+                        <span className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg">
                           <span className="text-white text-xs font-semibold px-2 py-1 bg-brand-primary/80 rounded">Change</span>
                         </span>
                       </>

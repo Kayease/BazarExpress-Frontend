@@ -7,6 +7,8 @@ import { Plus, Layers, IndianRupee, Ruler, Package, Image as ImageIcon, Camera, 
 import { Editor } from '@tinymce/tinymce-react';
 import CategoryFormModal from "./CategoryFormModal";
 import BrandFormModal from "./BrandFormModal";
+import TaxFormModal from "../app/admin/taxes/TaxFormModal";
+import WarehouseFormModal from "./WarehouseFormModal";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -128,11 +130,35 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showSubcategoryModal, setShowSubcategoryModal] = useState(false);
   const [showBrandModal, setShowBrandModal] = useState(false);
+  const [showTaxModal, setShowTaxModal] = useState(false);
+  const [showWarehouseModal, setShowWarehouseModal] = useState(false);
 
   // Add state for search inputs and focus
-  const [categorySearch, setCategorySearch] = useState("");
-  const [subcategorySearch, setSubcategorySearch] = useState("");
-  const [brandSearch, setBrandSearch] = useState("");
+  const [categorySearch, setCategorySearch] = useState(() => {
+    if (mode === 'edit' && initialProduct && initialProduct.category) {
+      if (typeof initialProduct.category === 'object' && initialProduct.category.name) return initialProduct.category.name;
+      // fallback: try to find in categories
+      const found = categories.find(cat => cat._id === initialProduct.category);
+      if (found) return found.name;
+    }
+    return "";
+  });
+  const [subcategorySearch, setSubcategorySearch] = useState(() => {
+    if (mode === 'edit' && initialProduct && initialProduct.subcategory) {
+      if (typeof initialProduct.subcategory === 'object' && initialProduct.subcategory.name) return initialProduct.subcategory.name;
+      const found = subcategories.find(subcat => subcat._id === initialProduct.subcategory);
+      if (found) return found.name;
+    }
+    return "";
+  });
+  const [brandSearch, setBrandSearch] = useState(() => {
+    if (mode === 'edit' && initialProduct && initialProduct.brand) {
+      if (typeof initialProduct.brand === 'object' && initialProduct.brand.name) return initialProduct.brand.name;
+      const found = brands.find(brand => brand._id === initialProduct.brand);
+      if (found) return found.name;
+    }
+    return "";
+  });
   const [categoryFocused, setCategoryFocused] = useState(false);
   const [subcategoryFocused, setSubcategoryFocused] = useState(false);
   const [brandFocused, setBrandFocused] = useState(false);
@@ -538,7 +564,7 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                     type="text"
                     value={categorySearch}
                     onChange={e => setCategorySearch(e.target.value)}
-                    placeholder="Search or select category"
+                    placeholder={categorySearch || (mode === 'edit' && initialProduct && initialProduct.category && typeof initialProduct.category === 'object' && initialProduct.category.name ? initialProduct.category.name : 'Search or select category')}
                     className="w-full border border-gray-300 rounded-l-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
                     style={{ height: "48px" }}
                     onFocus={() => setCategoryFocused(true)}
@@ -595,7 +621,7 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                     type="text"
                     value={subcategorySearch}
                     onChange={e => setSubcategorySearch(e.target.value)}
-                    placeholder="Search or select subcategory"
+                    placeholder={subcategorySearch || (mode === 'edit' && initialProduct && initialProduct.subcategory && typeof initialProduct.subcategory === 'object' && initialProduct.subcategory.name ? initialProduct.subcategory.name : 'Search or select subcategory')}
                     className="w-full border border-gray-300 rounded-l-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
                     style={{ height: "48px" }}
                     onFocus={() => setSubcategoryFocused(true)}
@@ -658,7 +684,7 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                     type="text"
                     value={brandSearch}
                     onChange={e => setBrandSearch(e.target.value)}
-                    placeholder="Search or select brand"
+                    placeholder={brandSearch || (mode === 'edit' && initialProduct && initialProduct.brand && typeof initialProduct.brand === 'object' && initialProduct.brand.name ? initialProduct.brand.name : 'Search or select brand')}
                     className="w-full border border-gray-300 rounded-l-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
                     style={{ height: "48px" }}
                     onFocus={() => setBrandFocused(true)}
@@ -749,22 +775,88 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Tax <span className="text-red-500">*</span>
+                </label>
+                <div className="flex items-stretch gap-2 relative">
+                  <select
+                    value={product.tax ?? ""}
+                    onChange={e => setProduct({ ...product, tax: e.target.value })}
+                    className="w-full border border-gray-300 rounded-l-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                    required
+                  >
+                    <option value="">Select Tax</option>
+                    {taxes.map((tax: any) => (
+                      <option key={tax._id} value={tax._id}>{tax.name}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="ml-0 h-[48px] px-4 bg-brand-primary text-white rounded-r-lg text-lg flex items-center justify-center"
+                    style={{ minWidth: "48px" }}
+                    onClick={() => setShowTaxModal(true)}
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+              <TaxFormModal
+                open={showTaxModal}
+                onClose={() => setShowTaxModal(false)}
+                tax={null}
+                onSuccess={async function (newTax: any) {
+                  setShowTaxModal(false);
+                  // Refetch taxes and update state
+                  const res = await fetch(`${API_URL}/taxes`);
+                  const data = await res.json();
+                  setTaxes(data);
+                  if (newTax && newTax._id) {
+                    setProduct((prev: any) => ({ ...prev, tax: newTax._id }));
+                  }
+                }}
+              />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Warehouse <span className="text-red-500">*</span>
                 </label>
-                <select
-                  value={product.warehouse ?? ""}
-                  onChange={(e) => setProduct({ ...product, warehouse: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                  required
-                >
-                  <option value="">Select Warehouse</option>
-                  {warehouses.map((warehouse: any) => (
-                    <option key={warehouse._id} value={warehouse._id}>
-                      {warehouse.name}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex items-stretch gap-2 relative">
+                  <select
+                    value={product.warehouse ?? ""}
+                    onChange={e => setProduct({ ...product, warehouse: e.target.value })}
+                    className="w-full border border-gray-300 rounded-l-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                    required
+                  >
+                    <option value="">Select Warehouse</option>
+                    {warehouses.map((warehouse: any) => (
+                      <option key={warehouse._id} value={warehouse._id}>
+                        {warehouse.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="ml-0 h-[48px] px-4 bg-brand-primary text-white rounded-r-lg text-lg flex items-center justify-center"
+                    style={{ minWidth: "48px" }}
+                    onClick={() => setShowWarehouseModal(true)}
+                  >
+                    +
+                  </button>
+                </div>
               </div>
+              <WarehouseFormModal
+                open={showWarehouseModal}
+                onClose={() => setShowWarehouseModal(false)}
+                warehouse={null}
+                onSuccess={async (newWarehouse: any) => {
+                  setShowWarehouseModal(false);
+                  // Refetch warehouses and update state
+                  const res = await fetch(`${API_URL}/warehouses`);
+                  const data = await res.json();
+                  setWarehouses(data);
+                  if (newWarehouse && newWarehouse._id) {
+                    setProduct((prev: any) => ({ ...prev, warehouse: newWarehouse._id }));
+                  }
+                }}
+              />
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Status
@@ -1329,6 +1421,36 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
             onSuccess={brand => {
               setBrands((prev: any[]) => [...prev, brand]);
               setProduct((prev: any) => ({ ...prev, brand: brand._id }));
+            }}
+          />
+          <TaxFormModal
+            open={showTaxModal}
+            onClose={() => setShowTaxModal(false)}
+            tax={null}
+            onSuccess={async (newTax: any) => {
+              setShowTaxModal(false);
+              // Refetch taxes and update state
+              const res = await fetch(`${API_URL}/taxes`);
+              const data = await res.json();
+              setTaxes(data);
+              if (newTax && newTax._id) {
+                setProduct((prev: any) => ({ ...prev, tax: newTax._id }));
+              }
+            }}
+          />
+          <WarehouseFormModal
+            open={showWarehouseModal}
+            onClose={() => setShowWarehouseModal(false)}
+            warehouse={null}
+            onSuccess={async (newWarehouse: any) => {
+              setShowWarehouseModal(false);
+              // Refetch warehouses and update state
+              const res = await fetch(`${API_URL}/warehouses`);
+              const data = await res.json();
+              setWarehouses(data);
+              if (newWarehouse && newWarehouse._id) {
+                setProduct((prev: any) => ({ ...prev, warehouse: newWarehouse._id }));
+              }
             }}
           />
         </div>

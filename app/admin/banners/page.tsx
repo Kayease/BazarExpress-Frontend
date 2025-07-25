@@ -76,6 +76,10 @@ export default function AdminBanner() {
     banner3: null as Banner | null,
   });
   const [activeTab, setActiveTab] = useState<'regular' | 'special'>('regular');
+  const [currentPage, setCurrentPage] = useState(1);
+  const BANNERS_PER_PAGE = 10;
+  const totalPages = Math.ceil(banners.length / BANNERS_PER_PAGE);
+  const paginatedBanners = banners.slice((currentPage - 1) * BANNERS_PER_PAGE, currentPage * BANNERS_PER_PAGE);
 
   const fetchBanners = async (showToast = true) => {
     setLoading(true);
@@ -426,7 +430,7 @@ export default function AdminBanner() {
 
   return (
     <AdminLayout>
-      <div className="space-y-6">
+      <div>
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-2xl font-bold text-text-primary">Banners</h1>
           <div className="flex gap-2">
@@ -463,7 +467,7 @@ export default function AdminBanner() {
                 </tr>
               </thead>
               <tbody>
-                {banners.length === 0 && (
+                {paginatedBanners.length === 0 && (
                   <tr>
                     <td colSpan={5}>
                       <div className="flex flex-col items-center justify-center py-16">
@@ -482,13 +486,13 @@ export default function AdminBanner() {
                     </td>
                   </tr>
                 )}
-                {banners.map(b => (
+                {paginatedBanners.map(b => (
                   <tr key={b._id || b.id} className="border-b last:border-b-0 hover:bg-gray-50 transition">
                     <td className="py-4 px-6 align-middle text-sm">
                       {b.image ? (
-                        <img src={b.image} alt="Banner" className="h-20 w-36 object-cover rounded-lg shadow" />
+                        <img src={b.image} alt="Banner" className="h-12 w-24 object-cover rounded-lg shadow" />
                       ) : (
-                        <div className="h-20 w-36 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400">No Image</div>
+                        <div className="h-12 w-24 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400">No Image</div>
                       )}
                     </td>
                     <td className="py-4 px-6 align-middle text-sm">
@@ -501,13 +505,13 @@ export default function AdminBanner() {
                       <span className={b.active ? "text-brand-success font-semibold" : "text-brand-error font-semibold"}>{b.active ? "Active" : "Inactive"}</span>
                     </td>
                     <td className="py-4 px-6 align-middle text-center text-sm">
-                      <div className="flex items-center justify-center gap-3">
-                        <button className="w-12 h-12 flex items-center justify-center rounded-lg bg-brand-primary text-white hover:bg-brand-primary-dark transition-colors" onClick={() => openEdit(b)} aria-label="Edit">
-                          <Pencil className="h-6 w-6" />
+                      <div className="flex items-center justify-center gap-2">
+                        <button className="w-8 h-8 flex items-center justify-center rounded-lg bg-brand-primary text-white hover:bg-brand-primary-dark transition-colors" onClick={() => openEdit(b)} aria-label="Edit">
+                          <Pencil className="h-4 w-4" />
                         </button>
                         {(b._id || b.id) && (
-                          <button className="w-12 h-12 flex items-center justify-center rounded-lg bg-brand-error text-white hover:bg-brand-error-dark transition-colors" onClick={() => handleDeleteClick(b)} aria-label="Delete">
-                            <Trash2 className="h-6 w-6" />
+                          <button className="w-8 h-8 flex items-center justify-center rounded-lg bg-brand-error text-white hover:bg-brand-error-dark transition-colors" onClick={() => handleDeleteClick(b)} aria-label="Delete">
+                            <Trash2 className="h-4 w-4" />
                           </button>
                         )}
                       </div>
@@ -516,6 +520,34 @@ export default function AdminBanner() {
                 ))}
               </tbody>
             </table>
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex justify-end items-center space-x-2 mt-6 mb-2 pr-2">
+                <button
+                  className="px-2 py-1 rounded border text-xs font-medium bg-gray-50 hover:bg-gray-100 disabled:opacity-50"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                >
+                  Previous
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                  <button
+                    key={page}
+                    className={`px-2 py-1 rounded text-xs font-medium border mx-0.5 ${currentPage === page ? 'bg-brand-primary text-white border-brand-primary' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
+                    onClick={() => setCurrentPage(page)}
+                  >
+                    {page}
+                  </button>
+                ))}
+                <button
+                  className="px-2 py-1 rounded border text-xs font-medium bg-gray-50 hover:bg-gray-100 disabled:opacity-50"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -545,7 +577,7 @@ export default function AdminBanner() {
         {/* Modal */}
         {showModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-8 relative border-4 border-brand-primary/20">
+            <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full mx-4 p-3 relative border-4 border-brand-primary/20">
               {loading && (
                 <div className="absolute inset-0 bg-white/70 flex items-center justify-center z-50">
                   <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-brand-primary"></div>
@@ -554,17 +586,17 @@ export default function AdminBanner() {
               <div className="text-2xl font-bold mb-4 text-brand-primary">
                 {editing ? "Edit" : "Add"} {form.bannerType !== 'regular' ? form.bannerType.charAt(0).toUpperCase() + form.bannerType.slice(1) + ' ' : ''}Banner
               </div>
-              <form onSubmit={handleSubmit} className="space-y-6">
+              <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                  <label className="block font-medium mb-1">Image</label>
-                  <div className="border-2 border-dashed border-brand-primary/40 rounded-lg flex flex-col items-center justify-center py-8 cursor-pointer hover:border-brand-primary transition-colors" onClick={() => document.getElementById('banner-image-input')?.click()}>
+                  <label className="block font-medium mb-1 text-sm">Image</label>
+                  <div className="border-2 border-dashed border-brand-primary/40 rounded-lg flex flex-col items-center justify-center py-4 px-2 cursor-pointer hover:border-brand-primary transition-colors min-h-[120px] max-h-[140px]" onClick={() => document.getElementById('banner-image-input')?.click()}>
                     {imagePreview ? (
-                      <img src={imagePreview} alt="Preview" className="h-32 object-contain mb-2 rounded shadow" />
+                      <img src={imagePreview} alt="Preview" className="h-20 object-contain mb-2 rounded shadow" />
                     ) : (
                       <>
-                        <svg width="40" height="40" fill="none" stroke="currentColor" className="text-brand-primary" strokeWidth="2" viewBox="0 0 24 24"><path d="M16 16v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2" /><rect x="8" y="2" width="8" height="8" rx="2" /><line x1="12" y1="12" x2="12" y2="16" /><line x1="10" y1="14" x2="14" y2="14" /></svg>
-                        <div className="font-medium text-text-primary mt-2">Upload Banner Image</div>
-                        <div className="text-text-secondary text-sm">Upload jpg, png images</div>
+                        <svg width="32" height="32" fill="none" stroke="currentColor" className="text-brand-primary" strokeWidth="2" viewBox="0 0 24 24"><path d="M16 16v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2" /><rect x="8" y="2" width="8" height="8" rx="2" /><line x1="12" y1="12" x2="12" y2="16" /><line x1="10" y1="14" x2="14" y2="14" /></svg>
+                        <div className="font-medium text-text-primary mt-1 text-sm">Upload Banner Image</div>
+                        <div className="text-text-secondary text-xs">Upload jpg, png images</div>
                       </>
                     )}
                     <input
@@ -576,7 +608,7 @@ export default function AdminBanner() {
                     />
                   </div>
                   {imagePreview && (
-                    <div className="flex items-center gap-2 mt-2">
+                    <div className="flex items-center gap-2 mt-1">
                       <button type="button" className="text-red-500 text-xs" onClick={() => {
                         if (imagePreview && !imageFile) {
                           setImageToDelete(imagePreview);
@@ -593,13 +625,13 @@ export default function AdminBanner() {
                   )}
                 </div>
                 <div>
-                  <label className="block font-medium mb-1">Name</label>
-                  <input className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required />
+                  <label className="block font-medium mb-1 text-sm">Name</label>
+                  <input className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required />
                 </div>
                 <div>
-                  <label className="block font-medium mb-1">Category (for redirection) <span className="text-red-500">*</span></label>
+                  <label className="block font-medium mb-1 text-sm">Category (for redirection) <span className="text-red-500">*</span></label>
                   <select 
-                    className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary" 
+                    className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary" 
                     value={form.categoryId} 
                     onChange={e => setForm({ ...form, categoryId: e.target.value })}
                     required
@@ -614,9 +646,9 @@ export default function AdminBanner() {
                 </div>
                 {form.bannerType === 'regular' && (
                   <div>
-                    <label className="block font-medium mb-1">Banner Type</label>
+                    <label className="block font-medium mb-1 text-sm">Banner Type</label>
                     <select 
-                      className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary" 
+                      className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary" 
                       value={form.bannerType} 
                       onChange={e => setForm({ ...form, bannerType: e.target.value as any })}
                     >
@@ -628,14 +660,14 @@ export default function AdminBanner() {
                   </div>
                 )}
                 <div>
-                  <label className="block font-medium mb-1">Active</label>
-                  <select className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary" value={form.active ? "true" : "false"} onChange={e => setForm({ ...form, active: e.target.value === "true" })}>
+                  <label className="block font-medium mb-1 text-sm">Active</label>
+                  <select className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary" value={form.active ? "true" : "false"} onChange={e => setForm({ ...form, active: e.target.value === "true" })}>
                     <option value="true">Active</option>
                     <option value="false">Inactive</option>
                   </select>
                 </div>
-                <div className="flex gap-2 mt-4">
-                  <button type="submit" className="bg-brand-primary hover:bg-brand-primary-dark text-white font-semibold py-2 px-6 rounded-lg flex items-center gap-2 shadow-sm transition-colors justify-center" disabled={loading || imageDeleting}>
+                <div className="flex gap-2 mt-2">
+                  <button type="submit" className="bg-brand-primary hover:bg-brand-primary-dark text-white font-semibold py-2 px-4 rounded-lg flex items-center gap-2 shadow-sm transition-colors justify-center text-sm" disabled={loading || imageDeleting}>
                     {(loading || imageDeleting) && (
                       <svg className="animate-spin h-5 w-5 mr-2 text-white" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -644,7 +676,7 @@ export default function AdminBanner() {
                     )}
                     {imageDeleting ? 'Deleting...' : loading ? 'Saving...' : 'Save'}
                   </button>
-                  <button type="button" className="bg-surface-secondary hover:bg-surface-tertiary text-text-primary font-semibold py-2 px-6 rounded-lg transition-colors" onClick={() => setShowModal(false)} disabled={loading}>Cancel</button>
+                  <button type="button" className="bg-surface-secondary hover:bg-surface-tertiary text-text-primary font-semibold py-2 px-4 rounded-lg transition-colors text-sm" onClick={() => setShowModal(false)} disabled={loading}>Cancel</button>
                 </div>
               </form>
               <button className="absolute top-3 right-3 text-text-secondary hover:text-brand-error text-2xl" onClick={() => setShowModal(false)} aria-label="Close">&times;</button>
@@ -652,7 +684,7 @@ export default function AdminBanner() {
           </div>
         )}
         {deleteModalOpen && bannerToDelete && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
             <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-8 relative border-4 border-brand-error/20">
               {deleteLoading && (
                 <div className="absolute inset-0 bg-white/70 flex items-center justify-center z-50">

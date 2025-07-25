@@ -290,7 +290,7 @@ export default function GoogleMapsModal({ isOpen, onClose, onLocationSelect }: G
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
             <div className="bg-white rounded-lg shadow-lg w-full max-w-2xl mx-4 p-6 relative">
                 <div className="flex items-center justify-between mb-4">
                     <div className="text-lg font-semibold">Select Warehouse Location</div>

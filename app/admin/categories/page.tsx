@@ -285,7 +285,7 @@ export default function AdminCategories() {
 
         {/* Search and Filter */}
         <div className="bg-surface-primary rounded-lg p-6 shadow-md">
-          <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">
+          <div className="flex flex-col md:flex-row gap-4 items-center">
             <div className="relative max-w-md flex-grow">
               <Search className="absolute left-3 top-2.5 h-5 w-5 text-text-tertiary" />
               <input
@@ -296,24 +296,21 @@ export default function AdminCategories() {
                 className="w-full pl-10 pr-4 py-2 border border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary h-10"
               />
             </div>
-            <div className="flex-shrink-0">
+            {/* Subcategory Filter */}
+            <div className="flex flex-row items-center gap-2 mb-0">
+              <label className="text-sm font-medium text-gray-700 flex items-center h-10">Filter by Parent Category:</label>
               <select
+                className="border border-gray-300 rounded-lg p-2 h-10 focus:outline-none focus:ring-2 focus:ring-brand-primary"
                 value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value as 'all' | 'parent' | 'sub')}
-                className="w-full border border-border-primary rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary h-10"
+                onChange={e => setCategoryFilter(e.target.value as any)}
               >
-                <option value="all">All Categories</option>
-                <option value="parent">Parent Categories Only</option>
-                <option value="sub">Subcategories Only</option>
+                <option value="all">All</option>
+                <option value="parent">Parent Categories</option>
+                <option value="sub">Subcategories</option>
               </select>
             </div>
           </div>
-          <div className="mt-4 text-sm text-text-secondary">
-            Showing {sortedCategories.length} of {categories.length} categories
-            {categoryFilter !== 'all' && (
-              <span> ({categoryFilter === 'parent' ? 'Parent Categories' : 'Subcategories'} only)</span>
-            )}
-          </div>
+
         </div>
 
         {/* Categories Grid */}
@@ -334,21 +331,21 @@ export default function AdminCategories() {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
             {sortedCategories.map((category: Category) => {
               const IconComponent = (LucideIcons as any)[category.icon] || LucideIcons["Box"];
               const parentCategory = category.parentId ? categories.find(c => c._id === category.parentId) : null;
               
               return (
-                <div key={category._id} className={`bg-surface-primary rounded-lg p-4 shadow-md hover:shadow-lg transition-shadow flex flex-col items-center md:flex-row md:items-start gap-4 w-full max-w-md mx-auto ${category.parentId ? 'border-l-4 border-brand-primary/30' : ''}`}>
+                <div key={category._id} className={`bg-surface-primary rounded-lg p-2 shadow-md hover:shadow-lg transition-shadow flex flex-col md:flex-row items-center justify-center md:items-center gap-2 w-full max-w-md mx-auto ${category.parentId ? 'border-l-4 border-brand-primary/30' : ''}`}>
                   {category.thumbnail && (
-                    <img src={category.thumbnail} alt={category.name} className="w-24 h-24 object-contain rounded border shadow mb-2 md:mb-0 bg-white" />
+                    <img src={category.thumbnail} alt={category.name} className="w-14 h-14 object-contain rounded border shadow mb-2 md:mb-0 bg-white" />
                   )}
                   <div className="flex-1 w-full flex flex-col items-center md:items-start">
                     <div className="flex flex-col items-center md:items-start w-full mb-2">
-                      <div className="flex items-center gap-2 mb-2 w-full justify-center md:justify-start">
-                        <IconComponent className="h-8 w-8 text-brand-primary" />
-                        <h3 className="text-lg font-semibold text-text-primary">{category.name}</h3>
+                      <div className="flex items-center gap-1 mb-2 w-full justify-center md:justify-start">
+                        <IconComponent className="h-6 w-6 text-brand-primary" />
+                        <h3 className="text-base font-semibold text-text-primary">{category.name}</h3>
                         {/* {category.slug && <span className="ml-2 text-xs text-gray-400 bg-gray-100 rounded px-2 py-0.5">{category.slug}</span>} */}
                       </div>
                       {parentCategory && (
@@ -615,7 +612,7 @@ export default function AdminCategories() {
 //   const IconComponent = (LucideIcons as any)[newCategory.icon] || LucideIcons["Box"];
 
 //   return (
-//     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+//     <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-50">
 //       <form
 //         className="bg-white rounded-lg shadow-lg p-8 w-full max-w-md space-y-6"
 //         onSubmit={editingCategory ? handleEditCategory : handleAddCategory}

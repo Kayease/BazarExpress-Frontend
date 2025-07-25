@@ -249,7 +249,7 @@ export default function Profile() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {/* Enhanced Header with Glassmorphism */}
           <div className="relative bg-gradient-to-r from-brand-primary via-brand-primary-dark to-purple-600 rounded-3xl shadow-2xl overflow-hidden mb-8">
-            <div className="absolute inset-0 bg-black/10"></div>
+            <div className="absolute inset-0 bg-black/20"></div>
             <div className="absolute inset-0 backdrop-blur-sm"></div>
             <div className="relative px-8 py-12">
               <div className="flex flex-col md:flex-row items-center space-y-6 md:space-y-0 md:space-x-8">

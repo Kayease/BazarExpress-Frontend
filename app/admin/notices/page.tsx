@@ -25,6 +25,14 @@ const defaultNotice: Notice = {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
+// Add helper to ensure endDate is always at end of day
+function toEndOfDay(dateStr: string) {
+  if (!dateStr) return dateStr;
+  const d = new Date(dateStr);
+  d.setHours(23, 59, 59, 999);
+  return d.toISOString();
+}
+
 export default function AdminNotices() {
   const user = useAppSelector((state) => state.auth.user);
   const token = useAppSelector((state) => state.auth.token);
@@ -33,6 +41,10 @@ export default function AdminNotices() {
   const [editing, setEditing] = useState<Notice | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const NOTICES_PER_PAGE = 15;
+  const totalPages = Math.ceil(notices.length / NOTICES_PER_PAGE);
+  const paginatedNotices = notices.slice((currentPage - 1) * NOTICES_PER_PAGE, currentPage * NOTICES_PER_PAGE);
 
   useEffect(() => {
     if (!user || user.role !== "admin") {
@@ -88,18 +100,22 @@ export default function AdminNotices() {
     if (!editing || !token) return;
     setLoading(true);
     try {
+      const payload = {
+        ...editing,
+        endDate: toEndOfDay(editing.endDate),
+      };
       let res;
       if (editing._id) {
         res = await fetch(`${API_URL}/notices/${editing._id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify(editing),
+          body: JSON.stringify(payload),
         });
       } else {
         res = await fetch(`${API_URL}/notices`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify(editing),
+          body: JSON.stringify(payload),
         });
       }
       if (!res.ok) throw new Error("Save failed");
@@ -152,7 +168,12 @@ export default function AdminNotices() {
       const res = await fetch(`${API_URL}/notices/${notice._id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ ...notice, status: newStatus }),
+        body: JSON.stringify({
+          message: notice.message,
+          status: newStatus,
+          startDate: notice.startDate,
+          endDate: toEndOfDay(notice.endDate),
+        }),
       });
       if (!res.ok) throw new Error('Status update failed');
       toast.success(`Notice ${newStatus === 'active' ? 'activated' : 'deactivated'}!`);
@@ -251,40 +272,24 @@ export default function AdminNotices() {
           </div>
         </div>
         <div className="bg-white rounded-lg shadow p-6">
-          <table className="w-full text-left border-separate border-spacing-y-2">
-            <thead>
-              <tr className="bg-gray-50">
-                <th className="py-3 px-4 font-semibold">Notice</th>
-                <th className="py-3 px-4 font-semibold text-center" style={{ width: '140px' }}>Status</th>
-                <th className="py-3 px-4 font-semibold">Start Date</th>
-                <th className="py-3 px-4 font-semibold">End Date</th>
-                <th className="py-3 px-4 font-semibold text-center">Actions</th>
+          <table className="w-full min-w-[600px] text-left border-separate border-spacing-y-2">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="py-2 px-3 font-semibold text-sm">Message</th>
+                <th className="py-2 px-3 font-semibold text-sm text-center">Status</th>
+                <th className="py-2 px-3 font-semibold text-sm">Start Date</th>
+                <th className="py-2 px-3 font-semibold text-sm">End Date</th>
+                <th className="py-2 px-3 font-semibold text-sm text-center">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {notices.length === 0 && (
-                <tr>
-                  <td colSpan={5}>
-                    <div className="flex flex-col items-center justify-center py-16">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-brand-primary mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                      </svg>
-                      <div className="text-lg text-gray-500 mb-2">No notices yet.</div>
-                      <div className="text-sm text-gray-400 mb-6">Click the + button or the button below to add your first notice.</div>
-                      <button
-                        className="bg-brand-primary hover:bg-brand-primary-dark text-white font-semibold py-2 px-6 rounded-lg transition-colors"
-                        onClick={() => { setEditing({ ...defaultNotice }); setShowForm(true); }}
-                      >
-                        Add Notice
-                      </button>
-                    </div>
-                  </td>
-                </tr>
+              {paginatedNotices.length === 0 && (
+                <tr><td colSpan={5} className="text-center py-8 text-gray-400">No notices found.</td></tr>
               )}
-              {notices.map(notice => (
-                <tr key={notice._id} className="bg-white border-b">
-                  <td className="py-3 px-4 align-middle max-w-xl whitespace-pre-line">{notice.message}</td>
-                  <td className="py-3 px-4 align-middle text-center">
+              {paginatedNotices.map(notice => (
+                <tr key={notice._id} className="bg-white border-b hover:bg-gray-50 transition group">
+                  <td className="py-2 px-3 align-middle max-w-xs whitespace-nowrap text-xs text-gray-900 truncate" title={notice.message}>{notice.message}</td>
+                  <td className="py-2 px-3 align-middle text-center">
                     <div className="flex items-center justify-center gap-2">
                       <button
                         type="button"
@@ -300,46 +305,70 @@ export default function AdminNotices() {
                       </button>
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${notice.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-700'}`}>{capitalize(notice.status)}</span>
                       {isScheduledForFuture(notice) && notice.status === 'active' && (
-                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                          Scheduled
-                        </span>
+                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Scheduled</span>
                       )}
                       {isCurrentlyActive(notice) && (
-                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          Live
-                        </span>
+                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">Live</span>
                       )}
                       {isExpired(notice) && (
-                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                          Expired
-                        </span>
+                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">Expired</span>
                       )}
                     </div>
                   </td>
-                  <td className="py-3 px-4 align-middle">{formatDate(notice.startDate)}</td>
-                  <td className="py-3 px-4 align-middle">{formatDate(notice.endDate)}</td>
-                  <td className="py-3 px-4 align-middle text-center flex gap-2 justify-center">
-                    <button
-                      className="inline-flex items-center justify-center rounded-full p-2 text-brand-primary hover:bg-brand-primary hover:text-white transition-colors mr-2"
-                      onClick={() => handleEdit(notice)}
-                      aria-label="Edit"
-                      disabled={loading}
-                    >
-                      <Pencil className="h-5 w-5" />
-                    </button>
-                    <button
-                      className="inline-flex items-center justify-center rounded-full p-2 text-brand-error hover:bg-brand-error hover:text-white transition-colors"
-                      onClick={() => handleDelete(notice._id)}
-                      aria-label="Delete"
-                      disabled={loading}
-                    >
-                      <Trash2 className="h-5 w-5" />
-                    </button>
+                  <td className="py-2 px-3 align-middle text-xs">{formatDate(notice.startDate)}</td>
+                  <td className="py-2 px-3 align-middle text-xs">{formatDate(notice.endDate)}</td>
+                  <td className="py-2 px-3 align-middle text-center">
+                    <div className="flex items-center justify-center gap-2">
+                      <button
+                        className="inline-flex items-center justify-center rounded p-1.5 text-xs text-purple-600 hover:bg-purple-100 hover:text-purple-800 transition-colors"
+                        onClick={() => handleEdit(notice)}
+                        aria-label="Edit"
+                        disabled={loading}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        className="inline-flex items-center justify-center rounded p-1.5 text-xs text-red-500 hover:bg-red-100 hover:text-red-700 transition-colors"
+                        onClick={() => handleDelete(notice._id)}
+                        aria-label="Delete"
+                        disabled={loading}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex justify-end items-center space-x-2 mt-6 mb-2 pr-2">
+              <button
+                className="px-2 py-1 rounded border text-xs font-medium bg-gray-50 hover:bg-gray-100 disabled:opacity-50"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+              >
+                Previous
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                <button
+                  key={page}
+                  className={`px-2 py-1 rounded text-xs font-medium border mx-0.5 ${currentPage === page ? 'bg-brand-primary text-white border-brand-primary' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
+                  onClick={() => setCurrentPage(page)}
+                >
+                  {page}
+                </button>
+              ))}
+              <button
+                className="px-2 py-1 rounded border text-xs font-medium bg-gray-50 hover:bg-gray-100 disabled:opacity-50"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Next
+              </button>
+            </div>
+          )}
         </div>
         {/* Notice Form Modal */}
         {showForm && editing && (
@@ -368,6 +397,7 @@ export default function AdminNotices() {
                       value={editing.startDate}
                       onChange={handleFormChange}
                       required
+                      min={new Date().toISOString().split('T')[0]}
                     />
                   </div>
                   <div className="flex-1">
@@ -379,6 +409,7 @@ export default function AdminNotices() {
                       value={editing.endDate}
                       onChange={handleFormChange}
                       required
+                      min={editing.startDate || new Date().toISOString().split('T')[0]}
                     />
                   </div>
                 </div>

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useState, useMemo } from "react"
+import React, { useEffect, useState, useMemo, useRef } from "react"
 import AdminLayout from "../../../components/AdminLayout"
 import {
   Table,
@@ -37,6 +37,7 @@ import {
   Pencil,
   Trash2,
   Calendar as CalendarIcon,
+  BadgePercent,
 } from "lucide-react"
 import { format, parseISO } from "date-fns"
 import { useRouter } from "next/navigation"
@@ -46,7 +47,7 @@ import ConfirmDeleteModal from "@/components/ui/ConfirmDeleteModal"
 
 // --- Types ---
 type PromoType = "percentage" | "fixed"
-type AppliesTo = "all" | "categories" | "products"
+type AppliesTo = "all" | "categories" | "brands" | "products"
 
 type Promo = {
   _id: string
@@ -63,9 +64,10 @@ type Promo = {
   products?: string[]
   status: boolean
   description?: string
+  brands?: string[]
 }
 
-type Category = { _id: string; name: string }
+type Category = { _id: string; name: string; parentId?: string }
 type Product = { _id: string; name: string }
 
 // --- Form State Type ---
@@ -83,12 +85,14 @@ type PromoForm = {
   products: string[]
   status: boolean
   description: string
+  brands: string[]
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 const API = `${API_URL}/promocodes`;
 const CATEGORY_API = `${API_URL}/categories`;
 const PRODUCT_API = `${API_URL}/products`;
+const BRAND_API = `${API_URL}/brands`;
 
 // --- Main Page ---
 export default function PromoCodesPage() {
@@ -102,7 +106,14 @@ export default function PromoCodesPage() {
   const [categories, setCategories] = useState<Category[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [fetchingCats, setFetchingCats] = useState(false)
-  const [fetchingProds, setFetchingProds] = useState(false)
+  const [brands, setBrands] = useState<{ _id: string; name: string }[]>([])
+  const [fetchingBrands, setFetchingBrands] = useState(false)
+  const [categorySearch, setCategorySearch] = useState("")
+  const [brandSearch, setBrandSearch] = useState("")
+  const [currentPage, setCurrentPage] = useState(1);
+  const PROMOS_PER_PAGE = 10;
+  const totalPages = Math.ceil(promos.length / PROMOS_PER_PAGE);
+  const paginatedPromos = promos.slice((currentPage - 1) * PROMOS_PER_PAGE, currentPage * PROMOS_PER_PAGE);
 
   // --- Fetch Promos ---
   useEffect(() => {
@@ -138,6 +149,12 @@ export default function PromoCodesPage() {
       .then((data) => setProducts(data))
       .catch(() => toast.error("Failed to load products"))
       .finally(() => setFetchingProds(false))
+    setFetchingBrands(true)
+    fetch(BRAND_API)
+      .then((r) => r.json())
+      .then((data) => setBrands(data))
+      .catch(() => toast.error("Failed to load brands"))
+      .finally(() => setFetchingBrands(false))
   }, [])
 
   // --- Form State ---
@@ -155,6 +172,7 @@ export default function PromoCodesPage() {
     products: [],
     status: true,
     description: "",
+    brands: [],
   }
   const [form, setForm] = useState<PromoForm>(initialForm)
   const [formErrors, setFormErrors] = useState<{ [k: string]: string }>({})
@@ -182,6 +200,7 @@ export default function PromoCodesPage() {
       products: promo.products ?? [],
       status: !!promo.status,
       description: promo.description ?? "",
+      brands: promo.brands ?? [],
     })
     setFormErrors({})
     setShowForm(true)
@@ -196,6 +215,7 @@ export default function PromoCodesPage() {
     if (form.type === "percentage" && (!form.maxDiscount || Number(form.maxDiscount) <= 0)) errors.maxDiscount = "Max discount required for percentage"
     if (form.startDate && form.endDate && form.endDate < form.startDate) errors.endDate = "End date must be after start date"
     if (form.appliesTo === "categories" && (!form.categories || form.categories.length === 0)) errors.categories = "Select at least one category"
+    if (form.appliesTo === "brands" && (!form.brands || form.brands.length === 0)) errors.brands = "Select at least one brand"
     if (form.appliesTo === "products" && (!form.products || form.products.length === 0)) errors.products = "Select at least one product"
     return errors
   }
@@ -216,6 +236,7 @@ export default function PromoCodesPage() {
       startDate: form.startDate || undefined,
       endDate: form.endDate || undefined,
       status: !!form.status,
+      brands: form.appliesTo === "brands" ? form.brands : [],
       categories: form.appliesTo === "categories" ? form.categories : [],
       products: form.appliesTo === "products" ? form.products : [],
     }
@@ -307,6 +328,95 @@ export default function PromoCodesPage() {
     { label: "Actions", key: "actions" },
   ]
 
+  // --- Async Product Search State ---
+  const [productSearch, setProductSearch] = useState("")
+  const [productResults, setProductResults] = useState<Product[]>([])
+  const [productPage, setProductPage] = useState(1)
+  const [productTotalPages, setProductTotalPages] = useState(1)
+  const [fetchingProds, setFetchingProds] = useState(false)
+  const productSearchTimeout = useRef<NodeJS.Timeout | null>(null)
+
+  // --- Async Product Search Effect ---
+  useEffect(() => {
+    if (form.appliesTo !== "products") return;
+    setFetchingProds(true)
+    if (productSearchTimeout.current) clearTimeout(productSearchTimeout.current)
+    productSearchTimeout.current = setTimeout(() => {
+      fetch(`${PRODUCT_API}/paginated?search=${encodeURIComponent(productSearch)}&page=${productPage}&limit=20`)
+        .then((r) => r.json())
+        .then((data) => {
+          setProductResults(data.products || [])
+          setProductTotalPages(data.totalPages || 1)
+        })
+        .catch(() => toast.error("Failed to load products"))
+        .finally(() => setFetchingProds(false))
+    }, 300)
+    // eslint-disable-next-line
+  }, [productSearch, productPage, form.appliesTo])
+
+  // --- Reset product page on new search ---
+  useEffect(() => {
+    setProductPage(1)
+  }, [productSearch])
+
+  // --- Async Category Search State ---
+  const [categoryResults, setCategoryResults] = useState<Category[]>([]);
+  const [categoryPage, setCategoryPage] = useState(1);
+  const [categoryTotalPages, setCategoryTotalPages] = useState(1);
+  const categorySearchTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  // --- Async Brand Search State ---
+  const [brandResults, setBrandResults] = useState<{ _id: string; name: string }[]>([]);
+  const [brandPage, setBrandPage] = useState(1);
+  const [brandTotalPages, setBrandTotalPages] = useState(1);
+  const brandSearchTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  // --- Async Category Search Effect ---
+  useEffect(() => {
+    if (form.appliesTo !== "categories") return;
+    setFetchingCats(true);
+    if (categorySearchTimeout.current) clearTimeout(categorySearchTimeout.current);
+    categorySearchTimeout.current = setTimeout(() => {
+      fetch(`${CATEGORY_API}/paginated?search=${encodeURIComponent(categorySearch)}&page=${categoryPage}&limit=10`)
+        .then((r) => r.json())
+        .then((data) => {
+          setCategoryResults(data.items || []);
+          setCategoryTotalPages(data.totalPages || 1);
+        })
+        .catch(() => toast.error("Failed to load categories"))
+        .finally(() => setFetchingCats(false));
+    }, 300);
+    // eslint-disable-next-line
+  }, [categorySearch, categoryPage, form.appliesTo]);
+
+  // --- Reset category page on new search ---
+  useEffect(() => {
+    setCategoryPage(1);
+  }, [categorySearch]);
+
+  // --- Async Brand Search Effect ---
+  useEffect(() => {
+    if (form.appliesTo !== "brands") return;
+    setFetchingBrands(true);
+    if (brandSearchTimeout.current) clearTimeout(brandSearchTimeout.current);
+    brandSearchTimeout.current = setTimeout(() => {
+      fetch(`${BRAND_API}/paginated?search=${encodeURIComponent(brandSearch)}&page=${brandPage}&limit=20`)
+        .then((r) => r.json())
+        .then((data) => {
+          setBrandResults(data.items || []);
+          setBrandTotalPages(data.totalPages || 1);
+        })
+        .catch(() => toast.error("Failed to load brands"))
+        .finally(() => setFetchingBrands(false));
+    }, 300);
+    // eslint-disable-next-line
+  }, [brandSearch, brandPage, form.appliesTo]);
+
+  // --- Reset brand page on new search ---
+  useEffect(() => {
+    setBrandPage(1);
+  }, [brandSearch]);
+
   // --- Render ---
   return (
     <AdminLayout>
@@ -321,84 +431,101 @@ export default function PromoCodesPage() {
             <span>Add Promo</span>
           </button>
         </div>
-        <div className="bg-white rounded-lg shadow p-0 md:p-6">
           {loading ? (
             <div className="space-y-2">
               {[...Array(5)].map((_, i) => (
                 <Skeleton key={i} className="h-12 w-full rounded" />
               ))}
             </div>
-          ) : promos.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-brand-primary mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M7 7a1 1 0 011-1h8a1 1 0 011 1v8a1 1 0 01-1 1H8a1 1 0 01-1-1V7zm0 0l10 10" />
-              </svg>
-              <div className="text-lg text-gray-500 mb-2">No promocodes yet.</div>
-              <div className="text-sm text-gray-400 mb-6">Click the + button or the button below to add your first promocode.</div>
+          ) : (
+            <div className="space-y-2">
+              {paginatedPromos.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8 w-full min-h-[120px] bg-brand-primary/5 rounded-xl">
+                  <span className="text-brand-primary mb-2"><BadgePercent className="h-5 w-5" /></span>
+                  <div className="text-base font-bold text-codGray mb-1">No Promocodes Yet</div>
+                  <div className="text-gray-500 mb-4 text-center max-w-xs text-xs">You haven’t created any promocodes for your store.</div>
               <button
-                className="bg-brand-primary hover:bg-brand-primary-dark text-white font-semibold py-2 px-6 rounded-lg transition-colors"
                 onClick={openAdd}
+                    className="bg-brand-primary hover:bg-brand-primary-dark text-white px-4 py-1.5 rounded-lg text-sm font-semibold shadow-md flex items-center gap-2"
               >
-                Add Promocode
+                    <Plus className="h-4 w-4 mr-1" /> Add Your First Promocode
               </button>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  {columns.map((col) => (
-                    <TableHead key={col.key}>{col.label}</TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {promos.map((promo) => (
-                  <TableRow key={promo._id}>
-                    <TableCell>{promo.code}</TableCell>
-                    <TableCell className="capitalize">{promo.type}</TableCell>
-                    <TableCell>
-                      {promo.type === "percentage"
-                        ? `${promo.discount}%${promo.maxDiscount ? ` (Max ₹${promo.maxDiscount})` : ""}`
-                        : `₹${promo.discount}`}
-                    </TableCell>
-                    <TableCell>
-                      {promo.startDate && promo.endDate
-                        ? `${format(parseISO(promo.startDate), "dd MMM yyyy")} → ${format(parseISO(promo.endDate), "dd MMM yyyy")}`
-                        : "-"}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={promo.status ? "default" : "destructive"}>
-                        {promo.status ? "Active" : "Inactive"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
+                paginatedPromos.map((promo) => (
+                  <div
+                    key={promo._id}
+                    className="bg-white rounded-xl shadow-md p-2 flex flex-col sm:flex-row sm:items-center gap-2 border border-gray-100 relative group hover:shadow-lg transition-all"
+                  >
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-gray-50 border flex items-center justify-center overflow-hidden">
+                        <BadgePercent className="h-5 w-5 text-brand-primary/60" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-base text-codGray flex items-center gap-2 truncate">
+                          {promo.code}
+                        </div>
+                        <div className="text-xs text-gray-500 line-clamp-2 min-h-[18px]">
+                          {promo.description || 'No description'}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1 items-center text-xs">
+                      <span className="bg-gray-100 rounded px-2 py-0.5 font-semibold capitalize">{promo.type}</span>
+                      <span className="bg-gray-100 rounded px-2 py-0.5 font-semibold">{promo.type === "percentage" ? `${promo.discount}%${promo.maxDiscount ? ` (Max ₹${promo.maxDiscount})` : ""}` : `₹${promo.discount}`}</span>
+                      <span className="bg-gray-100 rounded px-2 py-0.5 font-semibold">{promo.startDate && promo.endDate ? `${format(parseISO(promo.startDate), "dd MMM yyyy")} → ${format(parseISO(promo.endDate), "dd MMM yyyy")}` : "-"}</span>
+                      <span className={`rounded px-2 py-0.5 font-semibold ${promo.status ? "bg-green-100 text-green-700" : "bg-gray-200 text-gray-400"}`}>{promo.status ? "Active" : "Inactive"}</span>
+                    </div>
+                    <div className="flex gap-1 sm:ml-2">
                         <button
-                          className="inline-flex items-center justify-center bg-brand-primary hover:bg-brand-primary-dark text-white rounded p-2"
+                        className="p-1 rounded-full hover:bg-brand-primary/10 focus:bg-brand-primary/10 transition-colors"
+                        title="Edit"
                           onClick={() => openEdit(promo)}
-                          aria-label="Edit"
                         >
-                          <Pencil className="h-5 w-5" />
+                        <Pencil className="h-4 w-4 text-brand-primary" />
                         </button>
-                        <button
-                          className="inline-flex items-center justify-center bg-brand-error hover:bg-brand-error-dark text-white rounded p-2"
-                          onClick={() => setShowDelete(promo)}
-                          aria-label="Delete"
-                        >
-                          <Trash2 className="h-5 w-5" />
+                      <button className="p-1 rounded-full hover:bg-red-100 focus:bg-red-100 transition-colors" onClick={() => setShowDelete(promo)} title="Delete">
+                        <Trash2 className="h-4 w-4 text-red-500" />
                         </button>
                       </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                  </div>
+                ))
+              )}
+            </div>
           )}
-        </div>
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex justify-end items-center space-x-2 mt-6 mb-2 pr-2">
+              <button
+                className="px-2 py-1 rounded border text-xs font-medium bg-gray-50 hover:bg-gray-100 disabled:opacity-50"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+              >
+                Previous
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                <button
+                  key={page}
+                  className={`px-2 py-1 rounded text-xs font-medium border mx-0.5 ${currentPage === page ? 'bg-brand-primary text-white border-brand-primary' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
+                  onClick={() => setCurrentPage(page)}
+                >
+                  {page}
+                </button>
+              ))}
+              <button
+                className="px-2 py-1 rounded border text-xs font-medium bg-gray-50 hover:bg-gray-100 disabled:opacity-50"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Next
+              </button>
+            </div>
+          )}
+        
 
         {/* Add/Edit Promo Modal */}
         <Dialog open={showForm} onOpenChange={setShowForm}>
-          <DialogContent className="max-w-lg w-full">
+          <DialogContent className="max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editPromo ? "Edit Promo" : "Add Promo"}</DialogTitle>
             </DialogHeader>
@@ -593,70 +720,241 @@ export default function PromoCodesPage() {
                   </SelectTrigger>
                   <SelectContent className="bg-white">
                     <SelectItem value="all">All</SelectItem>
-                    <SelectItem value="categories">Categories</SelectItem>
-                    <SelectItem value="products">Products</SelectItem>
+                    <SelectItem value="categories">Category</SelectItem>
+                    <SelectItem value="brands">Brand</SelectItem>
+                    <SelectItem value="products">Advance</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               {form.appliesTo === "categories" && (
                 <div>
-                  <label className="block text-sm font-medium mb-1">Categories<span className="text-red-500">*</span></label>
-                  <div className="flex flex-wrap gap-2">
+                  <label className="block text-sm font-medium mb-1">Parent Categories<span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded-lg p-2 mb-2"
+                    placeholder="Search categories..."
+                    value={categorySearch}
+                    onChange={e => setCategorySearch(e.target.value)}
+                    disabled={fetchingCats}
+                  />
+                  <div className="flex flex-col gap-2 border rounded bg-gray-50 p-2 max-h-56 overflow-y-auto">
                     {fetchingCats ? (
                       <Skeleton className="h-8 w-32 rounded" />
-                    ) : categories.length === 0 ? (
-                      <span className="text-gray-400">No categories</span>
                     ) : (
-                      categories.map((cat) => (
-                        <label key={cat._id} className="flex items-center gap-1 text-sm bg-gray-100 px-2 py-1 rounded cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={form.categories.includes(cat._id)}
-                            onChange={e => {
-                              setForm({
-                                ...form,
-                                categories: e.target.checked
-                                  ? [...form.categories, cat._id]
-                                  : form.categories.filter((id) => id !== cat._id),
-                              })
-                            }}
-                            disabled={formLoading}
-                          />
-                          {cat.name}
-                        </label>
-                      ))
+                      <>
+                        {/* Show selected categories even if not in current search results */}
+                        {form.categories
+                          .filter(cid => !categoryResults.some(c => c._id === cid))
+                          .map(cid => (
+                            <label key={cid} className="flex items-center gap-2 text-sm cursor-pointer px-2 py-1 bg-yellow-50 rounded">
+                              <input
+                                type="checkbox"
+                                checked={form.categories.includes(cid)}
+                                onChange={e => {
+                                  setForm({
+                                    ...form,
+                                    categories: e.target.checked
+                                      ? [...form.categories, cid]
+                                      : form.categories.filter((id) => id !== cid),
+                                  })
+                                }}
+                                disabled={formLoading}
+                              />
+                              {cid}
+                              <span className="text-xs text-gray-400">(selected)</span>
+                            </label>
+                          ))}
+                        {/* Show current search results */}
+                        {categoryResults.length === 0 && form.categories.length === 0 ? (
+                          <span className="text-gray-400">No categories</span>
+                        ) : (
+                          categoryResults.map((cat) => (
+                            <label key={cat._id} className="flex items-center gap-2 text-sm cursor-pointer px-2 py-1 hover:bg-gray-100 rounded">
+                              <input
+                                type="checkbox"
+                                checked={form.categories.includes(cat._id)}
+                                onChange={e => {
+                                  setForm({
+                                    ...form,
+                                    categories: e.target.checked
+                                      ? [...form.categories, cat._id]
+                                      : form.categories.filter((id) => id !== cat._id),
+                                  })
+                                }}
+                                disabled={formLoading}
+                              />
+                              {cat.name}
+                            </label>
+                          ))
+                        )}
+                        {/* Load More button for pagination */}
+                        {categoryPage < categoryTotalPages && (
+                          <button
+                            type="button"
+                            className="mt-2 px-3 py-1 rounded bg-brand-primary text-white text-xs font-semibold hover:bg-brand-primary-dark"
+                            onClick={() => setCategoryPage(categoryPage + 1)}
+                            disabled={fetchingCats}
+                          >
+                            Load More
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
                   {formErrors.categories && <div className="text-xs text-red-500 mt-1">{formErrors.categories}</div>}
                 </div>
               )}
+              {form.appliesTo === "brands" && (
+                <div>
+                  <label className="block text-sm font-medium mb-1">Brands<span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded-lg p-2 mb-2"
+                    placeholder="Search brands..."
+                    value={brandSearch}
+                    onChange={e => setBrandSearch(e.target.value)}
+                    disabled={fetchingBrands}
+                  />
+                  <div className="flex flex-col gap-2 border rounded bg-gray-50 p-2 max-h-56 overflow-y-auto">
+                    {fetchingBrands ? (
+                      <Skeleton className="h-8 w-32 rounded" />
+                    ) : (
+                      <>
+                        {/* Show selected brands even if not in current search results */}
+                        {form.brands
+                          .filter(bid => !brandResults.some(b => b._id === bid))
+                          .map(bid => (
+                            <label key={bid} className="flex items-center gap-2 text-sm cursor-pointer px-2 py-1 bg-yellow-50 rounded">
+                              <input
+                                type="checkbox"
+                                checked={form.brands.includes(bid)}
+                                onChange={e => {
+                                  setForm({
+                                    ...form,
+                                    brands: e.target.checked
+                                      ? [...form.brands, bid]
+                                      : form.brands.filter((id) => id !== bid),
+                                  })
+                                }}
+                                disabled={formLoading}
+                              />
+                              {bid}
+                              <span className="text-xs text-gray-400">(selected)</span>
+                            </label>
+                          ))}
+                        {/* Show current search results */}
+                        {brandResults.length === 0 && form.brands.length === 0 ? (
+                          <span className="text-gray-400">No brands</span>
+                        ) : (
+                          brandResults.map((brand) => (
+                            <label key={brand._id} className="flex items-center gap-2 text-sm cursor-pointer px-2 py-1 hover:bg-gray-100 rounded">
+                              <input
+                                type="checkbox"
+                                checked={form.brands.includes(brand._id)}
+                                onChange={e => {
+                                  setForm({
+                                    ...form,
+                                    brands: e.target.checked
+                                      ? [...form.brands, brand._id]
+                                      : form.brands.filter((id) => id !== brand._id),
+                                  })
+                                }}
+                                disabled={formLoading}
+                              />
+                              {brand.name}
+                            </label>
+                          ))
+                        )}
+                        {/* Load More button for pagination */}
+                        {brandPage < brandTotalPages && (
+                          <button
+                            type="button"
+                            className="mt-2 px-3 py-1 rounded bg-brand-primary text-white text-xs font-semibold hover:bg-brand-primary-dark"
+                            onClick={() => setBrandPage(brandPage + 1)}
+                            disabled={fetchingBrands}
+                          >
+                            Load More
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  {formErrors.brands && <div className="text-xs text-red-500 mt-1">{formErrors.brands}</div>}
+                </div>
+              )}
               {form.appliesTo === "products" && (
                 <div>
                   <label className="block text-sm font-medium mb-1">Products<span className="text-red-500">*</span></label>
-                  <div className="flex flex-wrap gap-2">
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded-lg p-2 mb-2"
+                    placeholder="Search products..."
+                    value={productSearch}
+                    onChange={e => setProductSearch(e.target.value)}
+                    disabled={fetchingProds}
+                  />
+                  <div className="flex flex-col gap-2 border rounded bg-gray-50 p-2 max-h-56 overflow-y-auto">
                     {fetchingProds ? (
                       <Skeleton className="h-8 w-32 rounded" />
-                    ) : products.length === 0 ? (
-                      <span className="text-gray-400">No products</span>
                     ) : (
-                      products.map((prod) => (
-                        <label key={prod._id} className="flex items-center gap-1 text-sm bg-gray-100 px-2 py-1 rounded cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={form.products.includes(prod._id)}
-                            onChange={e => {
-                              setForm({
-                                ...form,
-                                products: e.target.checked
-                                  ? [...form.products, prod._id]
-                                  : form.products.filter((id) => id !== prod._id),
-                              })
-                            }}
-                            disabled={formLoading}
-                          />
-                          {prod.name}
-                        </label>
-                      ))
+                      <>
+                        {/* Show selected products even if not in current search results */}
+                        {form.products
+                          .filter(pid => !productResults.some(p => p._id === pid))
+                          .map(pid => (
+                            <label key={pid} className="flex items-center gap-2 text-sm cursor-pointer px-2 py-1 bg-yellow-50 rounded">
+                              <input
+                                type="checkbox"
+                                checked={form.products.includes(pid)}
+                                onChange={e => {
+                                  setForm({
+                                    ...form,
+                                    products: e.target.checked
+                                      ? [...form.products, pid]
+                                      : form.products.filter((id) => id !== pid),
+                                  })
+                                }}
+                                disabled={formLoading}
+                              />
+                              {pid}
+                              <span className="text-xs text-gray-400">(selected)</span>
+                            </label>
+                          ))}
+                        {/* Show current search results */}
+                        {productResults.length === 0 && form.products.length === 0 ? (
+                          <span className="text-gray-400">No products</span>
+                        ) : (
+                          productResults.map((prod) => (
+                            <label key={prod._id} className="flex items-center gap-2 text-sm cursor-pointer px-2 py-1 hover:bg-gray-100 rounded">
+                              <input
+                                type="checkbox"
+                                checked={form.products.includes(prod._id)}
+                                onChange={e => {
+                                  setForm({
+                                    ...form,
+                                    products: e.target.checked
+                                      ? [...form.products, prod._id]
+                                      : form.products.filter((id) => id !== prod._id),
+                                  })
+                                }}
+                                disabled={formLoading}
+                              />
+                              {prod.name}
+                            </label>
+                          ))
+                        )}
+                        {/* Load More button for pagination */}
+                        {productPage < productTotalPages && (
+                          <button
+                            type="button"
+                            className="mt-2 px-3 py-1 rounded bg-brand-primary text-white text-xs font-semibold hover:bg-brand-primary-dark"
+                            onClick={() => setProductPage(productPage + 1)}
+                            disabled={fetchingProds}
+                          >
+                            Load More
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
                   {formErrors.products && <div className="text-xs text-red-500 mt-1">{formErrors.products}</div>}

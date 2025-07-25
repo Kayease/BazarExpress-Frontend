@@ -129,7 +129,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
       <div
         role="dialog"
         aria-modal="true"
-        className="fixed inset-0 flex items-center justify-center bg-black/50 z-50"
+        className="fixed inset-0 flex items-center justify-center bg-black/20 z-50"
         onClick={(e) => {
           if (e.target === e.currentTarget) onClose();
         }}

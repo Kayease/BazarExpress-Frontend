@@ -70,6 +70,18 @@ export default function AdminUsers() {
   });
   const [editLoading, setEditLoading] = useState(false)
   const router = useRouter()
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Move filteredUsers above its usage
+  const filteredUsers = users.filter((u) => {
+    const matchesSearch = u.name.toLowerCase().includes(searchTerm.toLowerCase()) || u.email.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesRole = filterRole === "all" || u.role === filterRole
+    return matchesSearch && matchesRole
+  })
+
+  const USERS_PER_PAGE = 10;
+  const totalPages = Math.ceil(filteredUsers.length / USERS_PER_PAGE);
+  const paginatedUsers = filteredUsers.slice((currentPage - 1) * USERS_PER_PAGE, currentPage * USERS_PER_PAGE);
 
 
   useEffect(() => {
@@ -147,13 +159,13 @@ export default function AdminUsers() {
       status: u.status || 'active',
       phone: u.phone || '',
       dateOfBirth: u.dateOfBirth || '',
-      address: {
-        street: u.address?.street || '',
-        landmark: u.address?.landmark || '',
-        city: u.address?.city || '',
-        state: u.address?.state || '',
-        country: u.address?.country || '',
-        pincode: u.address?.pincode || '',
+      address: u.address || {
+        street: '',
+        landmark: '',
+        city: '',
+        state: '',
+        country: '',
+        pincode: '',
       },
     });
     setEditModalOpen(true);
@@ -167,20 +179,30 @@ export default function AdminUsers() {
     if (!editUser) return
     setEditLoading(true)
     try {
-      if (!token) throw new Error("No authentication token found.")
+      if (!token) throw new Error("No authentication token found.");
+      // Merge updated fields with the existing user object to preserve all other fields
+      const updatedUser = {
+        ...editUser,
+        name: editForm.name,
+        email: editForm.email,
+        phone: editForm.phone,
+        dateOfBirth: editForm.dateOfBirth,
+        role: editForm.role,
+        status: editForm.status,
+      };
       const res = await fetch(`${API_URL}/auth/users/${editUser.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(editForm)
-      })
-      if (!res.ok) throw new Error("Update failed")
-      setUsers(users.map(u => u.id === editUser.id ? { ...u, ...editForm } : u))
-      toast.success("User updated")
-      closeEditModal()
+        body: JSON.stringify(updatedUser)
+      });
+      if (!res.ok) throw new Error("Update failed");
+      setUsers(users.map(u => u.id === editUser.id ? updatedUser : u));
+      toast.success("User updated");
+      closeEditModal();
     } catch {
-      toast.error("Failed to update user")
+      toast.error("Failed to update user");
     } finally {
-      setEditLoading(false)
+      setEditLoading(false);
     }
   }
 
@@ -200,12 +222,6 @@ export default function AdminUsers() {
       toast.error('Failed to update status');
     }
   };
-
-  const filteredUsers = users.filter((u) => {
-    const matchesSearch = u.name.toLowerCase().includes(searchTerm.toLowerCase()) || u.email.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesRole = filterRole === "all" || u.role === filterRole
-    return matchesSearch && matchesRole
-  })
 
   if (!user || user.role !== "admin" || !token) {
     return (
@@ -273,7 +289,7 @@ export default function AdminUsers() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredUsers.map((u) => (
+                  {paginatedUsers.map((u) => (
                     <tr key={u.id} className="border-b border-gray-200 hover:bg-gray-50">
                       <td className="py-4 px-6">
                         <div className="flex items-center space-x-3">
@@ -329,7 +345,7 @@ export default function AdminUsers() {
                         </div>
                         {/* Confirm Delete Modal */}
                         {confirmDelete === u.id && (
-                          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+                          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
                             <div className="bg-white rounded-lg shadow-lg p-8 max-w-sm w-full text-center">
                               <h3 className="text-lg font-bold mb-2">Delete User?</h3>
                               <p className="mb-4 text-gray-600">Are you sure you want to delete <span className="font-semibold">{u.name}</span>? This action cannot be undone.</p>
@@ -359,10 +375,38 @@ export default function AdminUsers() {
             </div>
           )}
         </div>
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex justify-end items-center space-x-2 mt-6 mb-2 pr-2">
+            <button
+              className="px-2 py-1 rounded border text-xs font-medium bg-gray-50 hover:bg-gray-100 disabled:opacity-50"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+            >
+              Previous
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+              <button
+                key={page}
+                className={`px-2 py-1 rounded text-xs font-medium border mx-0.5 ${currentPage === page ? 'bg-brand-primary text-white border-brand-primary' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
+                onClick={() => setCurrentPage(page)}
+              >
+                {page}
+              </button>
+            ))}
+            <button
+              className="px-2 py-1 rounded border text-xs font-medium bg-gray-50 hover:bg-gray-100 disabled:opacity-50"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+            >
+              Next
+            </button>
+          </div>
+        )}
       </div>
       {/* Edit Modal */}
       {editModalOpen && editUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
           <div className="bg-white rounded-lg shadow-lg p-8 max-w-lg w-full text-center">
             <h3 className="text-lg font-bold mb-2">Edit User</h3>
             <form onSubmit={handleEditSubmit} className="space-y-4 text-left">
@@ -381,32 +425,6 @@ export default function AdminUsers() {
               <div>
                 <label className="block font-medium mb-1">Date of Birth</label>
                 <input type="date" className="w-full border border-gray-300 rounded-lg p-2" value={editForm.dateOfBirth || ''} onChange={e => setEditForm(f => ({ ...f, dateOfBirth: e.target.value }))} />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-medium mb-1">Street</label>
-                  <input className="w-full border border-gray-300 rounded-lg p-2" value={editForm.address?.street || ''} onChange={e => setEditForm(f => ({ ...f, address: { ...f.address, street: e.target.value } }))} />
-                </div>
-                <div>
-                  <label className="block font-medium mb-1">Landmark</label>
-                  <input className="w-full border border-gray-300 rounded-lg p-2" value={editForm.address?.landmark || ''} onChange={e => setEditForm(f => ({ ...f, address: { ...f.address, landmark: e.target.value } }))} />
-                </div>
-                <div>
-                  <label className="block font-medium mb-1">City</label>
-                  <input className="w-full border border-gray-300 rounded-lg p-2" value={editForm.address?.city || ''} onChange={e => setEditForm(f => ({ ...f, address: { ...f.address, city: e.target.value } }))} />
-                </div>
-                <div>
-                  <label className="block font-medium mb-1">State</label>
-                  <input className="w-full border border-gray-300 rounded-lg p-2" value={editForm.address?.state || ''} onChange={e => setEditForm(f => ({ ...f, address: { ...f.address, state: e.target.value } }))} />
-                </div>
-                <div>
-                  <label className="block font-medium mb-1">Country</label>
-                  <input className="w-full border border-gray-300 rounded-lg p-2" value={editForm.address?.country || ''} onChange={e => setEditForm(f => ({ ...f, address: { ...f.address, country: e.target.value } }))} />
-                </div>
-                <div>
-                  <label className="block font-medium mb-1">Pincode</label>
-                  <input className="w-full border border-gray-300 rounded-lg p-2" value={editForm.address?.pincode || ''} onChange={e => setEditForm(f => ({ ...f, address: { ...f.address, pincode: e.target.value } }))} />
-                </div>
               </div>
               <div>
                 <label className="block font-medium mb-1">Role</label>

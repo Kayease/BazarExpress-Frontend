@@ -357,7 +357,7 @@ export default function BrandManagementPage() {
 
   return (
     <AdminLayout>
-      <div className="space-y-6">
+      <div>
         {/* Header & Stats */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-2">
           <div>
@@ -385,7 +385,7 @@ export default function BrandManagementPage() {
           ))}
         </div>
         {/* Search Bar */}
-        <div className="bg-white rounded-xl shadow p-4 mb-4 border border-gray-100">
+        <div className="bg-white rounded-xl shadow mt-6 p-4 mb-4 border border-gray-100">
           <div className="flex items-center gap-3">
             <span className="text-gray-400"><svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg></span>
             <input
@@ -463,8 +463,8 @@ export default function BrandManagementPage() {
 
         {/* Add/Edit Modal */}
         {showModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg sm:max-w-md mx-2 md:mx-0 p-0 relative flex flex-col max-h-[95vh] overflow-hidden animate-fadeIn">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg sm:max-w-md mx-2 md:mx-0 p-0 relative flex flex-col max-h-[95vh] overflow-y-auto animate-fadeIn">
               <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-brand-primary/90 to-brand-primary/60">
                 <div className="flex items-center gap-2">
                   <BadgeCheck className="h-6 w-6 text-white/80" />
@@ -472,8 +472,8 @@ export default function BrandManagementPage() {
                 </div>
                 <button onClick={closeModal} className="rounded-full p-2 hover:bg-white/20 transition-colors"><X className="h-6 w-6 text-white" /></button>
               </div>
-              <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6 space-y-6">
-                <div className="grid grid-cols-1 gap-4">
+              <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6 space-y-4">
+                <div className="grid grid-cols-1 gap-2">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Brand Name <span className="text-red-500">*</span></label>
                     <input

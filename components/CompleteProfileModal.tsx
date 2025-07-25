@@ -45,7 +45,7 @@ export default function CompleteProfileModal({ isOpen, onClose, user, onProfileU
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
       <div className="bg-white rounded-lg p-6 w-11/12 max-w-md relative" onClick={e => e.stopPropagation()}>
         <button
           onClick={onClose}

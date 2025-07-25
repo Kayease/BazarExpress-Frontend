@@ -60,6 +60,10 @@ export default function AdminBlog() {
   const [imageDeleting, setImageDeleting] = useState(false);
   // --- Add state for image to delete ---
   const [imageToDelete, setImageToDelete] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const BLOGS_PER_PAGE = 10;
+  const totalPages = Math.ceil(blogs.length / BLOGS_PER_PAGE);
+  const paginatedBlogs = blogs.slice((currentPage - 1) * BLOGS_PER_PAGE, currentPage * BLOGS_PER_PAGE);
 
   useEffect(() => {
     if (!user || user.role !== "admin") {
@@ -330,13 +334,13 @@ export default function AdminBlog() {
                   </tr>
                 )}
                 
-                {blogs.map((blog) => (
+                {paginatedBlogs.map((blog) => (
                   <tr key={blog._id} className="bg-white border-b">
                     <td className="py-3 px-4 align-top">
                       <img 
                         src={blog.image} 
                         alt="Blog" 
-                        className="h-16 w-24 object-cover rounded shadow"
+                        className="h-12 w-20 object-cover rounded shadow"
                         onError={(e) => {
                           e.currentTarget.src = "/placeholder.svg"
                         }}
@@ -367,24 +371,53 @@ export default function AdminBlog() {
                     </td>
                     <td className="py-3 px-4 align-middle text-center">
                       <button
-                        className="inline-flex items-center justify-center bg-brand-primary hover:bg-brand-primary-dark text-white rounded p-2 mr-2"
+                        className="inline-flex items-center justify-center bg-brand-primary hover:bg-brand-primary-dark text-white rounded p-1 mr-1"
                         onClick={() => openEdit(blog)}
                         aria-label="Edit"
                       >
-                        <Pencil className="h-5 w-5" />
+                        <Pencil className="h-4 w-4" />
                       </button>
                       <button
-                        className="inline-flex items-center justify-center bg-brand-error hover:bg-brand-error-dark text-white rounded p-2"
+                        className="inline-flex items-center justify-center bg-brand-error hover:bg-brand-error-dark text-white rounded p-1"
                         onClick={() => openDelete(blog)}
                         aria-label="Delete"
                       >
-                        <Trash2 className="h-5 w-5" />
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex justify-end items-center space-x-2 mt-6 mb-2 pr-2">
+            <button
+              className="px-2 py-1 rounded border text-xs font-medium bg-gray-50 hover:bg-gray-100 disabled:opacity-50"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+            >
+              Previous
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+              <button
+                key={page}
+                className={`px-2 py-1 rounded text-xs font-medium border mx-0.5 ${currentPage === page ? 'bg-brand-primary text-white border-brand-primary' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
+                onClick={() => setCurrentPage(page)}
+              >
+                {page}
+              </button>
+            ))}
+            <button
+              className="px-2 py-1 rounded border text-xs font-medium bg-gray-50 hover:bg-gray-100 disabled:opacity-50"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+            >
+              Next
+            </button>
           </div>
         )}
 
@@ -593,7 +626,7 @@ export default function AdminBlog() {
 
         {/* Delete Confirmation Modal - Updated to match banner style */}
         {showDeleteModal && deletingBlog && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
             <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-8 relative border-4 border-brand-error/20">
               {deleteLoading && (
                 <div className="absolute inset-0 bg-white/70 flex items-center justify-center z-50">

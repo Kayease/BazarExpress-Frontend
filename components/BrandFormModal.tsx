@@ -65,8 +65,14 @@ export default function BrandFormModal({ open, onClose, onSuccess }: BrandFormMo
 
   if (!open) return null;
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value, type, checked } = e.target;
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
+    const { name, value, type } = e.target;
+    let checked = false;
+    if (type === "checkbox" && "checked" in e.target) {
+      checked = (e.target as HTMLInputElement).checked;
+    }
     setForm(f => ({
       ...f,
       [name]: type === "checkbox" ? checked : value,
@@ -158,7 +164,7 @@ export default function BrandFormModal({ open, onClose, onSuccess }: BrandFormMo
   };
 
   return ReactDOM.createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
       <div className="bg-white rounded-lg shadow-lg max-w-md w-full mx-4 p-8 relative">
         <button
           onClick={onClose}

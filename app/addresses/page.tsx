@@ -832,7 +832,7 @@ export default function AddressesPage() {
       {/* Address Modal */}
       {showAddressModal && (
         <>
-          <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/40 overflow-y-auto">
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/20 overflow-y-auto">
             <div className="w-full max-w-4xl mx-2 sm:mx-4 bg-white rounded-lg shadow-xl overflow-hidden h-auto max-h-[95vh] p-0 my-2 sm:my-4">
               <div className="flex flex-col">
                 {/* Header */}

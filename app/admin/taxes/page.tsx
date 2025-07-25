@@ -59,9 +59,12 @@ export default function AdminTaxes() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Tax | null>(null);
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<string>("all");
   const [modalOpen, setModalOpen] = useState(false);
   const [editTax, setEditTax] = useState<Tax | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const TAXES_PER_PAGE = 10;
+  const totalPages = Math.ceil(taxes.length / TAXES_PER_PAGE);
+  const paginatedTaxes = taxes.slice((currentPage - 1) * TAXES_PER_PAGE, currentPage * TAXES_PER_PAGE);
 
 
   // Fetch taxes
@@ -96,7 +99,17 @@ export default function AdminTaxes() {
         method: "DELETE",
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
-      if (!res.ok) throw new Error("Failed to delete tax");
+      if (!res.ok) {
+        const data = await res.json();
+        if (res.status === 400 && data?.error?.includes('used by one or more products')) {
+          toast.error('Cannot delete tax: It is used by one or more products. Remove or update those products first.');
+        } else {
+          toast.error("Failed to delete tax");
+        }
+        setConfirmDelete(null);
+        fetchTaxes();
+        return;
+      }
       toast.success("Tax deleted successfully");
       setConfirmDelete(null);
       fetchTaxes();
@@ -110,9 +123,6 @@ export default function AdminTaxes() {
   // Filtering & Search
   const filteredTaxes = useMemo(() => {
     let filtered = taxes;
-    if (filter !== "all") {
-      filtered = filtered.filter((tax) => tax.applicableFor === filter);
-    }
     if (search.trim()) {
       const s = search.trim().toLowerCase();
       filtered = filtered.filter(
@@ -124,7 +134,7 @@ export default function AdminTaxes() {
       );
     }
     return filtered;
-  }, [taxes, search, filter]);
+  }, [taxes, search]);
 
   // Toast for add/edit success
   useEffect(() => {
@@ -180,18 +190,6 @@ export default function AdminTaxes() {
                 onChange={e => setSearch(e.target.value)}
               />
             </div>
-            <Select value={filter} onValueChange={setFilter}>
-              <SelectTrigger className="w-36 rounded-lg border border-gray-200 bg-white">
-                <Filter className="h-4 w-4 mr-2 text-gray-400" />
-                <SelectValue placeholder="Filter by" />
-              </SelectTrigger>
-              <SelectContent className="bg-white">
-                <SelectItem value="all">All Methods</SelectItem>
-                <SelectItem value="product">Product</SelectItem>
-                <SelectItem value="shipping">Shipping</SelectItem>
-                <SelectItem value="both">Both</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
         </div>
         {/* Taxes List (Rows) */}
@@ -201,40 +199,47 @@ export default function AdminTaxes() {
               <Loader2 className="animate-spin h-8 w-8 text-brand-primary" />
             </div>
           ) : filteredTaxes.length === 0 ? (
-            <div className="text-center text-gray-400 py-12">No taxes found.</div>
+            <div className="flex flex-col items-center justify-center py-10 w-full min-h-[180px] bg-brand-primary/5">
+              <BadgePercent className="h-8 w-8 text-brand-primary mb-2" />
+              <div className="text-lg font-bold text-codGray mb-1">No Taxes Yet</div>
+              <div className="text-gray-500 mb-4 text-center max-w-xs text-sm">You haven’t created any tax rules for your store. Taxes help you manage compliance and pricing for your products.</div>
+              <Button
+                onClick={() => { setEditTax(null); setModalOpen(true); }}
+                className="bg-brand-primary hover:bg-brand-primary-dark text-white px-4 py-1.5 rounded-lg text-sm font-semibold shadow-md"
+              >
+                <Plus className="h-4 w-4 mr-1" /> Add Your First Tax
+              </Button>
+            </div>
           ) : (
-            filteredTaxes.map(tax => (
+            paginatedTaxes.map(tax => (
               <div
                 key={tax._id}
-                className="bg-white rounded-xl shadow-md p-5 flex flex-col sm:flex-row sm:items-center gap-4 border border-gray-100 relative group hover:shadow-lg transition-all"
+                className="bg-white rounded-xl shadow-md p-2 flex flex-col sm:flex-row sm:items-center gap-2 border border-gray-100 relative group hover:shadow-lg transition-all"
               >
-                <div className="flex items-center gap-4 flex-1 min-w-0">
-                  <div className="w-12 h-12 rounded-full bg-gray-50 border flex items-center justify-center overflow-hidden">
-                    <BadgePercent className="h-7 w-7 text-brand-primary/60" />
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <div className="w-8 h-8 rounded-full bg-gray-50 border flex items-center justify-center overflow-hidden">
+                    <BadgePercent className="h-5 w-5 text-brand-primary/60" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-lg text-codGray flex items-center gap-2 truncate">
+                    <div className="font-semibold text-base text-codGray flex items-center gap-2 truncate">
                       {tax.name}
                     </div>
-                    <div className="text-xs text-gray-400 truncate">{tax.country || 'N/A'}{tax.state ? `, ${tax.state}` : ''}</div>
-                    <div className="text-xs text-gray-500 line-clamp-2 min-h-[24px]">{tax.description || 'No description'}</div>
+                    <div className="text-xs text-gray-500 line-clamp-2 min-h-[18px]">{tax.description || 'No description'}</div>
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-2 items-center text-xs">
+                <div className="flex flex-wrap gap-1 items-center text-xs">
                   <span className="bg-gray-100 rounded px-2 py-0.5 font-semibold">{tax.percentage}%</span>
                   <span className={`rounded px-2 py-0.5 font-semibold ${tax.status === "active" ? "bg-green-100 text-green-700" : "bg-gray-200 text-gray-400"}`}>{tax.status === "active" ? "Active" : "Inactive"}</span>
-                  <span className="bg-gray-100 rounded px-2 py-0.5 font-semibold">{tax.applicableFor.charAt(0).toUpperCase() + tax.applicableFor.slice(1)}</span>
-                  <span className={`rounded px-2 py-0.5 font-semibold ${tax.isInclusive ? "bg-blue-100 text-blue-700" : "bg-gray-200 text-gray-400"}`}>{tax.isInclusive ? "Inclusive" : "Exclusive"}</span>
                 </div>
-                <div className="flex gap-2 sm:ml-4">
+                <div className="flex gap-1 sm:ml-2">
                   <button
-                    className="p-2 rounded-full hover:bg-brand-primary/10 focus:bg-brand-primary/10 transition-colors"
+                    className="p-1 rounded-full hover:bg-brand-primary/10 focus:bg-brand-primary/10 transition-colors"
                     title="Edit"
                     onClick={() => { setEditTax(tax); setModalOpen(true); }}
                   >
                     <Pencil className="h-4 w-4 text-brand-primary" />
                   </button>
-                  <button className="p-2 rounded-full hover:bg-red-100 focus:bg-red-100 transition-colors" onClick={() => setConfirmDelete(tax)} title="Delete">
+                  <button className="p-1 rounded-full hover:bg-red-100 focus:bg-red-100 transition-colors" onClick={() => setConfirmDelete(tax)} title="Delete">
                     <Trash2 className="h-4 w-4 text-red-500" />
                   </button>
                 </div>
@@ -242,6 +247,34 @@ export default function AdminTaxes() {
             ))
           )}
         </div>
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex justify-end items-center space-x-2 mt-6 mb-2 pr-2">
+            <button
+              className="px-2 py-1 rounded border text-xs font-medium bg-gray-50 hover:bg-gray-100 disabled:opacity-50"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+            >
+              Previous
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+              <button
+                key={page}
+                className={`px-2 py-1 rounded text-xs font-medium border mx-0.5 ${currentPage === page ? 'bg-brand-primary text-white border-brand-primary' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
+                onClick={() => setCurrentPage(page)}
+              >
+                {page}
+              </button>
+            ))}
+            <button
+              className="px-2 py-1 rounded border text-xs font-medium bg-gray-50 hover:bg-gray-100 disabled:opacity-50"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+            >
+              Next
+            </button>
+          </div>
+        )}
         {/* Confirm Delete Modal */}
         <ConfirmDeleteModal
           open={!!confirmDelete}

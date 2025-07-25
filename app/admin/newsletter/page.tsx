@@ -280,6 +280,11 @@ ${window.location.origin}/newsletter/unsubscribe
     }
   };
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const SUBSCRIBERS_PER_PAGE = 10;
+  const totalPages = Math.ceil(filteredSubscribers.length / SUBSCRIBERS_PER_PAGE);
+  const paginatedSubscribers = filteredSubscribers.slice((currentPage - 1) * SUBSCRIBERS_PER_PAGE, currentPage * SUBSCRIBERS_PER_PAGE);
+
   return (
     <AdminLayout>
       <div className="space-y-6">
@@ -439,17 +444,17 @@ ${window.location.origin}/newsletter/unsubscribe
                 </tr>
               )}
               
-              {filteredSubscribers.map(subscriber => (
+              {paginatedSubscribers.map(subscriber => (
                 <tr key={subscriber._id} className="bg-white border-b">
-                  <td className="py-3 px-4 align-middle font-medium">
+                  <td className="py-2 px-4 align-middle font-medium">
                     {subscriber.email}
                   </td>
-                  <td className="py-3 px-4 align-middle hidden md:table-cell">
+                  <td className="py-2 px-4 align-middle hidden md:table-cell">
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getSourceColor(subscriber.source)}`}>
                       {getSourceLabel(subscriber.source)}
                     </span>
                   </td>
-                  <td className="py-3 px-4 align-middle">
+                  <td className="py-2 px-4 align-middle">
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                       subscriber.isSubscribed ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                     }`}>
@@ -460,16 +465,16 @@ ${window.location.origin}/newsletter/unsubscribe
                       )}
                     </span>
                   </td>
-                  <td className="py-3 px-4 align-middle hidden md:table-cell">
+                  <td className="py-2 px-4 align-middle hidden md:table-cell">
                     {new Date(subscriber.subscribedAt).toLocaleDateString()}
                   </td>
-                  <td className="py-3 px-4 align-middle text-center">
+                  <td className="py-2 px-4 align-middle text-center">
                     <button 
-                      className="inline-flex items-center justify-center bg-brand-error hover:bg-brand-error-dark text-white rounded p-2" 
+                      className="inline-flex items-center justify-center bg-brand-error hover:bg-brand-error-dark text-white rounded p-1" 
                       onClick={() => handleDeleteClick(subscriber)} 
                       aria-label="Delete"
                     >
-                      <Trash2 className="h-5 w-5" />
+                      <Trash2 className="h-4 w-4" />
                     </button>
                   </td>
                 </tr>
@@ -478,9 +483,38 @@ ${window.location.origin}/newsletter/unsubscribe
           </table>
         </div>
         
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex justify-end items-center space-x-2 mt-6 mb-2 pr-2">
+            <button
+              className="px-2 py-1 rounded border text-xs font-medium bg-gray-50 hover:bg-gray-100 disabled:opacity-50"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+            >
+              Previous
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+              <button
+                key={page}
+                className={`px-2 py-1 rounded text-xs font-medium border mx-0.5 ${currentPage === page ? 'bg-brand-primary text-white border-brand-primary' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
+                onClick={() => setCurrentPage(page)}
+              >
+                {page}
+              </button>
+            ))}
+            <button
+              className="px-2 py-1 rounded border text-xs font-medium bg-gray-50 hover:bg-gray-100 disabled:opacity-50"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+            >
+              Next
+            </button>
+          </div>
+        )}
+        
         {/* Delete Confirmation Modal */}
         {deleteModalOpen && subscriberToDelete && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
             <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-8 relative border-4 border-brand-error/20">
               {deleteLoading && (
                 <div className="absolute inset-0 bg-white/70 flex items-center justify-center z-50">

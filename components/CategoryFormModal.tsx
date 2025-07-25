@@ -148,7 +148,7 @@ export default function CategoryFormModal({ open, onClose, onSuccess, categories
   };
 
   return ReactDOM.createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
       <div className="bg-white rounded-lg shadow-lg max-w-3xl w-full mx-4 p-8 relative">
         <button
           onClick={onClose}
@@ -294,7 +294,7 @@ export default function CategoryFormModal({ open, onClose, onSuccess, categories
                         alt="Thumbnail Preview"
                         className="w-full h-full object-cover rounded-lg"
                       />
-                      <span className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg">
+                      <span className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg">
                         <span className="text-white text-xs font-semibold px-2 py-1 bg-brand-primary/80 rounded">Change</span>
                       </span>
                     </>

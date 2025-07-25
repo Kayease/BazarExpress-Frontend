@@ -57,7 +57,7 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
 
   return (
     <>
-      {isOpen && <div className="fixed inset-0 bg-black/50 z-[151] backdrop-blur-sm" onClick={onClose} />}
+      {isOpen && <div className="fixed inset-0 bg-black/20 z-[151] backdrop-blur-sm" onClick={onClose} />}
       <div
         className={`fixed top-0 right-0 h-full w-full max-w-xs sm:max-w-sm bg-white transform transition-all duration-300 ease-out z-[152] ${isOpen ? "translate-x-0" : "translate-x-full"} flex flex-col`}
       >
@@ -68,7 +68,7 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
               <ShoppingCart className="h-4 w-4 text-white" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-gray-900">My Cart</h2>
+              <h2 className="text-lg font-bold text-gray-900">Shopping Cart</h2>
               <p className="text-xs text-gray-600">{cartItems.length} {cartItems.length === 1 ? 'item' : 'items'}</p>
             </div>
           </div>

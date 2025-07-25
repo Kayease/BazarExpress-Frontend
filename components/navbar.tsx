@@ -620,7 +620,7 @@ export default function Navbar() {
       {/* Mobile Search Modal */}
       {showSearchModal && (
         <div 
-          className="fixed inset-0 bg-black/60 z-[200] md:hidden"
+          className="fixed inset-0 bg-black/20 z-[200] md:hidden"
           onClick={() => setShowSearchModal(false)}
         >
           <div 
