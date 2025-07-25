@@ -29,7 +29,10 @@ export default function WishlistPage() {
             >
               <ArrowLeft className="h-5 w-5" />
             </Button>
-            <h1 className="text-3xl font-bold text-gray-900">My Wishlist</h1>
+            <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
+              <Heart className="h-8 w-8 text-red-500" fill="#ef4444" strokeWidth={0} />
+              My Wishlist
+            </h1>
           </div>
 
           {/* Empty Wishlist */}
@@ -63,79 +66,78 @@ export default function WishlistPage() {
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <h1 className="text-3xl font-bold text-gray-900">My Wishlist</h1>
+          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
+            <Heart className="h-8 w-8 text-red-500" fill="#ef4444" strokeWidth={0} />
+            My Wishlist
+          </h1>
           <span className="bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-medium">
             {wishlistItems.length} {wishlistItems.length === 1 ? 'item' : 'items'}
           </span>
         </div>
 
         {/* Wishlist Items Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {wishlistItems.map((item) => (
-            <div key={item.id} className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-300 group">
-              {/* Product Image */}
-              <div className="relative aspect-square rounded-xl overflow-hidden bg-gray-100 mb-4">
-                <Link href={`/products/${item.id}`}>
-                  <Image
-                    src={item.image || '/placeholder.svg'}
-                    alt={item.name}
-                    fill
-                    className="object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
-                </Link>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+          {wishlistItems.map((item) => {
+            const hasDiscount = item.mrp != null && item.mrp > item.price;
+            const discountPercent = hasDiscount ? Math.round((((item.mrp ?? 0) - item.price) / (item.mrp ?? 1)) * 100) : 0;
+            return (
+              <div key={item.id || item._id} className="min-w-[180px] max-w-[180px] bg-white border border-gray-200 rounded-xl flex flex-col relative group font-sans" style={{ fontFamily: 'Sinkin Sans, sans-serif', boxShadow: 'none' }}>
+                {/* Discount Badge */}
+                {hasDiscount && (
+                  <div className="absolute left-3 top-0 z-10 flex items-center justify-center" style={{ width: '29px', height: '28px' }}>
+                    <svg width="29" height="28" viewBox="0 0 29 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M28.9499 0C28.3999 0 27.9361 1.44696 27.9361 2.60412V27.9718L24.5708 25.9718L21.2055 27.9718L17.8402 25.9718L14.4749 27.9718L11.1096 25.9718L7.74436 27.9718L4.37907 25.9718L1.01378 27.9718V2.6037C1.01378 1.44655 0.549931 0 0 0H28.9499Z" fill="#256fef"></path>
+                    </svg>
+                    <div className="absolute top-0 left-0 w-full h-full flex flex-col items-center justify-center text-center text-[9px] font-extrabold text-white z-20" style={{ pointerEvents: 'none' }}>
+                      {discountPercent}%<br/>OFF
+                    </div>
+                  </div>
+                )}
+                {/* Remove from Wishlist Button */}
                 <button
-                  onClick={() => removeFromWishlist(item.id)}
-                  className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full hover:bg-red-600 transition-colors shadow-lg hover:scale-110 transform duration-200"
+                  className="absolute top-2 right-2 z-10 p-1 rounded-full bg-white shadow hover:bg-gray-100"
+                  onClick={() => removeFromWishlist(item.id || item._id)}
                   aria-label="Remove from wishlist"
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 className="w-5 h-5 text-red-500" />
                 </button>
-              </div>
-
-              {/* Product Details */}
-              <div className="space-y-3">
-                <Link href={`/products/${item.id}`}>
-                  <h3 className="font-semibold text-gray-900 text-lg line-clamp-2 hover:text-green-600 transition-colors">
+                {/* Product Image */}
+                <div className="flex justify-center items-center h-32 pt-2">
+                  <Image src={item.image || "/placeholder.svg"} alt={item.name} width={120} height={120} className="w-[120px] h-[120px] object-contain" />
+                </div>
+                <div className="px-3 py-2 flex-1 flex flex-col">
+                  {/* Product Name */}
+                  <div className="text-[12px] font-bold text-gray-900 line-clamp-2 mb-2 leading-snug">
                     {item.name}
-                  </h3>
-                </Link>
-                
-                <div className="flex items-center justify-between text-sm text-gray-500">
-                  <span>{item.category}</span>
-                  <span>{item.brand}</span>
-                </div>
-
-                <div className="text-2xl font-bold text-green-600">
-                  ₹{item.price.toLocaleString()}
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex gap-2">
-                  <Button
-                    onClick={() => moveToCart(item)}
-                    className="flex-1 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white py-2 rounded-xl shadow-md hover:shadow-lg transition-all duration-300 hover:scale-105"
-                  >
-                    <ShoppingCart className="h-4 w-4 mr-2" />
-                    Add to Cart
-                  </Button>
-                  <Link href={`/products/${item.id}`}>
-                    <Button
-                      variant="outline"
-                      className="px-4 py-2 rounded-xl border-2 hover:bg-gray-50 transition-colors"
-                    >
-                      View
-                    </Button>
-                  </Link>
+                  </div>
+                  {/* Variant/Weight/Unit */}
+                  <div className="text-xs text-gray-500 mb-2 font-normal">
+                    {item.unit}
+                  </div>
+                  {/* Bottom Section: Price, MRP, Add to Cart button */}
+                  <div className="flex items-end justify-between mt-2">
+                    <div>
+                      <div className="text-[15px] font-bold text-gray-900 leading-none mb-1">₹{item.price}</div>
+                      {hasDiscount && (
+                        <div className="text-xs text-gray-400 line-through leading-none font-normal">₹{item.mrp}</div>
+                      )}
+                    </div>
+                    <button
+                      className="border border-green-600 text-green-700 font-medium text-[15px] bg-white hover:bg-green-50 transition rounded h-8 px-3"
+                      onClick={() => moveToCart(item)}
+                    >ADD</button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Continue Shopping */}
-        <div className="text-center mt-12">
-          <Link href="/search">
-            <Button variant="outline" className="px-8 py-3 rounded-xl border-2 hover:bg-gray-50 transition-colors">
+        <div className="flex justify-center mt-12">
+          <Link href="/search" className="flex">
+            <Button className="bg-gradient-to-r from-green-500 to-green-700 hover:from-green-600 hover:to-green-800 text-white px-8 py-4 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 text-lg font-semibold flex items-center gap-2">
+              <ShoppingCart className="h-5 w-5 mr-2" />
               Continue Shopping
             </Button>
           </Link>

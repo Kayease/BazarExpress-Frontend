@@ -78,7 +78,8 @@ export default function CategoryFormModal({ open, onClose, onSuccess, categories
   if (!open) return null;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value, type, checked } = e.target;
+    const { name, value, type } = e.target;
+    const checked = (e.target as HTMLInputElement).checked;
     setForm(f => ({
       ...f,
       [name]: type === "checkbox" ? checked : value,

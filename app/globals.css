@@ -461,4 +461,9 @@ div[data-sonner-toast],
     animation: slideVertical 15s ease-in-out infinite;
   }
   
+  /* Make sure the Google Places dropdown is always on top of modals */
+.pac-container {
+  z-index: 99999 !important;
+}
+  
   

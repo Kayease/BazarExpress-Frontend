@@ -135,12 +135,12 @@ export default function FilterPanel({ isOpen, onClose, className = "" }: FilterP
           {expandedSections.brand && (
             <div className="space-y-2">
               {brands.map((brand) => (
-                <label key={brand} className="flex items-center">
+                <label key={typeof brand === 'object' && brand !== null ? brand._id || brand.name : brand} className="flex items-center">
                   <input
                     type="checkbox"
                     className="rounded border-border-primary text-brand-accent focus:ring-brand-accent"
                   />
-                  <span className="ml-2 text-text-secondary">{brand}</span>
+                  <span className="ml-2 text-text-secondary">{typeof brand === 'object' && brand !== null ? brand.name : brand}</span>
                 </label>
               ))}
             </div>

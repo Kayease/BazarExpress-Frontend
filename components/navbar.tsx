@@ -446,14 +446,13 @@ export default function Navbar() {
                     size={20}
                     className={`mr-2 ${cartAnimation ? "animate-cart-shake" : ""}`}
                   />
-                  <span className="font-medium">My Cart</span>
-                {cartItemCount > 0 && (
-                  <span
-                      className={`ml-1 ${cartAnimation ? "animate-counter-pop" : ""}`}
-                  >
-                      {`(${cartItemCount})`}
+                {cartItemCount > 0 ? (
+                  <span className={`font-medium ${cartAnimation ? "animate-counter-pop" : ""}`}>
+                    {cartItemCount} item{cartItemCount !== 1 ? 's' : ''} ₹{Math.round(cartTotal)}
                   </span>
-                  )}
+                ) : (
+                  <span className="font-medium">My Cart</span>
+                )}
                 </button>
                 </div>
             </div>
@@ -545,10 +544,12 @@ export default function Navbar() {
                   >
                     <div className="flex items-center">
                       <ShoppingCart size={18} className={cartItemCount > 0 ? "text-green-600 mr-3" : "mr-3"} />
-                      <span className="font-medium">My Cart</span>
+                      <span className="font-medium">
+                        {cartItemCount > 0 ? `${cartItemCount} item${cartItemCount !== 1 ? 's' : ''}` : 'My Cart'}
+                      </span>
                     </div>
                     <div className="text-sm text-gray-500">
-                      {cartItemCount} items
+                      {cartItemCount > 0 ? `₹${Math.round(cartTotal)}` : '0 items'}
                     </div>
                   </button>
 
@@ -581,6 +582,29 @@ export default function Navbar() {
           </div>
         )}
       </header>
+
+      {/* Mobile Sticky Cart Bar */}
+      {cartItemCount > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 bg-green-600 text-white p-4 z-50 md:hidden">
+          <button
+            onClick={() => setIsCartOpen(true)}
+            className="w-full flex items-center justify-between"
+          >
+            <div className="flex items-center">
+              <ShoppingCart size={20} className="mr-3" />
+              <span className="font-medium">
+                {cartItemCount} item{cartItemCount !== 1 ? 's' : ''}
+              </span>
+              <span className="ml-2 text-sm opacity-90">
+                ₹{Math.round(cartTotal)}
+              </span>
+            </div>
+            <span className="font-medium bg-white text-green-600 px-4 py-2 rounded">
+              View Cart
+            </span>
+          </button>
+        </div>
+      )}
 
       {/* Cart Drawer rendered globally */}
         <CartDrawer isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />

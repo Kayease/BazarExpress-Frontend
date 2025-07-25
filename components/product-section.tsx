@@ -1,23 +1,20 @@
 "use client";
 
-import { Clock, Loader2, Star, StarHalf, Info, Package, Tag, Truck, Shield, Heart } from "lucide-react";
+import { Clock, Loader2, Star, StarHalf, Info, Package, Tag, Truck, Shield, Heart, ShoppingCart, ChevronLeft, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
+import { Skeleton } from '@/components/ui/skeleton';
 import Link from "next/link";
-import {
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  CarouselPrevious,
-  CarouselNext,
-} from "@/components/ui/carousel";
-import { useEffect, useState } from "react";
-import { useAppContext } from "@/components/app-provider";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useEffect, useState, useRef } from "react";
+import { useAppContext } from "@/components/app-provider";
 
 // Define interfaces for our data types
 interface Product {
@@ -63,6 +60,10 @@ interface Category {
   description?: string;
   thumbnail?: string;
   productCount?: number;
+  parentId?: string | null;
+  slug?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 interface ProductSection {
@@ -71,7 +72,7 @@ interface ProductSection {
 }
 
 interface ProductSectionProps {
-  onAddToCart: (product: any) => void;
+  onAddToCart: (product: Product) => void;
   searchQuery: string;
 }
 
@@ -82,13 +83,67 @@ export default function ProductSection({
   const [productSections, setProductSections] = useState<ProductSection[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const API_URL = process.env.NEXT_PUBLIC_API_URL;
-  
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
+
   // Get wishlist functions from context
-  const { addToWishlist, isInWishlist } = useAppContext();
+  const { addToWishlist, isInWishlist, addToCart, updateCartItem, cartItems } = useAppContext();
+
+  // Local quantity state for product tiles
+  const [quantities, setQuantities] = useState<{ [id: string]: number }>({});
+
+  // Sync local quantity state with cartItems
+  useEffect(() => {
+    const newQuantities: { [id: string]: number } = {};
+    cartItems.forEach(item => {
+      const itemId = item.id || item._id;
+      newQuantities[itemId] = item.quantity;
+    });
+    setQuantities(newQuantities);
+  }, [cartItems]);
+
+  const handleAdd = (product: Product) => {
+    const productId = product._id;
+    setQuantities(q => ({ ...q, [productId]: 1 }));
+    addToCart({ ...product, id: productId, quantity: 1 });
+  };
+  const handleInc = (product: Product) => {
+    const id = product._id;
+    const newQty = (quantities[id] || 0) + 1;
+    setQuantities(q => ({ ...q, [id]: newQty }));
+    updateCartItem(id, newQty);
+  };
+  const handleDec = (product: Product) => {
+    const id = product._id;
+    const newQty = (quantities[id] || 0) - 1;
+    if (newQty <= 0) {
+      setQuantities(q => ({ ...q, [id]: 0 }));
+      updateCartItem(id, 0);
+    } else {
+      setQuantities(q => ({ ...q, [id]: newQty }));
+      updateCartItem(id, newQty);
+    }
+  };
+
+  // Carousel scroll state
+  const [scrollPositions, setScrollPositions] = useState<{ [key: string]: number }>({});
+  const scrollRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+
+  const handleScroll = (catId: string) => {
+    const ref = scrollRefs.current[catId];
+    if (ref) {
+      setScrollPositions((prev) => ({ ...prev, [catId]: ref.scrollLeft }));
+    }
+  };
+
+  const scrollByAmount = (catId: string, amount: number) => {
+    const ref = scrollRefs.current[catId];
+    if (ref) {
+      ref.scrollBy({ left: amount, behavior: 'smooth' });
+    }
+  };
 
   useEffect(() => {
-    const fetchHomeCategories = async () => {
+    const fetchProducts = async () => {
       try {
         setLoading(true);
         setError(null);
@@ -98,21 +153,12 @@ export default function ProductSection({
         if (!categoriesResponse.ok) {
           throw new Error('Failed to fetch categories');
         }
-
         const categoriesData = await categoriesResponse.json();
 
-        // Filter categories that have showOnHome=true OR show all parent categories if none have showOnHome set
-        const homeCategories = categoriesData.filter((category: Category) => {
-          // Only parent categories (no parentId)
-          const isParent = !category.parentId || category.parentId === "";
-          // If any parent category has showOnHome set, only show those
-          const hasShowOnHomeCategories = categoriesData.some((cat: Category) => (!cat.parentId || cat.parentId === "") && cat.showOnHome);
-          if (hasShowOnHomeCategories) {
-            return isParent && category.showOnHome;
-          }
-          // Otherwise, show all parent categories that are not hidden
-          return isParent && !category.hide;
-        });
+        // Find all parent categories with showOnHome = true
+        const homeCategories = categoriesData.filter((category: Category) =>
+          category.showOnHome === true && (!category.parentId || category.parentId === "")
+        );
 
         if (homeCategories.length === 0) {
           setProductSections([]);
@@ -120,30 +166,44 @@ export default function ProductSection({
           return;
         }
 
-        // Fetch all products
-        const productsResponse = await fetch(`${API_URL}/products`);
+        // Build a map of parentId -> subcategories
+        const subcategoriesByParent: { [parentId: string]: string[] } = {};
+        categoriesData.forEach((cat: Category) => {
+          if (cat.parentId) {
+            if (!subcategoriesByParent[cat.parentId]) subcategoriesByParent[cat.parentId] = [];
+            subcategoriesByParent[cat.parentId].push(cat._id);
+          }
+        });
+
+        // Fetch all active products
+        const productsResponse = await fetch(`${API_URL}/products?status=active`);
         if (!productsResponse.ok) {
           throw new Error('Failed to fetch products');
         }
+        let productsData = await productsResponse.json();
 
-        const productsData = await productsResponse.json();
-
-        // Group products by category
-        const sections = homeCategories.map((category: Category) => {
-          const categoryProducts = productsData.filter(
-            (product: Product) => product.category && (typeof product.category === 'object' ? product.category._id === category._id : product.category === category._id)
-          );
-
-          return {
-            category,
-            products: categoryProducts,
-          };
+        // For each home category, collect its own and all subcategory IDs
+        const productSections: ProductSection[] = homeCategories.map((parentCat: Category) => {
+          // Get all subcategory IDs for this parent
+          const subcatIds = subcategoriesByParent[parentCat._id] || [];
+          // Include parent category ID as well
+          const allCatIds = [parentCat._id, ...subcatIds];
+          // Filter products for this category and its subcategories
+          const catProducts = productsData.filter((product: Product) => {
+          if (!product.category) return false;
+          const categoryId = typeof product.category === 'object' ? product.category._id : product.category;
+            return allCatIds.includes(categoryId);
         });
+          // Shuffle and pick up to 15 random products
+          const shuffled = [...catProducts].sort(() => 0.5 - Math.random());
+        const selectedProducts = shuffled.slice(0, 15);
+          return {
+            category: parentCat,
+          products: selectedProducts
+        };
+        }).filter((section: { products: string | any[]; }) => section.products.length > 0); // Only show if there are products
 
-        // Filter out sections with no products
-        const nonEmptySections = sections.filter((section: { products: string | any[]; }) => section.products.length > 0);
-
-        setProductSections(nonEmptySections);
+        setProductSections(productSections);
       } catch (err) {
         console.error('Error fetching home categories:', err);
         setError('Failed to load products. Please try again later.');
@@ -152,83 +212,58 @@ export default function ProductSection({
       }
     };
 
-    fetchHomeCategories();
+    fetchProducts();
   }, [API_URL]);
 
   // Filter products based on search query if provided
   useEffect(() => {
     if (!searchQuery || searchQuery.trim() === '') return;
 
-    const fetchHomeCategories = async () => {
+    const fetchSearchedProducts = async () => {
       try {
         setLoading(true);
 
-        // Fetch all categories
-        const categoriesResponse = await fetch(`${API_URL}/categories`);
-        if (!categoriesResponse.ok) {
-          throw new Error('Failed to fetch categories');
+        // Fetch products matching the search query
+        const searchResponse = await fetch(`${API_URL}/products/search?q=${encodeURIComponent(searchQuery)}`);
+        if (!searchResponse.ok) {
+          throw new Error('Failed to search products');
         }
 
-        const categoriesData = await categoriesResponse.json();
+        const searchResults = await searchResponse.json();
 
-        // Filter categories that have showOnHome=true OR show all parent categories if none have showOnHome set
-        const homeCategories = categoriesData.filter((category: Category) => {
-          // Only parent categories (no parentId)
-          const isParent = !category.parentId || category.parentId === "";
-          // If any parent category has showOnHome set, only show those
-          const hasShowOnHomeCategories = categoriesData.some((cat: Category) => (!cat.parentId || cat.parentId === "") && cat.showOnHome);
-          if (hasShowOnHomeCategories) {
-            return isParent && category.showOnHome;
-          }
-          // Otherwise, show all parent categories that are not hidden
-          return isParent && !category.hide;
-        });
+        // Create a single section with search results
+        const searchSection: ProductSection = {
+          category: {
+            _id: 'search',
+            name: 'Search Results',
+            popular: false,
+            showOnHome: false,
+            parentId: null,
+            hide: false
+          },
+          products: searchResults
+        };
 
-        if (homeCategories.length === 0) {
-          setProductSections([]);
-          setLoading(false);
-          return;
-        }
-
-        // Fetch all products
-        const productsResponse = await fetch(`${API_URL}/products`);
-        if (!productsResponse.ok) {
-          throw new Error('Failed to fetch products');
-        }
-
-        const productsData = await productsResponse.json();
-
-        // Filter products by search query
-        const filteredProducts = productsData.filter((product: Product) =>
-          product.name.toLowerCase().includes(searchQuery.toLowerCase())
-        );
-
-        // Group filtered products by category
-        const sections = homeCategories.map((category: Category) => {
-          const categoryProducts = filteredProducts.filter(
-            (product: Product) => product.category && (typeof product.category === 'object' ? product.category._id === category._id : product.category === category._id)
-          );
-
-          return {
-            category,
-            products: categoryProducts,
-          };
-        });
-
-        // Filter out sections with no products
-        const nonEmptySections = sections.filter((section: { products: string | any[]; }) => section.products.length > 0);
-
-        setProductSections(nonEmptySections);
+        setProductSections([searchSection]);
       } catch (err) {
-        console.error('Error filtering products:', err);
-        setError('Failed to filter products. Please try again later.');
+        console.error('Error searching products:', err);
+        setError('Failed to search products. Please try again.');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchHomeCategories();
+    fetchSearchedProducts();
   }, [searchQuery, API_URL]);
+
+  const handleWishlistClick = (product: Product) => {
+    // Implementation of add to wishlist
+    console.log('Add to wishlist:', product);
+    // Call the actual wishlist function from context
+    if (addToWishlist) {
+      addToWishlist(product);
+    }
+  };
 
   if (loading) {
     return (
@@ -241,9 +276,20 @@ export default function ProductSection({
 
   if (error) {
     return (
-      <div className="py-20 flex flex-col items-center justify-center">
-        <p className="text-red-500">{error}</p>
-      </div>
+      <section className="py-12 bg-surface-secondary">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="text-center py-12">
+            <p className="text-red-500">{error}</p>
+            <Button
+              onClick={() => window.location.reload()}
+              className="mt-4"
+              variant="outline"
+            >
+              Retry
+            </Button>
+          </div>
+        </div>
+      </section>
     );
   }
 
@@ -256,225 +302,143 @@ export default function ProductSection({
   }
 
   return (
-    <section className="py-4 sm:py-6 md:py-8 bg-surface-primary overflow-hidden">
-      <div className="w-full mx-auto px-2 sm:px-4 md:px-6 lg:px-8">
-        {productSections.map((section) => (
-          <div key={section.category._id} className="mb-12">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-text-primary">
-                {section.category.name}
-              </h2>
-              <Link href={`/categories/${section.category._id}`} className="text-brand-primary font-medium hover:text-brand-primary-dark">
-                see all
-              </Link>
-            </div>
-
-            <div className="relative group">
-              <Carousel
-                className="w-full relative group"
-                opts={{
-                  align: "start",
-                  loop: true,
-                }}
-              >
-                <CarouselPrevious className="left-2 sm:left-4 md:left-6 lg:left-8 xl:left-12 2xl:left-16 -translate-y-1/2 top-1/2 z-10 hidden sm:flex" />
-                <CarouselContent className="-ml-1">
-                  {section.products.map((product) => (
-                    <CarouselItem
-                      key={product._id}
-                      className="basis-1/2 sm:basis-1/2 md:basis-1/3 lg:basis-1/4 xl:basis-1/5 2xl:basis-1/6 pl-2 sm:pl-4"
+    <section className="py-12 ">
+      <div className="max-w-7xl mx-auto px-4">
+        {productSections.length > 0 ? (
+          productSections.map(section => {
+            // Debug: Log all product IDs in this section
+            const idCounts: { [id: string]: number } = {};
+            section.products.forEach(product => {
+              idCounts[product._id] = (idCounts[product._id] || 0) + 1;
+            });
+            const duplicateIds = Object.entries(idCounts).filter(([id, count]) => count > 1);
+            if (duplicateIds.length > 0) {
+              console.warn('Duplicate product IDs found in section', section.category.name, duplicateIds);
+            }
+            return (
+              <div className="mb-12" key={section.category._id}>
+                <div className="flex justify-between items-center mb-4">
+                  <div className="text-2xl font-extrabold">{section.category.name}</div>
+                  <Link href={`/search?category=${section.category._id}`} className="text-green-600 font-medium hover:underline">See all</Link>
+                </div>
+                <div className="relative">
+                  {/* Left Button */}
+                  {scrollPositions[section.category._id] > 0 && (
+                    <button
+                      className="absolute left-[-28px] top-1/2 -translate-y-1/2 z-20 bg-white border border-gray-200 rounded-full shadow p-1 flex items-center justify-center hover:bg-gray-100"
+                      style={{ width: 32, height: 32 }}
+                      onClick={() => scrollByAmount(section.category._id, -220)}
+                      aria-label="Scroll left"
                     >
-                      <Link href={`/products/${product._id}`} className="block group">
-                        <div className="relative w-full h-full bg-white border border-gray-200 rounded-2xl p-3 sm:p-4 flex flex-col items-center shadow-sm min-h-[320px] group/card transition-all duration-300 cursor-pointer overflow-hidden \
-                          before:absolute before:inset-0 before:bg-gradient-to-br before:from-green-50 before:to-white before:opacity-0 group-hover/card:before:opacity-100 before:transition-opacity before:duration-300">
-                          {/* Product Image and Badges */}
-                          <div className="w-full flex flex-col items-center relative mb-2 z-10">
+                      <ChevronLeft className="w-5 h-5" />
+                    </button>
+                  )}
+                  {/* Right Button */}
+                  <button
+                    className="absolute right-[-28px] top-1/2 -translate-y-1/2 z-20 bg-white border border-gray-200 rounded-full shadow p-1 flex items-center justify-center hover:bg-gray-100"
+                    style={{ width: 32, height: 32, display: section.products.length * 190 > (scrollRefs.current[section.category._id]?.clientWidth || 0) + (scrollRefs.current[section.category._id]?.scrollLeft || 0) ? 'flex' : 'none' }}
+                    onClick={() => scrollByAmount(section.category._id, 220)}
+                    aria-label="Scroll right"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                  <div
+                    className="overflow-x-auto scrollbar-hide"
+                    ref={el => { scrollRefs.current[section.category._id] = el; }}
+                    onScroll={() => handleScroll(section.category._id)}
+                    style={{ scrollBehavior: 'smooth' }}
+                  >
+                    <div className="flex gap-4 pb-2">
+                      {section.products.map(product => {
+                        const hasDiscount = product.mrp != null && product.mrp > product.price;
+                        const discountPercent = hasDiscount ? Math.round((((product.mrp ?? 0) - product.price) / (product.mrp ?? 1)) * 100) : 0;
+                        return (
+                          <div key={product._id} className="min-w-[180px] max-w-[180px] bg-white border border-gray-200 rounded-xl flex-shrink-0 flex flex-col relative group" style={{ fontFamily: 'Sinkin Sans, sans-serif', boxShadow: 'none' }}>
+                            {/* Discount Badge */}
+                            {hasDiscount && (
+                              <div className="absolute left-3 top-0 z-10 flex items-center justify-center" style={{ width: '29px', height: '28px' }}>
+                                <svg width="29" height="28" viewBox="0 0 29 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                  <path d="M28.9499 0C28.3999 0 27.9361 1.44696 27.9361 2.60412V27.9718L24.5708 25.9718L21.2055 27.9718L17.8402 25.9718L14.4749 27.9718L11.1096 25.9718L7.74436 27.9718L4.37907 25.9718L1.01378 27.9718V2.6037C1.01378 1.44655 0.549931 0 0 0H28.9499Z" fill="#256fef"></path>
+                                </svg>
+                                <div className="absolute top-0 left-0 w-full h-full flex flex-col items-center justify-center text-center text-[9px] font-extrabold text-white z-20" style={{ pointerEvents: 'none' }}>
+                                  {discountPercent}%<br/>OFF
+                      </div>
+                              </div>
+                            )}
                             {/* Wishlist Button */}
                             <button
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                const wishlistItem = {
-                                  id: product._id,
-                                  name: product.name,
-                                  price: product.price,
-                                  image: product.image,
-                                  category: typeof product.category === 'object' && product.category ? product.category.name : product.category,
-                                  brand: product.brand && typeof product.brand === 'object' ? product.brand.name : product.brand,
-                                  unit: product.unit,
-                                  weight: product.weight,
-                                  mrp: product.mrp,
-                                };
-                                addToWishlist(wishlistItem);
-                              }}
-                              disabled={isInWishlist(product._id)}
-                              className={`absolute top-2 right-2 z-30 p-2 rounded-full transition-all duration-200 ${
-                                isInWishlist(product._id)
-                                  ? 'bg-red-100 text-red-500 cursor-not-allowed'
-                                  : 'bg-white/80 hover:bg-white text-gray-600 hover:text-red-500 shadow-md hover:shadow-lg'
-                              } opacity-70 sm:opacity-0 group-hover/card:opacity-100 transform scale-90 group-hover/card:scale-100`}
-                              title={isInWishlist(product._id) ? "Already in wishlist" : "Add to wishlist"}
+                              className="absolute top-2 right-2 z-10 p-1 rounded-full bg-white shadow hover:bg-gray-100"
+                              onClick={() => handleWishlistClick(product)}
+                              aria-label={isInWishlist && isInWishlist(product._id) ? 'Remove from wishlist' : 'Add to wishlist'}
                             >
-                              <Heart 
-                                className={`w-4 h-4 transition-all duration-200 ${
-                                  isInWishlist(product._id) ? 'fill-red-500' : 'hover:fill-red-500'
-                                }`} 
-                              />
+                              <Heart className={`w-5 h-5 transition-colors duration-200 ${isInWishlist && isInWishlist(product._id) ? 'text-red-500 fill-red-500' : 'text-gray-400 fill-none'}`} />
                             </button>
-                            
-                            {product.stock && product.stock <= (product.lowStockThreshold || 5) && product.stock > 0 && (
-                              <Badge variant="destructive" className="absolute top-0 left-0 z-20">
-                                Low Stock
-                              </Badge>
-                            )}
-                            {product.stock === 0 && (
-                              <Badge variant="secondary" className="absolute top-0 left-0 z-20 bg-gray-700 text-white">
-                                Out of Stock
-                              </Badge>
-                            )}
-                            {product.mrp && product.price < product.mrp && (
-                              <Badge variant="default" className="absolute bottom-0 left-0 z-20 bg-green-600">
-                                {Math.round(((product.mrp - product.price) / product.mrp) * 100)}% OFF
-                              </Badge>
-                            )}
-                            <div className="w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32 mb-2 flex items-center justify-center overflow-hidden rounded-xl bg-gradient-to-tr from-green-100 to-green-50 shadow group-hover/card:scale-105 transition-transform duration-300 relative">
-                              <img
-                                src={product.image || "/placeholder.svg"}
-                                alt={product.name}
-                                className="max-w-full max-h-full object-contain drop-shadow-lg group-hover/card:scale-110 transition-transform duration-300"
-                              />
-                              {product.stock !== undefined && product.stock > 0 && product.stock <= (product.lowStockThreshold || 5) && (
-                                <div className="absolute bottom-0 left-0 right-0 bg-amber-100 text-amber-800 text-[10px] text-center py-0.5 rounded-b-xl">
-                                  Only {product.stock} left
-                                </div>
-                              )}
-                            </div>
+                            {/* Product Image */}
+                            <div className="flex justify-center items-center h-32 pt-2">
+                              <img src={product.image || "/placeholder.svg"} alt={product.name} className="w-[120px] h-[120px] object-contain" />
                           </div>
-
-                          {/* Product Details */}
-                          <div className="w-full flex-1 flex flex-col items-center justify-between z-10">
-                            {/* Product Name */}
-                            <h3 className="text-lg font-bold text-gray-900 text-center mb-1 line-clamp-2 group-hover/card:text-green-700 transition-colors">
-                              {product.name}
-                            </h3>
-                            {/* Description */}
-                            {product.description && (
-                              <p className="text-xs text-gray-500 text-center mb-1 line-clamp-2">{product.description}</p>
-                            )}
-                            {/* Unit and Brand */}
-                            <div className="flex flex-col items-center mb-1 gap-0.5">
-                              {product.unit && (
-                                <span className="text-xs text-gray-400">{product.unit}</span>
-                              )}
-                              {product.brand && (
-                                <span className="text-xs text-gray-400">{product.brand.name}</span>
-                              )}
-                            </div>
-                            {/* Rating */}
-                            {product.rating > 0 && (
-                              <div className="flex items-center mb-2">
-                                {[...Array(Math.floor(product.rating))].map((_, i) => (
-                                  <Star key={i} className="w-3 h-3 text-yellow-400 fill-yellow-400" strokeWidth={0} />
-                                ))}
-                                {product.rating % 1 >= 0.5 && (
-                                  <StarHalf className="w-3 h-3 text-yellow-400 fill-yellow-400" strokeWidth={0} />
-                                )}
-                                <span className="text-xs text-gray-500 ml-1">{product.rating.toFixed(1)}</span>
-                              </div>
-                            )}
-                            {/* Features */}
-                            <div className="w-full flex justify-center gap-2 mb-2">
-                              <TooltipProvider>
-                                {product.returnable && (
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <div className="cursor-help">
-                                        <Tag className="w-3 h-3 text-blue-500" />
-                                      </div>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      <p>{product.returnWindow || 7} days return</p>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                )}
-                                {product.codAvailable && (
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <div className="cursor-help">
-                                        <Truck className="w-3 h-3 text-green-500" />
-                                      </div>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      <p>Cash on Delivery available</p>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                )}
-                                {product.warranty && (
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <div className="cursor-help">
-                                        <Shield className="w-3 h-3 text-purple-500" />
-                                      </div>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      <p>{product.warranty} warranty</p>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                )}
-                              </TooltipProvider>
-                            </div>
-                            {/* Price and Add Button */}
-                            <div className="flex items-center justify-between w-full mt-auto relative">
-                              <div className="flex flex-col">
-                                <div className="flex items-center gap-1">
-                                  <span className="text-base font-bold text-green-700">
-                                    ₹{product.price}
-                                  </span>
-                                  {product.mrp && product.price < product.mrp && (
-                                    <span className="text-xs font-medium text-green-600">
-                                      {Math.round(((product.mrp - product.price) / product.mrp) * 100)}% off
-                                    </span>
+                            <div className="px-3 py-2 flex-1 flex flex-col">
+                              {/* Delivery Time Badge */}
+                              <div className="text-[10px] text-gray-500 flex items-center gap-1 mb-2" style={{ fontFamily: 'Sinkin Sans, sans-serif' }}>
+                                <img src="/timer-logo.avif" alt="eta" className="w-3 h-3" />
+                                <span className="uppercase font-medium">8 mins</span>
+                      </div>
+                              {/* Product Name */}
+                              <div className="text-[12px] font-bold text-gray-900 line-clamp-2 mb-4 leading-snug" style={{ fontFamily: 'Sinkin Sans, sans-serif' }}>
+                                {product.name}
+                    </div>
+                              {/* Variant/Weight/Unit */}
+                              <div className="text-xs text-gray-500 mb-2 font-normal" style={{ fontFamily: 'Sinkin Sans, sans-serif' }}>
+                                {product.unit}
+          </div>
+                              {/* Bottom Section: Price, MRP, ADD button */}
+                              <div className="flex items-end justify-between mt-2">
+                                <div>
+                                  <div className="text-[15px] font-bold text-gray-900 leading-none mb-1" style={{ fontFamily: 'Sinkin Sans, sans-serif' }}>₹{product.price}</div>
+                                  {hasDiscount && (
+                                    <div className="text-xs text-gray-400 line-through leading-none font-normal" style={{ fontFamily: 'Sinkin Sans, sans-serif' }}>₹{product.mrp}</div>
                                   )}
                                 </div>
-                                {product.mrp && product.price < product.mrp && (
-                                  <span className="text-xs text-gray-400 line-through">₹{product.mrp}</span>
+                                {quantities[product._id] > 0 ? (
+                                  <div className="flex items-center bg-green-700 rounded justify-between" style={{ minWidth: '80px', width: '80px', height: '32px' }}>
+                                    <button
+                                      className="text-white text-lg focus:outline-none flex-1 text-center h-full flex items-center justify-center"
+                                      onClick={() => handleDec(product)}
+                                      aria-label="Decrease quantity"
+                                    >-</button>
+                                    <span className="text-white font-bold text-base select-none text-center flex-1 h-full flex items-center justify-center">{quantities[product._id]}</span>
+                                    <button
+                                      className="text-white text-lg focus:outline-none flex-1 text-center h-full flex items-center justify-center"
+                                      onClick={() => handleInc(product)}
+                                      aria-label="Increase quantity"
+                                    >+</button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    className="border border-green-600 text-green-700 font-medium text-[15px] bg-white hover:bg-green-50 transition"
+                                    style={{ minWidth: '80px', width: '80px', height: '32px', fontFamily: 'Sinkin Sans, sans-serif', borderRadius: '4px', boxShadow: 'none' }}
+                                    onClick={() => handleAdd(product)}
+                                  >ADD</button>
                                 )}
                               </div>
-                              <button
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  // Only pass primitive fields to cart, and use id instead of _id
-                                  const cartItem = {
-                                    id: product._id,
-                                    name: product.name,
-                                    price: product.price,
-                                    image: product.image,
-                                    category: typeof product.category === 'object' && product.category ? product.category.name : product.category,
-                                    brand: product.brand && typeof product.brand === 'object' ? product.brand.name : product.brand,
-                                    unit: product.unit,
-                                    weight: product.weight,
-                                    mrp: product.mrp,
-                                    // add more fields as needed, but avoid nested objects
-                                  };
-                                  onAddToCart(cartItem);
-                                }}
-                                disabled={product.stock === 0}
-                                className={`absolute right-2 bottom-2 opacity-0 group-hover/card:opacity-100 translate-y-4 group-hover/card:translate-y-0 transition-all duration-300 ml-2 px-4 py-2 rounded-full shadow-lg font-bold text-white bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-xs sm:text-sm whitespace-nowrap z-20 ${product.stock === 0 ? 'bg-gray-300 text-gray-400 cursor-not-allowed' : ''}`}
-                              >
-                                {product.stock === 0 ? 'SOLD OUT' : 'ADD TO CART'}
-                              </button>
                             </div>
                           </div>
-                        </div>
-                      </Link>
-                    </CarouselItem>
-                  ))}
-                </CarouselContent>
-                <CarouselNext className="right-2 sm:right-4 md:right-6 lg:right-8 xl:right-12 2xl:right-16 -translate-y-1/2 top-1/2 z-10 hidden sm:flex" />
-              </Carousel>
-            </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        ) : (
+          <div className="text-center py-12">
+            <p className="text-foreground/70">No products found. Try a different search term.</p>
+            <Link href="/search" className="mt-4 inline-block text-primary hover:underline">
+              Browse all products
+            </Link>
           </div>
-        ))}
+        )}
       </div>
     </section>
   );

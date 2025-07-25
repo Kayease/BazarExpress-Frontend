@@ -338,7 +338,7 @@ export default function AdminProducts() {
 
                       <td className="py-4 px-6">
                         <div className="flex items-center space-x-2">
-                          <button className="p-1 text-text-tertiary hover:text-brand-primary transition-colors" onClick={() => router.push(`/admin/products/${product._id}`)}>
+                          <button className="p-1 text-text-tertiary hover:text-brand-primary transition-colors" onClick={() => router.push(`/products/${product._id}`)}>
                             <Eye className="h-4 w-4" />
                           </button>
                           <button className="p-1 text-text-tertiary hover:text-brand-primary transition-colors" onClick={() => router.push(`/admin/products/${product._id}/edit`)}>

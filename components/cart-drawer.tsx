@@ -120,7 +120,11 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
                       <div className="flex justify-between items-start">
                         <div>
                           <h4 className="font-semibold text-gray-900 text-sm leading-tight">{item.name}</h4>
-                          <p className="text-xs text-gray-500">{item.brand} • {item.category}</p>
+                          <p className="text-xs text-gray-500">
+                            {typeof item.brand === "object" && item.brand !== null ? item.brand.name : item.brand}
+                            {" • "}
+                            {typeof item.category === "object" && item.category !== null ? item.category.name : item.category}
+                          </p>
                         </div>
                         <div className="flex items-center">
                           <button 

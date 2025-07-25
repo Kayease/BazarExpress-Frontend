@@ -109,39 +109,40 @@ function AppProviderInner({ children }: { children: ReactNode }) {
 
   const addToCart = (product: any) => {
     const items = getCartItems();
-    const existing = items.find((item) => item.id === product.id);
+    const productId = product.id || product._id;
+    const existing = items.find((item) => (item.id || item._id) === productId);
     const quantityToAdd = product.quantity || 1;
     
     if (existing) {
       existing.quantity += quantityToAdd;
-      toast.success(`Updated ${product.name} quantity in cart!`, {
-        duration: 3000,
-        position: 'top-right',
-        icon: '🛒',
-      });
+      // toast.success(`Updated ${product.name} quantity in cart!`, {
+      //   duration: 3000,
+      //   position: 'top-right',
+      //   icon: '🛒',
+      // });
     } else {
-      items.push({ ...product, quantity: quantityToAdd });
-      toast.success(`${product.name} added to cart!`, {
-        duration: 3000,
-        position: 'top-right',
-        icon: '🛒',
-      });
+      items.push({ ...product, id: productId, quantity: quantityToAdd });
+      // toast.success(`${product.name} added to cart!`, {
+      //   duration: 3000,
+      //   position: 'top-right',
+      //   icon: '🛒',
+      // });
     }
     setCartItems(items);
   };
 
   const updateCartItem = (id: any, quantity: number, showToast: boolean = true) => {
     const items = getCartItems();
-    const item = items.find((item) => item.id === id);
+    const item = items.find((item) => (item.id || item._id) === id);
     if (item) {
       item.quantity = quantity;
       if (item.quantity <= 0) {
-        setCartItems(items.filter((item) => item.id !== id));
+        setCartItems(items.filter((item) => (item.id || item._id) !== id));
         if (showToast) {
-          toast.success('Item removed from cart', {
-            icon: '🗑️',
-            duration: 2000,
-          });
+          // toast.success('Item removed from cart', {
+          //   icon: '🗑️',
+          //   duration: 2000,
+          // });
         }
         return;
       }
@@ -150,38 +151,39 @@ function AppProviderInner({ children }: { children: ReactNode }) {
   };
 
   const addToWishlist = (product: any) => {
-    const existing = wishlistItems.find((item) => item.id === product.id);
+    const id = product.id || product._id;
+    const existing = wishlistItems.find((item) => item.id === id);
     if (!existing) {
-      const newWishlist = [...wishlistItems, product];
+      const newWishlist = [...wishlistItems, { ...product, id }];
       setWishlistItems(newWishlist);
       localStorage.setItem('wishlistItems', JSON.stringify(newWishlist));
-      toast.success(`${product.name} added to wishlist!`, {
-        duration: 3000,
-        position: 'top-right',
-        icon: '❤️',
-      });
+      // toast.success(`${product.name} added to wishlist!`, {
+      //   duration: 3000,
+      //   position: 'top-right',
+      //   icon: '❤️',
+      // });
     } else {
-      toast.error(`${product.name} is already in your wishlist!`, {
-        duration: 3000,
-        position: 'top-right',
-        icon: '⚠️',
-      });
+      // toast.error(`${product.name} is already in your wishlist!`, {
+      //   duration: 3000,
+      //   position: 'top-right',
+      //   icon: '⚠️',
+      // });
     }
   };
 
   const removeFromWishlist = (productId: string) => {
-    const newWishlist = wishlistItems.filter((item) => item.id !== productId);
+    const newWishlist = wishlistItems.filter((item) => item.id !== productId && item._id !== productId);
     setWishlistItems(newWishlist);
     localStorage.setItem('wishlistItems', JSON.stringify(newWishlist));
-    toast.success('Removed from wishlist!', {
-      duration: 3000,
-      position: 'top-right',
-      icon: '💔',
-    });
+    // toast.success('Removed from wishlist!', {
+    //   duration: 3000,
+    //   position: 'top-right',
+    //   icon: '💔',
+    // });
   };
 
   const isInWishlist = (productId: string) => {
-    return wishlistItems.some((item) => item.id === productId);
+    return wishlistItems.some((item) => item.id === productId || item._id === productId);
   };
 
   const cartTotal = cartItems.reduce(

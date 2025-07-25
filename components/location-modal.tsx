@@ -57,6 +57,19 @@ export default function LocationModal({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [autocompleteInitialized, setAutocompleteInitialized] = useState(false);
 
+  // Add/remove body class when modal opens/closes
+  useEffect(() => {
+    if (isOpen) {
+      document.body.classList.add('location-modal-open');
+    } else {
+      document.body.classList.remove('location-modal-open');
+    }
+    
+    return () => {
+      document.body.classList.remove('location-modal-open');
+    };
+  }, [isOpen]);
+
   // Load Google Maps script when modal opens
   useEffect(() => {
     if (!isOpen) return;
@@ -268,9 +281,9 @@ export default function LocationModal({
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4 location-modal-container"
       onClick={onClose}
     >
-      {/* Global CSS to hide Google's autocomplete dropdown */}
+      {/* CSS to hide Google's autocomplete dropdown only when location modal is open */}
       <style jsx global>{`
-        .pac-container {
+        body.location-modal-open .pac-container {
           display: none !important;
           z-index: -9999 !important;
           visibility: hidden !important;

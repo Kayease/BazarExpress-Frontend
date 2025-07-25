@@ -2,12 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-// Add this at the top for TypeScript global declaration
-declare global {
-    interface Window {
-        google: any;
-    }
-}
+
 
 interface GoogleMapsModalProps {
     isOpen: boolean;

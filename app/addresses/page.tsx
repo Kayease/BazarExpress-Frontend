@@ -49,8 +49,9 @@ function parseAddressComponents(components: any[]): any {
 
 export default function AddressesPage() {
   const router = useRouter();
-  const user = useAppSelector((state) => state.auth.user);
-  const token = useAppSelector((state) => state.auth.token);
+  // Fix: Use correct selector for persisted state shape
+  const user = useAppSelector((state: any) => state?.auth?.user);
+  const token = useAppSelector((state: any) => state?.auth?.token);
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [savedAddresses, setSavedAddresses] = useState<Address[]>([]);
   const [selectedAddress, setSelectedAddress] = useState<Address | null>(null);
@@ -779,7 +780,15 @@ export default function AddressesPage() {
                           {address.building && <p>{address.building}{address.floor ? `, Floor ${address.floor}` : ''}</p>}
                           {address.area && <p className="break-words">{address.area}</p>}
                           {address.landmark && <p>Near {address.landmark}</p>}
-                          <p>{`${address.city || ''}, ${address.state || ''} ${address.pincode || ''}`.trim()}</p>
+                          {/* Avoid duplicating city, state, pincode if already present in area */}
+                          {address.area && (
+                            (address.area.includes(address.city) || address.area.includes(address.state) || address.area.includes(address.pincode))
+                              ? null
+                              : <p>{`${address.city || ''}, ${address.state || ''} ${address.pincode || ''}`.trim()}</p>
+                          )}
+                          {!address.area && (
+                            <p>{`${address.city || ''}, ${address.state || ''} ${address.pincode || ''}`.trim()}</p>
+                          )}
                           {address.phone && (
                             <p className="text-gray-700 mt-1">📞 {address.phone}</p>
                           )}
