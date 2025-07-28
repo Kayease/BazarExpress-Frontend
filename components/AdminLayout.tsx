@@ -33,6 +33,7 @@ import {
   ChevronLeft,
   LogOut,
   Send,
+  Warehouse,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useAppSelector, useAppDispatch } from '../lib/store'
@@ -85,6 +86,7 @@ const menuItems = [
           );
         }
       },
+      { name: "Delivery Settings", href: "/admin/delivery", icon: Truck },
     ],
   },
   {

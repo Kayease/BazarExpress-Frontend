@@ -22,6 +22,16 @@ interface Warehouse {
   email: string;
   capacity: number;
   status: 'active' | 'inactive';
+  deliverySettings?: {
+    maxDeliveryRadius: number;
+    freeDeliveryRadius: number;
+    isDeliveryEnabled: boolean;
+    deliveryDays: string[];
+    deliveryHours: {
+      start: string;
+      end: string;
+    };
+  };
 }
 
 export default function AdminWarehouse() {
@@ -209,7 +219,7 @@ export default function AdminWarehouse() {
                 <th className="py-2 px-3 font-semibold text-sm">Name</th>
                 <th className="py-2 px-3 font-semibold text-sm">Address</th>
                 <th className="py-2 px-3 font-semibold text-sm">Contact Phone</th>
-                <th className="py-2 px-3 font-semibold text-sm">Capacity</th>
+                <th className="py-2 px-3 font-semibold text-sm">Delivery Radius</th>
                 <th className="py-2 px-3 font-semibold text-sm">Status</th>
                 <th className="py-2 px-3 font-semibold text-sm text-center">Action</th>
               </tr>
@@ -237,10 +247,14 @@ export default function AdminWarehouse() {
               {warehouses.map(w => (
                 <tr key={w._id} className="bg-white border-b hover:bg-gray-50 transition group">
                   <td className="py-2 px-3 align-middle max-w-xs whitespace-nowrap text-sm font-medium text-gray-900 truncate">{w.name}</td>
-                  <td className="py-2 px-3 align-middle max-w-sm whitespace-nowrap text-xs text-gray-700 truncate">{w.address}</td>
+                  <td className="py-2 px-3 align-middle max-w-xs whitespace-nowrap text-xs text-gray-700 truncate">{w.address}</td>
                   <td className="py-2 px-3 align-middle text-xs text-gray-700">{w.contactPhone}</td>
-                  <td className="py-2 px-3 align-middle text-xs text-gray-700">{w.capacity}</td>
-                  <td className="py-2 px-3 align-middle text-xs font-semibold {w.status === 'active' ? 'text-green-600' : 'text-gray-400'}">{capitalizeFirstLetter(w.status)}</td>
+                  <td className="py-2 px-3 align-middle text-xs text-gray-700">
+                    {(w as any).deliverySettings?.maxDeliveryRadius ? `${(w as any).deliverySettings.maxDeliveryRadius} km` : '50 km'}
+                    <br />
+                    <span className="text-green-600">Free: {(w as any).deliverySettings?.freeDeliveryRadius || 3} km</span>
+                  </td>
+                  <td className={`py-2 px-3 align-middle text-xs font-semibold ${w.status === 'active' ? 'text-green-600' : 'text-gray-400'}`}>{capitalizeFirstLetter(w.status)}</td>
                   <td className="py-2 px-3 align-middle text-center">
                     <div className="flex items-center justify-center gap-2">
                       <button

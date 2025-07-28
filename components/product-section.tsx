@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useEffect, useState, useRef } from "react";
 import { useAppContext } from "@/components/app-provider";
+import { getDeliveryTimeEstimate } from "@/lib/delivery";
 
 // Define interfaces for our data types
 interface Product {
@@ -90,6 +91,10 @@ export default function ProductSection({
 
   // Local quantity state for product tiles
   const [quantities, setQuantities] = useState<{ [id: string]: number }>({});
+  
+  // User location for delivery time calculation
+  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
+  const [defaultDeliveryTime, setDefaultDeliveryTime] = useState<string>("8-12 minutes");
 
   // Sync local quantity state with cartItems
   useEffect(() => {
@@ -100,6 +105,41 @@ export default function ProductSection({
     });
     setQuantities(newQuantities);
   }, [cartItems]);
+
+  // Get user location and calculate delivery time
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const userLat = position.coords.latitude;
+          const userLng = position.coords.longitude;
+          setUserLocation({ lat: userLat, lng: userLng });
+          
+          // Calculate distance from default warehouse (Delhi coordinates)
+          const warehouseLat = 28.6139;
+          const warehouseLng = 77.2090;
+          
+          // Simple distance calculation
+          const R = 6371; // Earth's radius in kilometers
+          const dLat = (userLat - warehouseLat) * Math.PI / 180;
+          const dLon = (userLng - warehouseLng) * Math.PI / 180;
+          const a = 
+            Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(warehouseLat * Math.PI / 180) * Math.cos(userLat * Math.PI / 180) * 
+            Math.sin(dLon/2) * Math.sin(dLon/2);
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+          const distance = R * c;
+          
+          // Set delivery time based on distance
+          setDefaultDeliveryTime(getDeliveryTimeEstimate(distance));
+        },
+        (error) => {
+          console.error('Error getting location:', error);
+          // Keep default delivery time
+        }
+      );
+    }
+  }, []);
 
   const handleAdd = (product: Product) => {
     const productId = product._id;
@@ -381,7 +421,7 @@ export default function ProductSection({
                               {/* Delivery Time Badge */}
                               <div className="text-[10px] text-gray-500 flex items-center gap-1 mb-2" style={{ fontFamily: 'Sinkin Sans, sans-serif' }}>
                                 <img src="/timer-logo.avif" alt="eta" className="w-3 h-3" />
-                                <span className="uppercase font-medium">8 mins</span>
+                                <span className="uppercase font-medium">{defaultDeliveryTime}</span>
                       </div>
                               {/* Product Name */}
                               <div className="text-[12px] font-bold text-gray-900 line-clamp-2 mb-4 leading-snug" style={{ fontFamily: 'Sinkin Sans, sans-serif' }}>

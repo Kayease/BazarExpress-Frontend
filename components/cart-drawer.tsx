@@ -196,14 +196,8 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
               <div className="flex items-center justify-between text-gray-700 text-sm">
                 <span>Delivery charge</span>
                 <span className="text-green-600 font-medium">
-                  <span className="line-through text-gray-400 mr-1">₹40</span>
                   FREE
                 </span>
-              </div>
-              
-              <div className="flex items-center justify-between text-gray-700 text-sm">
-                <span>Platform fee</span>
-                <span className="font-semibold">₹5</span>
               </div>
               
               <div className="border-t border-gray-100 pt-2 mt-2">
@@ -213,7 +207,7 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
                     <p className="text-xs text-gray-500">Inclusive of all taxes</p>
                   </div>
                   <div className="flex flex-col items-end">
-                    <div className="text-xl font-bold text-green-600">₹{(cartTotal + 5).toLocaleString()}</div>
+                    <div className="text-xl font-bold text-green-600">₹{cartTotal.toLocaleString()}</div>
                     <div className="text-xs text-gray-700">Delivery in 15-20 mins</div>
                   </div>
                 </div>
@@ -221,14 +215,16 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
             </div>
             
             {/* Savings Badge */}
-            <div className="mt-3 p-2 bg-green-50 rounded-lg border border-green-100">
-              <div className="flex items-center">
-                <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
-                <span className="text-xs text-green-700 font-medium">
-                  You're saving ₹40 on delivery!
-                </span>
+            {cartTotal >= 500 && (
+              <div className="mt-3 p-2 bg-green-50 rounded-lg border border-green-100">
+                <div className="flex items-center">
+                  <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                  <span className="text-xs text-green-700 font-medium">
+                    You're getting free delivery!
+                  </span>
+                </div>
               </div>
-            </div>
+            )}
             
             <button
               className="w-full bg-green-500 text-white font-bold py-3.5 rounded-lg hover:bg-green-600 transition-colors flex items-center justify-center mt-4"

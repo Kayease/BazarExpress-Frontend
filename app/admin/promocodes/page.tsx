@@ -57,6 +57,7 @@ type Promo = {
   maxDiscount?: number
   minOrderAmount?: number
   usageLimit?: number
+  usageType?: 'single_use' | 'multiple_use'
   startDate?: string
   endDate?: string
   appliesTo: AppliesTo
@@ -78,6 +79,7 @@ type PromoForm = {
   maxDiscount: number | ""
   minOrderAmount: number | ""
   usageLimit: number | ""
+  usageType: 'single_use' | 'multiple_use'
   startDate: string
   endDate: string
   appliesTo: AppliesTo
@@ -165,6 +167,7 @@ export default function PromoCodesPage() {
     maxDiscount: "",
     minOrderAmount: "",
     usageLimit: "",
+    usageType: "multiple_use",
     startDate: "",
     endDate: "",
     appliesTo: "all",
@@ -193,6 +196,7 @@ export default function PromoCodesPage() {
       maxDiscount: promo.maxDiscount ?? "",
       minOrderAmount: promo.minOrderAmount ?? "",
       usageLimit: promo.usageLimit ?? "",
+      usageType: promo.usageType ?? "multiple_use",
       startDate: promo.startDate ? promo.startDate.slice(0, 10) : "",
       endDate: promo.endDate ? promo.endDate.slice(0, 10) : "",
       appliesTo: promo.appliesTo,
@@ -377,7 +381,7 @@ export default function PromoCodesPage() {
     setFetchingCats(true);
     if (categorySearchTimeout.current) clearTimeout(categorySearchTimeout.current);
     categorySearchTimeout.current = setTimeout(() => {
-      fetch(`${CATEGORY_API}/paginated?search=${encodeURIComponent(categorySearch)}&page=${categoryPage}&limit=10`)
+      fetch(`${CATEGORY_API}/paginated?search=${encodeURIComponent(categorySearch)}&page=${categoryPage}&limit=20`)
         .then((r) => r.json())
         .then((data) => {
           setCategoryResults(data.items || []);
@@ -525,7 +529,7 @@ export default function PromoCodesPage() {
 
         {/* Add/Edit Promo Modal */}
         <Dialog open={showForm} onOpenChange={setShowForm}>
-          <DialogContent className="max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-2xl w-full max-h-[90vh] overflow-y-auto z-[9999]">
             <DialogHeader>
               <DialogTitle>{editPromo ? "Edit Promo" : "Add Promo"}</DialogTitle>
             </DialogHeader>
@@ -617,6 +621,22 @@ export default function PromoCodesPage() {
                   />
                 </div>
               </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Usage Type<span className="text-red-500">*</span></label>
+                <Select
+                  value={form.usageType}
+                  onValueChange={(value: 'single_use' | 'multiple_use') => setForm({ ...form, usageType: value })}
+                  disabled={formLoading}
+                >
+                  <SelectTrigger className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary">
+                    <SelectValue placeholder="Select usage type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="multiple_use">Multiple Use - Can be used multiple times</SelectItem>
+                    <SelectItem value="single_use">Single Use - One time per user</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block text-sm font-medium mb-1">Start Date</label>
@@ -631,19 +651,46 @@ export default function PromoCodesPage() {
                         aria-label="Pick start date"
                       >
                         {form.startDate
-                          ? format(new Date(form.startDate), "dd-MM-yyyy")
-                          : "dd-mm-yyyy"}
+                          ? (isNaN(new Date(form.startDate).getTime()) 
+                              ? "Invalid date" 
+                              : format(new Date(form.startDate), "dd/MM/yyyy"))
+                          : "dd/mm/yyyy"}
                         <CalendarIcon className="h-5 w-5 text-gray-400 ml-2" />
                       </button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0 bg-white border rounded-lg shadow-lg">
+                    <PopoverContent className="w-auto p-0 bg-white border rounded-lg shadow-lg z-50">
                       <Calendar
                         mode="single"
-                        selected={form.startDate ? new Date(form.startDate) : undefined}
+                        selected={form.startDate ? (isNaN(new Date(form.startDate).getTime()) ? undefined : new Date(form.startDate)) : undefined}
                         onSelect={date => setForm({ ...form, startDate: date ? format(date, "yyyy-MM-dd") : "" })}
+                        disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
                         initialFocus
+                        className="rounded-md border-0"
+                        classNames={{
+                          months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
+                          month: "space-y-4",
+                          caption: "flex justify-center pt-1 relative items-center",
+                          caption_label: "text-sm font-medium",
+                          nav: "space-x-1 flex items-center",
+                          nav_button: "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100",
+                          nav_button_previous: "absolute left-1",
+                          nav_button_next: "absolute right-1",
+                          table: "w-full border-collapse space-y-1",
+                          head_row: "flex",
+                          head_cell: "text-muted-foreground rounded-md w-9 font-normal text-[0.8rem]",
+                          row: "flex w-full mt-2",
+                          cell: "h-9 w-9 text-center text-sm p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
+                          day: "h-9 w-9 p-0 font-normal aria-selected:opacity-100",
+                          day_range_end: "day-range-end",
+                          day_selected: "bg-brand-primary text-white hover:bg-brand-primary hover:text-white focus:bg-brand-primary focus:text-white",
+                          day_today: "bg-accent text-accent-foreground",
+                          day_outside: "day-outside text-muted-foreground aria-selected:bg-accent/50 aria-selected:text-muted-foreground",
+                          day_disabled: "text-muted-foreground opacity-50",
+                          day_range_middle: "aria-selected:bg-accent aria-selected:text-accent-foreground",
+                          day_hidden: "invisible",
+                        }}
                       />
-                      <div className="flex justify-between px-3 pb-2 pt-1">
+                      <div className="flex justify-between px-3 pb-2 pt-1 border-t">
                         <button
                           type="button"
                           className="text-xs text-gray-500 hover:text-brand-primary"
@@ -675,19 +722,50 @@ export default function PromoCodesPage() {
                         aria-label="Pick end date"
                       >
                         {form.endDate
-                          ? format(new Date(form.endDate), "dd-MM-yyyy")
-                          : "dd-mm-yyyy"}
+                          ? (isNaN(new Date(form.endDate).getTime()) 
+                              ? "Invalid date" 
+                              : format(new Date(form.endDate), "dd/MM/yyyy"))
+                          : "dd/mm/yyyy"}
                         <CalendarIcon className="h-5 w-5 text-gray-400 ml-2" />
                       </button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0 bg-white border rounded-lg shadow-lg">
+                    <PopoverContent className="w-auto p-0 bg-white border rounded-lg shadow-lg z-50">
                       <Calendar
                         mode="single"
-                        selected={form.endDate ? new Date(form.endDate) : undefined}
+                        selected={form.endDate ? (isNaN(new Date(form.endDate).getTime()) ? undefined : new Date(form.endDate)) : undefined}
                         onSelect={date => setForm({ ...form, endDate: date ? format(date, "yyyy-MM-dd") : "" })}
+                        disabled={(date) => {
+                          const today = new Date(new Date().setHours(0, 0, 0, 0));
+                          const startDate = form.startDate ? new Date(form.startDate) : today;
+                          return date < Math.max(today.getTime(), startDate.getTime());
+                        }}
                         initialFocus
+                        className="rounded-md border-0"
+                        classNames={{
+                          months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
+                          month: "space-y-4",
+                          caption: "flex justify-center pt-1 relative items-center",
+                          caption_label: "text-sm font-medium",
+                          nav: "space-x-1 flex items-center",
+                          nav_button: "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100",
+                          nav_button_previous: "absolute left-1",
+                          nav_button_next: "absolute right-1",
+                          table: "w-full border-collapse space-y-1",
+                          head_row: "flex",
+                          head_cell: "text-muted-foreground rounded-md w-9 font-normal text-[0.8rem]",
+                          row: "flex w-full mt-2",
+                          cell: "h-9 w-9 text-center text-sm p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
+                          day: "h-9 w-9 p-0 font-normal aria-selected:opacity-100",
+                          day_range_end: "day-range-end",
+                          day_selected: "bg-brand-primary text-white hover:bg-brand-primary hover:text-white focus:bg-brand-primary focus:text-white",
+                          day_today: "bg-accent text-accent-foreground",
+                          day_outside: "day-outside text-muted-foreground aria-selected:bg-accent/50 aria-selected:text-muted-foreground",
+                          day_disabled: "text-muted-foreground opacity-50",
+                          day_range_middle: "aria-selected:bg-accent aria-selected:text-accent-foreground",
+                          day_hidden: "invisible",
+                        }}
                       />
-                      <div className="flex justify-between px-3 pb-2 pt-1">
+                      <div className="flex justify-between px-3 pb-2 pt-1 border-t">
                         <button
                           type="button"
                           className="text-xs text-gray-500 hover:text-brand-primary"

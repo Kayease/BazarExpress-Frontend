@@ -465,5 +465,70 @@ div[data-sonner-toast],
 .pac-container {
   z-index: 99999 !important;
 }
+
+/* Calendar specific fixes */
+.rdp {
+    --rdp-cell-size: 40px;
+    --rdp-accent-color: hsl(275, 56%, 60%);
+    --rdp-background-color: hsl(275, 56%, 60%);
+    --rdp-accent-color-dark: hsl(275, 56%, 40%);
+    --rdp-background-color-dark: hsl(275, 56%, 40%);
+    --rdp-outline: 2px solid var(--rdp-accent-color);
+    --rdp-outline-selected: 2px solid rgba(0, 0, 0, 0.75);
+    margin: 1em;
+}
+
+.rdp-day_selected,
+.rdp-day_selected:focus-visible,
+.rdp-day_selected:hover {
+    color: hsl(0, 0%, 100%);
+    opacity: 1;
+    background-color: var(--rdp-accent-color);
+}
+
+.rdp-day_today {
+    font-weight: bold;
+    color: var(--rdp-accent-color);
+}
+
+.rdp-button:hover:not([disabled]):not(.rdp-day_selected) {
+    background-color: hsl(275, 56%, 90%);
+}
+
+/* Ensure popover content is visible */
+[data-radix-popper-content-wrapper] {
+    z-index: 9999 !important;
+}
+
+/* Fix for calendar in modal */
+[data-radix-dialog-content] .rdp {
+    margin: 0;
+}
+
+/* Ensure calendar popover is properly positioned */
+[data-radix-popover-content] {
+    z-index: 10000 !important;
+}
+
+/* Fix calendar button styling */
+.rdp-button {
+    border: none !important;
+    background: transparent !important;
+    font-family: inherit !important;
+    font-size: inherit !important;
+    line-height: inherit !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    cursor: pointer !important;
+}
+
+.rdp-button:hover {
+    background-color: hsl(275, 56%, 90%) !important;
+}
+
+.rdp-button:focus {
+    outline: 2px solid hsl(275, 56%, 60%) !important;
+    outline-offset: 2px !important;
+}
   
   

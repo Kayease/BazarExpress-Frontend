@@ -1,14 +1,22 @@
 "use client";
 import { useAppContext } from "@/components/app-provider";
 import { Button } from "@/components/ui/button";
-import { Minus, Plus, Trash2, ShoppingBag, ArrowLeft, Heart } from "lucide-react";
+import { Minus, Plus, Trash2, ShoppingBag, ArrowLeft, Heart, MapPin, Clock, Info } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { calculateDeliveryChargeAPI, formatDeliveryCharge, getDeliveryTimeEstimate } from "@/lib/delivery";
+import DeliveryAvailabilityChecker from "@/components/DeliveryAvailabilityChecker";
 
 export default function CartPage() {
   const { cartItems, updateCartItem, cartTotal, addToWishlist, isInWishlist } = useAppContext();
   const router = useRouter();
+  
+  // Delivery calculation states
+  const [deliveryInfo, setDeliveryInfo] = useState<any>(null);
+  const [loadingDelivery, setLoadingDelivery] = useState(false);
+  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
 
   const removeFromCart = (id: string) => {
     updateCartItem(id, 0);
@@ -18,6 +26,69 @@ export default function CartPage() {
     addToWishlist(item);
     removeFromCart(item.id);
   };
+
+  // Get user's current location
+  const getUserLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          });
+        },
+        (error) => {
+          console.error('Error getting location:', error);
+          // Use default location (Delhi) if geolocation fails
+          setUserLocation({
+            lat: 28.6139,
+            lng: 77.2090
+          });
+        }
+      );
+    } else {
+      // Use default location if geolocation is not supported
+      setUserLocation({
+        lat: 28.6139,
+        lng: 77.2090
+      });
+    }
+  };
+
+  // Calculate delivery charges
+  const calculateDelivery = async () => {
+    if (!userLocation || cartItems.length === 0) return;
+    
+    try {
+      setLoadingDelivery(true);
+      const result = await calculateDeliveryChargeAPI(
+        userLocation.lat,
+        userLocation.lng,
+        cartTotal,
+        'online'
+      );
+      
+      if (result) {
+        setDeliveryInfo(result);
+      }
+    } catch (error) {
+      console.error('Error calculating delivery:', error);
+    } finally {
+      setLoadingDelivery(false);
+    }
+  };
+
+  // Get location on component mount
+  useEffect(() => {
+    getUserLocation();
+  }, []);
+
+  // Calculate delivery when location or cart changes
+  useEffect(() => {
+    if (userLocation && cartItems.length > 0) {
+      calculateDelivery();
+    }
+  }, [userLocation, cartTotal, cartItems.length]);
 
   if (cartItems.length === 0) {
     return (
@@ -161,24 +232,55 @@ export default function CartPage() {
                   <span>Subtotal ({cartItems.length} items)</span>
                   <span>₹{cartTotal.toLocaleString()}</span>
                 </div>
+                
+                {/* Delivery Fee */}
                 <div className="flex justify-between text-gray-600">
-                  <span>Delivery Fee</span>
-                  <span className="text-green-600">FREE</span>
+                  <div className="flex items-center gap-2">
+                    <span>Delivery Fee</span>
+                    {deliveryInfo?.distance && (
+                      <span className="text-xs text-gray-400">
+                        ({deliveryInfo.distance.toFixed(1)} km)
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    {deliveryInfo?.available === false ? (
+                      <span className="text-red-600 text-sm">Not Available</span>
+                    ) : deliveryInfo ? (
+                      <span className={deliveryInfo.isFreeDelivery ? "text-green-600 font-medium" : "text-gray-900"}>
+                        {formatDeliveryCharge(deliveryInfo.deliveryCharge)}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">--</span>
+                    )}
+                  </div>
                 </div>
+                
                 <div className="border-t pt-4">
                   <div className="flex justify-between text-xl font-bold text-gray-900">
                     <span>Total</span>
-                    <span className="text-green-600">₹{cartTotal.toLocaleString()}</span>
+                    <span className="text-green-600">
+                      ₹{(cartTotal + (deliveryInfo?.available !== false ? (deliveryInfo?.deliveryCharge || 0) : 0)).toLocaleString()}
+                    </span>
                   </div>
                 </div>
               </div>
 
               <div className="space-y-3">
-                <Link href="/payment">
-                  <Button className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white py-4 text-lg rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105">
-                    Proceed to Checkout
+                {deliveryInfo?.available === false ? (
+                  <Button 
+                    disabled 
+                    className="w-full bg-gray-400 text-white py-4 text-lg rounded-xl cursor-not-allowed"
+                  >
+                    Delivery Not Available
                   </Button>
-                </Link>
+                ) : (
+                  <Link href="/payment">
+                    <Button className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white py-4 text-lg rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105">
+                      Proceed to Checkout
+                    </Button>
+                  </Link>
+                )}
                 <Link href="/search">
                   <Button variant="outline" className="w-full py-3 rounded-xl border-2 hover:bg-gray-50 transition-colors">
                     Continue Shopping
@@ -186,14 +288,14 @@ export default function CartPage() {
                 </Link>
               </div>
 
-              {/* Delivery Info */}
-              <div className="mt-6 p-4 bg-green-50 rounded-xl border border-green-200">
-                <div className="text-sm text-green-800">
-                  <div className="font-semibold mb-1">Free Delivery</div>
-                  <div>Your order qualifies for free delivery!</div>
-                  <div className="text-xs text-green-600 mt-1">Estimated delivery: 2-4 hours</div>
-                </div>
-              </div>
+              {/* Delivery Availability Checker */}
+              <DeliveryAvailabilityChecker
+                userLocation={userLocation}
+                cartTotal={cartTotal}
+                paymentMethod="online"
+                onDeliveryInfoChange={(info) => setDeliveryInfo(info)}
+                className="mt-6"
+              />
             </div>
           </div>
         </div>
