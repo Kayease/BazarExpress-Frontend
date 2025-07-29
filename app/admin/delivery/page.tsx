@@ -35,7 +35,7 @@ interface DeliverySettings {
   maximumDeliveryCharge: number
   perKmCharge: number
   codAvailable: boolean
-  codExtraCharge: number
+
   calculationMethod: 'haversine' | 'straight_line'
   isActive?: boolean
   createdAt?: string
@@ -66,7 +66,7 @@ export default function DeliveryManagementPage() {
     maximumDeliveryCharge: 100,
     perKmCharge: 5,
     codAvailable: true,
-    codExtraCharge: 20,
+
     calculationMethod: 'haversine'
   })
   const [errors, setErrors] = useState<{ [key: string]: string }>({})
@@ -149,9 +149,7 @@ export default function DeliveryManagementPage() {
       newErrors.perKmCharge = 'Per km charge must be positive'
     }
     
-    if (formData.codExtraCharge < 0) {
-      newErrors.codExtraCharge = 'COD extra charge must be positive'
-    }
+
     
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
@@ -471,21 +469,7 @@ export default function DeliveryManagementPage() {
                     />
                   </div>
                   
-                  {formData.codAvailable && (
-                    <div>
-                      <Label htmlFor="codExtraCharge">COD Extra Charge (₹)</Label>
-                      <Input
-                        id="codExtraCharge"
-                        type="number"
-                        value={formData.codExtraCharge}
-                        onChange={(e) => handleInputChange('codExtraCharge', Number(e.target.value))}
-                        className={errors.codExtraCharge ? 'border-red-500' : ''}
-                      />
-                      {errors.codExtraCharge && (
-                        <p className="text-sm text-red-500 mt-1">{errors.codExtraCharge}</p>
-                      )}
-                    </div>
-                  )}
+
                   
                   <div>
                     <Label htmlFor="calculationMethod">Distance Calculation Method</Label>

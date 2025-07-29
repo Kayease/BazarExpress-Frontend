@@ -67,14 +67,18 @@ export default function AvailablePromocodes({
       });
 
       const response = await fetch(`${API_URL}/promocodes/available?${params}`);
-      const data = await response.json();
-
-      if (response.ok) {
-        setAvailablePromocodes(data.available || []);
-        setAlmostAvailablePromocodes(data.almostAvailable || []);
+      
+      if (!response.ok) {
+        console.warn('Failed to fetch promocodes:', response.status);
+        return;
       }
+      
+      const data = await response.json();
+      setAvailablePromocodes(data.available || []);
+      setAlmostAvailablePromocodes(data.almostAvailable || []);
     } catch (error) {
-      console.error('Error fetching available promocodes:', error);
+      console.warn('Error fetching available promocodes:', error);
+      // Don't show error to user, just fail silently
     } finally {
       setLoading(false);
     }

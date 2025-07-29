@@ -9,18 +9,37 @@ export interface DeliverySettings {
   perKmCharge: number;
   codAvailable: boolean;
   codExtraCharge: number;
-  calculationMethod: 'haversine' | 'straight_line';
+  calculationMethod: 'osrm' | 'haversine' | 'straight_line';
 }
 
 export interface DeliveryCalculationResult {
+  success: boolean;
   distance: number;
+  duration?: number;
   deliveryCharge: number;
-  codCharge: number;
+  codCharge?: number;
   totalDeliveryCharge: number;
   isFreeDelivery: boolean;
   freeDeliveryEligible: boolean;
   amountNeededForFreeDelivery: number;
-  settings: DeliverySettings;
+  calculationMethod?: string;
+  route?: {
+    distance_meters: number;
+    duration_seconds: number;
+    geometry?: any;
+  };
+  warehouse?: {
+    id: string;
+    name: string;
+    address: string;
+  };
+  warehouseSettings?: {
+    freeDeliveryRadius: number;
+    maxDeliveryRadius: number;
+    isDeliveryEnabled: boolean;
+  };
+  settings?: DeliverySettings;
+  error?: string;
 }
 
 export interface Location {
@@ -28,7 +47,8 @@ export interface Location {
   lng: number;
 }
 
-// Haversine formula for distance calculation
+// Legacy distance calculation functions (kept for backward compatibility)
+// Note: These are now deprecated in favor of server-side OSRM calculations
 export function calculateDistance(
   lat1: number, 
   lon1: number, 
@@ -36,6 +56,8 @@ export function calculateDistance(
   lon2: number, 
   method: 'haversine' | 'straight_line' = 'haversine'
 ): number {
+  console.warn('Client-side distance calculation is deprecated. Use server-side OSRM calculation instead.');
+  
   if (method === 'straight_line') {
     // Simple straight line distance (less accurate but faster)
     const R = 6371; // Earth's radius in kilometers
@@ -44,7 +66,7 @@ export function calculateDistance(
     const distance = Math.sqrt(dLat * dLat + dLon * dLon) * R;
     return distance;
   } else {
-    // Haversine formula (more accurate)
+    // Haversine formula (more accurate than straight line but less accurate than OSRM)
     const R = 6371; // Earth's radius in kilometers
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
@@ -152,8 +174,10 @@ export async function calculateDeliveryChargeAPI(
     
     if (data.success) {
       return data;
+    } else {
+      // Return the error data so the frontend can handle it
+      return { error: data.error || 'Delivery calculation failed' };
     }
-    return null;
   } catch (error) {
     console.error('Error calculating delivery charge:', error);
     return null;
@@ -168,8 +192,24 @@ export function formatDeliveryCharge(charge: number): string {
   return `₹${charge.toFixed(2)}`;
 }
 
-// Get delivery time estimate (you can customize this based on your business logic)
-export function getDeliveryTimeEstimate(distance: number): string {
+// Get delivery time estimate based on distance or duration
+export function getDeliveryTimeEstimate(distance: number, duration?: number): string {
+  // If we have duration from OSRM, use it for more accurate estimates
+  if (duration && duration > 0) {
+    if (duration <= 15) {
+      return '8-15 minutes';
+    } else if (duration <= 30) {
+      return '15-30 minutes';
+    } else if (duration <= 60) {
+      return '30-60 minutes';
+    } else if (duration <= 120) {
+      return '1-2 hours';
+    } else {
+      return '2+ hours';
+    }
+  }
+  
+  // Fallback to distance-based estimates
   if (distance <= 2) {
     return '8-12 minutes';
   } else if (distance <= 5) {

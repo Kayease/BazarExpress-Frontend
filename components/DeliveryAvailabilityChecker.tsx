@@ -98,6 +98,7 @@ export default function DeliveryAvailabilityChecker({
           warehouseSettings: data.warehouseSettings
         });
       } else {
+        const errorMessage = data.error || 'Delivery not available to this location';
         setDeliveryInfo({
           available: false,
           deliveryCharge: 0,
@@ -105,9 +106,17 @@ export default function DeliveryAvailabilityChecker({
           isFreeDelivery: false,
           freeDeliveryEligible: false,
           amountNeededForFreeDelivery: 0,
-          error: data.error || 'Delivery not available to this location'
+          error: errorMessage
         });
-        setError(data.error || 'Delivery not available to this location');
+        setError(errorMessage);
+        
+        // Show toast notification for delivery unavailability
+        if (errorMessage.includes('Maximum delivery distance') || errorMessage.includes('delivery radius')) {
+          toast.error('Location outside delivery area', {
+            duration: 4000,
+            icon: '📍'
+          });
+        }
       }
     } catch (err) {
       console.error('Error checking delivery availability:', err);

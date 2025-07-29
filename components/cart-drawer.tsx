@@ -1,15 +1,22 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { X, ShoppingBag, Truck, Info, CreditCard, LogIn, Plus, Minus, Trash2, Heart, ShoppingCart } from "lucide-react";
+import { X, ShoppingBag, LogIn, Plus, Minus, Trash2, Heart, ShoppingCart, MapPin, Clock } from "lucide-react";
 import { getCartItems, updateCartQuantity, removeFromCart, getCartTotals } from "../lib/cart";
 import { useAppContext } from "@/components/app-provider";
+
+import { useAppSelector } from "@/lib/store";
 import Image from "next/image";
 import toast from "react-hot-toast";
 
 export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const { cartItems, updateCartItem, cartTotal, isLoggedIn, setIsLoginOpen, addToWishlist, isInWishlist } = useAppContext();
   const router = useRouter();
+  const user = useAppSelector((state: any) => state?.auth?.user);
+
+
+
+
 
   // Add effect to prevent body scrolling when cart is open
   useEffect(() => {
@@ -26,6 +33,19 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
       document.body.style.overflow = '';
     };
   }, [isOpen]);
+
+  // Load delivery settings on mount
+  // Auto-close cart drawer when it becomes empty (with a small delay)
+  useEffect(() => {
+    if (isOpen && cartItems.length === 0) {
+      const timer = setTimeout(() => {
+        onClose();
+        toast.success('Cart is now empty', { icon: '🛒' });
+      }, 1500); // 1.5 second delay to show empty state briefly
+      
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen, cartItems.length, onClose]);
 
   const handleUpdate = (id: string, quantity: number) => {
     updateCartItem(id, quantity);
@@ -46,6 +66,13 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
   };
 
   const handleProceed = () => {
+    // Check if cart is empty
+    if (cartItems.length === 0) {
+      toast.error('Your cart is empty. Add some items first!');
+      onClose();
+      return;
+    }
+
     if (isLoggedIn) {
       router.push("/payment");
       onClose();
@@ -179,52 +206,42 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
           )}
         </div>
 
-        {/* Bill Summary and Action Bar Combined - Non-scrollable */}
+        {/* Simplified Cart Summary - Non-scrollable */}
         {cartItems.length > 0 && (
           <div className="bg-white border-t border-gray-100 p-4 flex-shrink-0">
-            <h3 className="font-bold text-gray-900 mb-3 flex items-center">
-              <CreditCard className="h-4 w-4 mr-2 text-green-600" />
-              Bill Summary
-            </h3>
-            
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-gray-700 text-sm">
-                <span>Items total ({cartItems.length})</span>
-                <span className="font-semibold">₹{cartTotal.toLocaleString()}</span>
-              </div>
-              
-              <div className="flex items-center justify-between text-gray-700 text-sm">
-                <span>Delivery charge</span>
-                <span className="text-green-600 font-medium">
-                  FREE
-                </span>
-              </div>
-              
-              <div className="border-t border-gray-100 pt-2 mt-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="font-bold text-lg text-gray-900">Total</div>
-                    <p className="text-xs text-gray-500">Inclusive of all taxes</p>
-                  </div>
-                  <div className="flex flex-col items-end">
-                    <div className="text-xl font-bold text-green-600">₹{cartTotal.toLocaleString()}</div>
-                    <div className="text-xs text-gray-700">Delivery in 15-20 mins</div>
+            {/* Delivery Address */}
+            {user?.defaultAddress && (
+              <div className="mb-3 p-2 bg-gray-50 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <MapPin className="h-4 w-4 text-green-600" />
+                  <div className="flex-1">
+                    <div className="text-xs font-medium text-gray-900">Delivering to:</div>
+                    <div className="text-xs text-gray-600 truncate">
+                      {user.defaultAddress.building && `${user.defaultAddress.building}, `}
+                      {user.defaultAddress.area}
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
-            
-            {/* Savings Badge */}
-            {cartTotal >= 500 && (
-              <div className="mt-3 p-2 bg-green-50 rounded-lg border border-green-100">
-                <div className="flex items-center">
-                  <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
-                  <span className="text-xs text-green-700 font-medium">
-                    You're getting free delivery!
-                  </span>
+                {/* Delivery Time */}
+                <div className="flex items-center gap-1 mt-1">
+                  <Clock className="h-3 w-3 text-gray-500" />
+                  <span className="text-xs text-gray-500">Delivery in 15-20 mins</span>
                 </div>
               </div>
             )}
+            
+            {/* Total Amount */}
+            <div className="border-t border-gray-100 pt-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-bold text-lg text-gray-900">Total</div>
+                  <div className="text-xs text-gray-500">{cartItems.length} items</div>
+                </div>
+                <div className="text-xl font-bold text-green-600">
+                  ₹{cartTotal.toFixed(2)}
+                </div>
+              </div>
+            </div>
             
             <button
               className="w-full bg-green-500 text-white font-bold py-3.5 rounded-lg hover:bg-green-600 transition-colors flex items-center justify-center mt-4"

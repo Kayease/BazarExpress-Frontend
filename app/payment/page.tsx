@@ -43,6 +43,8 @@ import AvailablePromocodes from "@/components/AvailablePromocodes";
 import toast from "react-hot-toast";
 import { calculateDeliveryChargeAPI, formatDeliveryCharge, getDeliveryTimeEstimate, fetchDeliverySettings } from "@/lib/delivery";
 import DeliveryAvailabilityChecker from "@/components/DeliveryAvailabilityChecker";
+import { validateCartDelivery, CartValidationResponse } from "@/lib/location";
+import CartValidationAlert from "@/components/CartValidationAlert";
 
 interface PaymentMethod {
   id: string;
@@ -150,6 +152,42 @@ interface ValidationErrors {
   addressRequired?: string;
 }
 
+interface DeliveryInfo {
+  distance: number;
+  duration?: number;
+  deliveryCharge: number;
+  codCharge?: number;
+  totalDeliveryCharge: number;
+  isFreeDelivery: boolean;
+  freeDeliveryEligible: boolean;
+  amountNeededForFreeDelivery: number;
+  calculationMethod?: string;
+  estimatedDeliveryTime?: string;
+  route?: any;
+  warehouseSettings?: {
+    freeDeliveryRadius: number;
+    maxDeliveryRadius: number;
+    isDeliveryEnabled: boolean;
+  };
+  warehouse?: {
+    id: string;
+    name: string;
+    address: string;
+  };
+  settings?: any;
+}
+
+interface DeliverySettings {
+  freeDeliveryMinAmount: number;
+  freeDeliveryRadius: number;
+  baseDeliveryCharge: number;
+  minimumDeliveryCharge: number;
+  maximumDeliveryCharge: number;
+  perKmCharge: number;
+  codAvailable: boolean;
+  calculationMethod: string;
+}
+
 // Helper for parsing Google address components
 function parseAddressComponents(components: any[]): any {
   let area = "", city = "", state = "", country = "", pin = "";
@@ -230,7 +268,7 @@ export default function PaymentPage() {
   const [discountAmount, setDiscountAmount] = useState<number>(0);
   
   // Delivery calculation states
-  const [deliveryInfo, setDeliveryInfo] = useState<any>(null);
+  const [deliveryInfo, setDeliveryInfo] = useState<DeliveryInfo | null>(null);
   const [loadingDelivery, setLoadingDelivery] = useState(false);
   
   // Validation states
@@ -239,7 +277,11 @@ export default function PaymentPage() {
   const [warehouseOperationalHours, setWarehouseOperationalHours] = useState<any>(null);
   
   // Delivery settings state
-  const [deliverySettings, setDeliverySettings] = useState<any>(null);
+  const [deliverySettings, setDeliverySettings] = useState<DeliverySettings | null>(null);
+  
+  // Cart validation states
+  const [cartValidation, setCartValidation] = useState<CartValidationResponse | null>(null);
+  const [isValidatingCart, setIsValidatingCart] = useState(false);
 
   // Filter payment methods based on delivery settings
   const paymentMethods = allPaymentMethods.filter(method => {
@@ -253,7 +295,7 @@ export default function PaymentPage() {
   useEffect(() => {
     if (selectedPaymentMethod === 'cod' && deliverySettings?.codAvailable === false) {
       setSelectedPaymentMethod('upi');
-      toast.info('COD is currently not available. Switched to UPI payment.');
+      toast('COD is currently not available. Switched to UPI payment.');
     }
   }, [deliverySettings, selectedPaymentMethod]);
 
@@ -300,16 +342,26 @@ export default function PaymentPage() {
       // Only show this error if we're not loading and have no delivery info
       setValidationErrors(prev => ({
         ...prev,
-        deliveryNotAvailable: 'Unable to calculate delivery for selected address. Please try selecting a different address.'
+        deliveryNotAvailable: 'Unable to calculate delivery for selected address. Please try selecting a different address or contact support.'
       }));
       return false;
     }
     
-    const maxDeliveryRadius = 25; // km - you can make this configurable
+    // Check if delivery is available based on warehouse settings
+    const maxDeliveryRadius = deliveryInfo.warehouseSettings?.maxDeliveryRadius || 25;
     if (deliveryInfo.distance && deliveryInfo.distance > maxDeliveryRadius) {
       setValidationErrors(prev => ({
         ...prev,
-        deliveryNotAvailable: `Delivery not available to your location. Maximum delivery distance is ${maxDeliveryRadius}km, but your location is ${deliveryInfo.distance.toFixed(2)}km away.`
+        deliveryNotAvailable: `Delivery not available to your location. Maximum delivery distance is ${maxDeliveryRadius}km, but your location is ${deliveryInfo.distance.toFixed(2)}km away from our nearest warehouse.`
+      }));
+      return false;
+    }
+
+    // Check if warehouse delivery is enabled
+    if (deliveryInfo.warehouseSettings?.isDeliveryEnabled === false) {
+      setValidationErrors(prev => ({
+        ...prev,
+        deliveryNotAvailable: 'Delivery is currently not available from our nearest warehouse to your location. Please try a different address.'
       }));
       return false;
     }
@@ -355,13 +407,94 @@ export default function PaymentPage() {
     return true;
   };
 
-  const validatePayment = (): boolean => {
+  // Validate cart items against selected delivery address
+  const validateCartForDelivery = async (): Promise<boolean> => {
+    if (!selectedAddress) {
+      setValidationErrors(prev => ({
+        ...prev,
+        addressRequired: 'Please select a delivery address to validate cart items.'
+      }));
+      return false;
+    }
+
+    // Prepare cart items for validation
+    const cartItemsForValidation = cartItemsWithCODInfo.map((item: any) => ({
+      _id: item._id || item.id,
+      name: item.name,
+      warehouseId: item.warehouseId || item.warehouse?._id,
+      quantity: item.quantity
+    }));
+
+    // Check if all items have warehouse information
+    const itemsWithoutWarehouse = cartItemsForValidation.filter(item => !item.warehouseId);
+    if (itemsWithoutWarehouse.length > 0) {
+      console.warn('Some cart items missing warehouse information:', itemsWithoutWarehouse);
+      // For now, we'll skip validation for items without warehouse info
+      // In production, you should ensure all products have warehouse assignments
+    }
+
+    const validItems = cartItemsForValidation.filter(item => item.warehouseId);
+    if (validItems.length === 0) {
+      setValidationErrors(prev => ({
+        ...prev,
+        deliveryNotAvailable: 'Unable to validate delivery for cart items. Please contact support.'
+      }));
+      return false;
+    }
+
+    setIsValidatingCart(true);
+    
+    try {
+      const validation = await validateCartDelivery(validItems, {
+        lat: selectedAddress.lat!,
+        lng: selectedAddress.lng!,
+        address: `${selectedAddress.building}, ${selectedAddress.area}, ${selectedAddress.city}`
+      });
+
+      setCartValidation(validation);
+
+      if (!validation.success) {
+        setValidationErrors(prev => ({
+          ...prev,
+          deliveryNotAvailable: validation.error || 'Failed to validate cart delivery'
+        }));
+        return false;
+      }
+
+      if (!validation.allItemsDeliverable) {
+        const undeliverableNames = validation.undeliverableItems.map(item => item.name).join(', ');
+        setValidationErrors(prev => ({
+          ...prev,
+          deliveryNotAvailable: `Some items cannot be delivered to your address: ${undeliverableNames}. Please select an address within the delivery zone or remove these items from your cart.`
+        }));
+        return false;
+      }
+
+      setValidationErrors(prev => ({ ...prev, deliveryNotAvailable: undefined }));
+      return true;
+
+    } catch (error) {
+      console.error('Error validating cart delivery:', error);
+      setValidationErrors(prev => ({
+        ...prev,
+        deliveryNotAvailable: 'Unable to validate delivery for your cart. Please try again or contact support.'
+      }));
+      return false;
+    } finally {
+      setIsValidatingCart(false);
+    }
+  };
+
+  const validatePayment = async (): Promise<boolean> => {
     const isCODValid = validateCODAvailability();
     const isDeliveryValid = validateDeliveryArea();
     const isWarehouseOperational = validateWarehouseOperationalHours();
     const isAddressValid = validateAddress();
     
-    return isCODValid && isDeliveryValid && isWarehouseOperational && isAddressValid;
+    // Add cart validation for delivery zone
+    const isCartValid = await validateCartForDelivery();
+    
+    return isCODValid && isDeliveryValid && isWarehouseOperational && isAddressValid && isCartValid;
   };
 
   // Format delivery charges to 2 decimal places
@@ -493,6 +626,14 @@ export default function PaymentPage() {
     loadDeliverySettings();
   }, [user, token, router]);
 
+  // Redirect if cart is empty
+  useEffect(() => {
+    if (cartItems.length === 0) {
+      router.push('/');
+      return;
+    }
+  }, [cartItems, router]);
+
   // Calculate delivery when address or payment method changes
   useEffect(() => {
     if (selectedAddress && addresses.length > 0) {
@@ -571,14 +712,14 @@ export default function PaymentPage() {
   const calculateDelivery = async (address: Address) => {
     if (!address.lat || !address.lng) {
       console.log('Address missing coordinates:', address);
-      // Create a default delivery info for addresses without coordinates
+      // Create a default delivery info for addresses without coordinates using settings
       const defaultDeliveryInfo = {
         distance: 10, // Default 10km distance
-        deliveryCharge: 20,
-        codCharge: selectedPaymentMethod === 'cod' ? 20 : 0,
+        deliveryCharge: deliverySettings?.baseDeliveryCharge || 20,
+        totalDeliveryCharge: deliverySettings?.baseDeliveryCharge || 20,
         isFreeDelivery: false,
-        freeDeliveryEligible: cartTotal >= 500,
-        amountNeededForFreeDelivery: Math.max(0, 500 - cartTotal)
+        freeDeliveryEligible: cartTotal >= (deliverySettings?.freeDeliveryMinAmount || 500),
+        amountNeededForFreeDelivery: Math.max(0, (deliverySettings?.freeDeliveryMinAmount || 500) - cartTotal)
       };
       setDeliveryInfo(defaultDeliveryInfo);
       return;
@@ -586,55 +727,79 @@ export default function PaymentPage() {
     
     try {
       setLoadingDelivery(true);
-      console.log('Calculating delivery for:', { lat: address.lat, lng: address.lng, cartTotal, paymentMethod: selectedPaymentMethod });
+      
+      // Validate coordinates
+      if (!address.lat || !address.lng || isNaN(Number(address.lat)) || isNaN(Number(address.lng))) {
+        throw new Error('Invalid address coordinates. Please select a valid address.');
+      }
+      
+      console.log('Calculating delivery for:', { 
+        lat: Number(address.lat), 
+        lng: Number(address.lng), 
+        cartTotal: cartTotal - discountAmount, 
+        paymentMethod: selectedPaymentMethod === 'cod' ? 'cod' : 'online'
+      });
       
       // Add timeout to prevent hanging
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Delivery calculation timeout')), 10000)
+        setTimeout(() => reject(new Error('Delivery calculation timeout')), 15000)
       );
       
       const result = await Promise.race([
         calculateDeliveryChargeAPI(
-          address.lat,
-          address.lng,
+          Number(address.lat),
+          Number(address.lng),
           cartTotal - discountAmount,
           selectedPaymentMethod === 'cod' ? 'cod' : 'online'
         ),
         timeoutPromise
       ]);
       
-      console.log('Delivery calculation result:', result);
+      console.log('OSRM Delivery calculation result:', result);
       
-      if (result && result.distance !== undefined) {
-        setDeliveryInfo(result);
-      } else {
-        // If API fails or returns incomplete data, create a fallback calculation
-        const fallbackDistance = Math.random() * 30 + 5; // Random distance between 5-35km for testing
-        const fallbackDeliveryInfo = {
-          distance: fallbackDistance,
-          deliveryCharge: fallbackDistance > 25 ? 0 : (fallbackDistance <= 5 ? 0 : Math.round(fallbackDistance * 2)),
-          codCharge: selectedPaymentMethod === 'cod' ? 20 : 0,
-          isFreeDelivery: fallbackDistance <= 5,
-          freeDeliveryEligible: cartTotal >= 500 && fallbackDistance <= 25,
-          amountNeededForFreeDelivery: Math.max(0, 500 - cartTotal)
+      if (result && result.success && typeof result.distance === 'number') {
+        // Enhanced delivery info with OSRM data
+        const enhancedDeliveryInfo: DeliveryInfo = {
+          distance: result.distance,
+          duration: result.duration,
+          deliveryCharge: result.deliveryCharge || 0,
+          codCharge: result.codCharge || 0,
+          totalDeliveryCharge: result.totalDeliveryCharge || result.deliveryCharge || 0,
+          isFreeDelivery: result.isFreeDelivery || false,
+          freeDeliveryEligible: result.freeDeliveryEligible || false,
+          amountNeededForFreeDelivery: result.amountNeededForFreeDelivery || 0,
+          calculationMethod: result.calculationMethod || 'osrm',
+          estimatedDeliveryTime: result.duration ? 
+            getDeliveryTimeEstimate(result.distance, result.duration) : 
+            getDeliveryTimeEstimate(result.distance),
+          route: result.route,
+          warehouseSettings: result.warehouseSettings,
+          warehouse: result.warehouse,
+          settings: result.settings
         };
-        console.log('Using fallback delivery info:', fallbackDeliveryInfo);
-        setDeliveryInfo(fallbackDeliveryInfo);
+        
+        console.log('Enhanced delivery info with OSRM:', enhancedDeliveryInfo);
+        setDeliveryInfo(enhancedDeliveryInfo);
+        
+        // Show success message with delivery details
+        if (result.calculationMethod === 'osrm') {
+          toast.success(`Delivery calculated: ${result.distance.toFixed(2)}km, ${result.duration?.toFixed(0) || 'N/A'} min via ${result.warehouse?.name || 'warehouse'}`);
+        }
+      } else if (result && result.error) {
+        console.error('API returned error:', result.error);
+        throw new Error(result.error);
+      } else {
+        console.error('Invalid delivery calculation result:', result);
+        throw new Error('Unable to calculate delivery. Please try again.');
       }
     } catch (error) {
-      console.error('Error calculating delivery:', error);
-      // Create fallback delivery info on error
-      const fallbackDistance = Math.random() * 30 + 5;
-      const fallbackDeliveryInfo = {
-        distance: fallbackDistance,
-        deliveryCharge: fallbackDistance > 25 ? 0 : (fallbackDistance <= 5 ? 0 : Math.round(fallbackDistance * 2)),
-        codCharge: selectedPaymentMethod === 'cod' ? 20 : 0,
-        isFreeDelivery: fallbackDistance <= 5,
-        freeDeliveryEligible: cartTotal >= 500 && fallbackDistance <= 25,
-        amountNeededForFreeDelivery: Math.max(0, 500 - cartTotal)
-      };
-      console.log('Using error fallback delivery info:', fallbackDeliveryInfo);
-      setDeliveryInfo(fallbackDeliveryInfo);
+      console.error('Error calculating delivery with OSRM:', error);
+      
+      // Show error message to user
+      toast.error('Unable to calculate delivery for this address. Please try a different address or contact support.');
+      
+      // Clear delivery info to prevent invalid state
+      setDeliveryInfo(null);
     } finally {
       setLoadingDelivery(false);
     }
@@ -643,18 +808,41 @@ export default function PaymentPage() {
   // Calculate final total with discount and delivery
   const finalTotal = cartTotal - discountAmount;
   const deliveryCharge = deliveryInfo?.deliveryCharge || 0;
-  const codCharge = deliveryInfo?.codCharge || 0;
-  const finalTotalWithDelivery = finalTotal + deliveryCharge + codCharge;
+  const finalTotalWithDelivery = finalTotal + deliveryCharge;
 
   const handlePayment = async () => {
     setIsValidatingPayment(true);
     
-    // Run all validations
-    const isValid = validatePayment();
+    // Run all validations (now async)
+    const isValid = await validatePayment();
     
     if (!isValid) {
       setIsValidatingPayment(false);
-      toast.error('Please resolve the validation errors before proceeding.');
+      
+      // Show specific error messages for different validation failures
+      if (validationErrors.deliveryNotAvailable) {
+        toast.error('Delivery not available to your location. Please select a different address.', {
+          duration: 5000,
+          icon: '🚫'
+        });
+      } else if (validationErrors.codNotAvailable) {
+        toast.error('Cash on Delivery is not available for some items in your cart.', {
+          duration: 4000,
+          icon: '💳'
+        });
+      } else if (validationErrors.warehouseNotOperational) {
+        toast.error('Our warehouse is currently closed. Please place your order during operational hours.', {
+          duration: 4000,
+          icon: '🕒'
+        });
+      } else if (validationErrors.addressRequired) {
+        toast.error('Please select a delivery address to continue.', {
+          duration: 3000,
+          icon: '📍'
+        });
+      } else {
+        toast.error('Please resolve the validation errors before proceeding.');
+      }
       return;
     }
 
@@ -889,11 +1077,7 @@ export default function PaymentPage() {
                     <p className="text-sm text-amber-700 mt-1">
                       Pay cash to our delivery partner when your order arrives.
                     </p>
-                    <div className="mt-2 p-2 bg-amber-100 rounded border border-amber-300">
-                      <p className="text-xs text-amber-800 font-medium">
-                        💡 Save ₹{codCharge.toFixed(2)} by choosing prepaid payment methods above
-                      </p>
-                    </div>
+
                   </div>
                 </div>
               </div>
@@ -1356,12 +1540,7 @@ export default function PaymentPage() {
                 )}
                 
                 {/* COD Charge - Single entry */}
-                {selectedPaymentMethod === 'cod' && deliveryInfo?.codCharge > 0 && (
-                  <div className="flex justify-between text-gray-600">
-                    <span>COD Handling Fee</span>
-                    <span>₹{deliveryInfo.codCharge.toFixed(2)}</span>
-                  </div>
-                )}
+
                 <div className="border-t pt-3 mt-2">
                   <div className="flex justify-between text-xl font-bold text-gray-900">
                     <span>Total</span>
@@ -1564,6 +1743,25 @@ export default function PaymentPage() {
                    <div className="w-full h-60 rounded-lg overflow-hidden border border-gray-200 bg-white mb-2">
                      <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
                    </div>
+                   
+                   {/* Coordinates indicator */}
+                   <div className={`text-xs p-2 rounded-lg mb-2 ${
+                     addressForm.lat && addressForm.lng 
+                       ? 'bg-green-50 text-green-700 border border-green-200' 
+                       : 'bg-orange-50 text-orange-700 border border-orange-200'
+                   }`}>
+                     {addressForm.lat && addressForm.lng ? (
+                       <div className="flex items-center gap-2">
+                         <Check className="h-4 w-4" />
+                         <span>Location coordinates captured: {addressForm.lat.toFixed(6)}, {addressForm.lng.toFixed(6)}</span>
+                       </div>
+                     ) : (
+                       <div className="flex items-center gap-2">
+                         <MapPin className="h-4 w-4" />
+                         <span>Please select your location on the map for accurate delivery calculation</span>
+                       </div>
+                     )}
+                   </div>
                    <div className="w-full bg-gray-50 rounded-lg p-2 flex items-center gap-2 mb-2 border border-gray-200">
                      <div className="flex-shrink-0 bg-green-100 rounded-full p-1.5">
                        <MapPin className="w-4 h-4 text-green-600" />
@@ -1581,6 +1779,17 @@ export default function PaymentPage() {
                     if ((!addressForm.building && !addressForm.area) || !addressForm.city || !addressForm.state || !addressForm.pincode) {
                       alert('Please fill in all required fields (at least building or area, city, state, and pincode)');
                       return;
+                    }
+                    
+                    // Warn if coordinates are missing (important for delivery calculation)
+                    if (!addressForm.lat || !addressForm.lng) {
+                      const confirmSave = confirm(
+                        'Location coordinates are missing. This may affect delivery calculation. ' +
+                        'Please use the map to select your exact location, or continue anyway?'
+                      );
+                      if (!confirmSave) {
+                        return;
+                      }
                     }
                     const now = Date.now();
                     const addressData = {
@@ -1601,6 +1810,9 @@ export default function PaymentPage() {
                       isActive: true,
                       createdAt: now,
                       updatedAt: now,
+                      // Include lat/lng coordinates if available
+                      lat: addressForm.lat || undefined,
+                      lng: addressForm.lng || undefined,
                     };
                     await handleAddAddress(addressData);
                     await fetchUserAddresses();

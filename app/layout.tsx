@@ -6,7 +6,7 @@ import { Toaster } from 'react-hot-toast'
 
 export const metadata: Metadata = {
   title: 'BazarXpress | All your desired here..',
-  description: 'Design and Developed by Rustam Khan',
+  description: 'Design and Developed by Pradeependra Pratap',
 }
 
 export default function RootLayout({
