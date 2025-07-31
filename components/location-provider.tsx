@@ -92,7 +92,7 @@ export function LocationProvider({ children }: LocationProviderProps) {
       pincode: deliveryCheck.pincode,
       isLocationDetected: true,
       deliveryMode: deliveryCheck.mode === 'custom-disabled' ? 'custom' : deliveryCheck.mode,
-      deliveryMessage: deliveryCheck.deliveryStatus?.shortMessage || 'Delivery info unavailable',
+      deliveryMessage: deliveryCheck.deliveryStatus?.shortMessage || 'May take few days',
       showOverlay: deliveryCheck.mode === 'custom-disabled',
       overlayMessage: deliveryCheck.deliveryStatus?.message || deliveryCheck.matchedWarehouse?.deliverySettings?.disabledMessage || 'Delivery is currently unavailable in your area',
       matchedWarehouse: deliveryCheck.matchedWarehouse,

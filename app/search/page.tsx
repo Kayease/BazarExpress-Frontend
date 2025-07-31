@@ -160,50 +160,22 @@ export default function SearchPage() {
               categories: [] 
             });
           } else {
-            // Fallback to regular API if location-based fails
-            await fetchRegularProducts();
+            console.error('Error fetching location-based products:', locationProducts.error);
           }
         } else {
-          // Fallback to regular API
-          await fetchRegularProducts();
+          // Block search if PIN is not set
+          setResults({ products: [], categories: [] });
+          setLoading(false);
+          alert('Please select your delivery PIN code to search products.');
+          return;
         }
       } catch (error) {
         console.error('Error fetching location-based products:', error);
-        await fetchRegularProducts();
       } finally {
         setLoading(false);
       }
     };
     
-    const fetchRegularProducts = async () => {
-      try {
-        // If no search and no category, fetch all products
-        if (!q && !categoryParam) {
-          const res = await axios.get(`${API_URL}/products`);
-          setResults({ products: res.data, categories: [] });
-          return;
-        }
-
-        // If only category is selected, use the products endpoint with category filter
-        if (!q && categoryParam) {
-          const res = await axios.get(`${API_URL}/products?category=${categoryParam}`);
-          setResults({ products: res.data, categories: [] });
-          return;
-        }
-
-        // If search query exists, use search endpoint
-        if (q.length > 0) {
-          let url = `/search?q=${encodeURIComponent(q)}`;
-          if (categoryParam) url += `&category=${encodeURIComponent(categoryParam)}`;
-          const res = await axios.get(url);
-          setResults(res.data);
-        }
-      } catch (err) {
-        console.error('Error fetching regular products:', err);
-        setResults({ products: [], categories: [] });
-      }
-    };
-
     fetchLocationBasedProducts();
   }, [q, categoryParam, pincodeParam, modeParam, locationState.pincode, locationState.isLocationDetected, fetchProductsByLocation]);
 

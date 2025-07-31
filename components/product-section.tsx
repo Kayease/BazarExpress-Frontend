@@ -16,7 +16,6 @@ import {
 import { useEffect, useState, useRef } from "react";
 import { useAppContext } from "@/components/app-provider";
 import { useLocation } from "@/components/location-provider";
-import { getDeliveryTimeEstimate } from "@/lib/delivery";
 
 // Define interfaces for our data types
 interface Product {
@@ -96,9 +95,6 @@ export default function ProductSection({
   // Local quantity state for product tiles
   const [quantities, setQuantities] = useState<{ [id: string]: number }>({});
   
-  // User location for delivery time calculation
-  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
-  const [defaultDeliveryTime, setDefaultDeliveryTime] = useState<string>("8-12 minutes");
 
   // Sync local quantity state with cartItems
   useEffect(() => {
@@ -110,40 +106,6 @@ export default function ProductSection({
     setQuantities(newQuantities);
   }, [cartItems]);
 
-  // Get user location and calculate delivery time
-  useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const userLat = position.coords.latitude;
-          const userLng = position.coords.longitude;
-          setUserLocation({ lat: userLat, lng: userLng });
-          
-          // Calculate distance from default warehouse (Delhi coordinates)
-          const warehouseLat = 28.6139;
-          const warehouseLng = 77.2090;
-          
-          // Simple distance calculation
-          const R = 6371; // Earth's radius in kilometers
-          const dLat = (userLat - warehouseLat) * Math.PI / 180;
-          const dLon = (userLng - warehouseLng) * Math.PI / 180;
-          const a = 
-            Math.sin(dLat/2) * Math.sin(dLat/2) +
-            Math.cos(warehouseLat * Math.PI / 180) * Math.cos(userLat * Math.PI / 180) * 
-            Math.sin(dLon/2) * Math.sin(dLon/2);
-          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-          const distance = R * c;
-          
-          // Set delivery time based on distance
-          setDefaultDeliveryTime(getDeliveryTimeEstimate(distance));
-        },
-        (error) => {
-          console.error('Error getting location:', error);
-          // Keep default delivery time
-        }
-      );
-    }
-  }, []);
 
   const handleAdd = (product: Product) => {
     const productId = product._id;
@@ -192,7 +154,7 @@ export default function ProductSection({
         setLoading(true);
         setError(null);
 
-        // If location is detected, use location-based product fetching
+        // If location is detected and PIN is set, use location-based product fetching
         if (locationState.isLocationDetected && locationState.pincode) {
           const locationProducts = await fetchProductsByLocation({ limit: 100 });
           
@@ -248,63 +210,11 @@ export default function ProductSection({
             setProductSections([]);
           }
         } else {
-          // Fallback to original logic if location not detected
-          // Fetch all categories
-          const categoriesResponse = await fetch(`${API_URL}/categories`);
-          if (!categoriesResponse.ok) {
-            throw new Error('Failed to fetch categories');
-          }
-          const categoriesData = await categoriesResponse.json();
-
-          // Find all parent categories with showOnHome = true
-          const homeCategories = categoriesData.filter((category: Category) =>
-            category.showOnHome === true && (!category.parentId || category.parentId === "")
-          );
-
-          if (homeCategories.length === 0) {
-            setProductSections([]);
-            setLoading(false);
-            return;
-          }
-
-          // Build a map of parentId -> subcategories
-          const subcategoriesByParent: { [parentId: string]: string[] } = {};
-          categoriesData.forEach((cat: Category) => {
-            if (cat.parentId) {
-              if (!subcategoriesByParent[cat.parentId]) subcategoriesByParent[cat.parentId] = [];
-              subcategoriesByParent[cat.parentId].push(cat._id);
-            }
-          });
-
-          // Fetch all active products
-          const productsResponse = await fetch(`${API_URL}/products?status=active`);
-          if (!productsResponse.ok) {
-            throw new Error('Failed to fetch products');
-          }
-          let productsData = await productsResponse.json();
-
-          // For each home category, collect its own and all subcategory IDs
-          const productSections: ProductSection[] = homeCategories.map((parentCat: Category) => {
-            // Get all subcategory IDs for this parent
-            const subcatIds = subcategoriesByParent[parentCat._id] || [];
-            // Include parent category ID as well
-            const allCatIds = [parentCat._id, ...subcatIds];
-            // Filter products for this category and its subcategories
-            const catProducts = productsData.filter((product: Product) => {
-            if (!product.category) return false;
-            const categoryId = typeof product.category === 'object' ? product.category._id : product.category;
-              return allCatIds.includes(categoryId);
-          });
-            // Shuffle and pick up to 15 random products
-            const shuffled = [...catProducts].sort(() => 0.5 - Math.random());
-          const selectedProducts = shuffled.slice(0, 15);
-            return {
-              category: parentCat,
-            products: selectedProducts
-          };
-          }).filter((section: { products: string | any[]; }) => section.products.length > 0); // Only show if there are products
-
-          setProductSections(productSections);
+          // Block product display if PIN is not set
+          setProductSections([]);
+          setError('Please select your delivery PIN code to view available products.');
+          setLoading(false);
+          return;
         }
       } catch (err) {
         console.error('Error fetching products:', err);
@@ -327,7 +237,7 @@ export default function ProductSection({
 
         let searchResults = [];
 
-        // If location is detected, use location-based search
+        // If location is detected and PIN is set, use location-based search
         if (locationState.isLocationDetected && locationState.pincode) {
           const locationProducts = await fetchProductsByLocation({ 
             search: searchQuery,
@@ -338,12 +248,11 @@ export default function ProductSection({
             searchResults = locationProducts.products;
           }
         } else {
-          // Fallback to regular search
-          const searchResponse = await fetch(`${API_URL}/products/search?q=${encodeURIComponent(searchQuery)}`);
-          if (!searchResponse.ok) {
-            throw new Error('Failed to search products');
-          }
-          searchResults = await searchResponse.json();
+          // Block search if PIN is not set
+          setProductSections([]);
+          setError('Please select your delivery PIN code to search products.');
+          setLoading(false);
+          return;
         }
 
         // Create a single section with search results
@@ -494,13 +403,7 @@ export default function ProductSection({
                               <img src={product.image || "/placeholder.svg"} alt={product.name} className="w-[120px] h-[120px] object-contain" />
                           </div>
                             <div className="px-3 py-2 flex-1 flex flex-col">
-                              {/* Delivery Time Badge */}
-                              <div className="text-[10px] text-gray-500 flex items-center gap-1 mb-2" style={{ fontFamily: 'Sinkin Sans, sans-serif' }}>
-                                <img src="/timer-logo.avif" alt="eta" className="w-3 h-3" />
-                                <span className="uppercase font-medium">
-                                  {locationState.isLocationDetected ? deliveryMessage : defaultDeliveryTime}
-                                </span>
-                              </div>
+
                               {/* Delivery Mode Indicator */}
                               {locationState.isLocationDetected && (
                                 <div className="text-[9px] text-gray-400 flex items-center gap-1 mb-1" style={{ fontFamily: 'Sinkin Sans, sans-serif' }}>
