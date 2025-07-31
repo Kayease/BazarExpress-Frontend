@@ -17,7 +17,7 @@ import {
   Heart,
   ChevronUp,
 } from "lucide-react";
-import { PincodeLocationModal } from "@/components/pincode-location-modal";
+
 import Link from "next/link";
 import Image from "next/image";
 import { useAppContext } from "@/components/app-provider";
@@ -49,30 +49,13 @@ export default function Navbar() {
   const router = useRouter();
   
   // Get location context
-  const { locationState, deliveryMessage, isGlobalMode } = useLocation();
+  const { locationState, deliveryMessage, isGlobalMode, showLocationModal, setShowLocationModal } = useLocation();
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [showAccountDropdown, setShowAccountDropdown] = useState(false);
-  const [showLocationModal, setShowLocationModal] = useState(false);
-  interface LocationState {
-    name: string;
-    address: string;
-    deliveryTime: string;
-    pincode: string | null;
-    coordinates?: { lat: number; lng: number };
-  }
-
-  const [currentLocation, setCurrentLocation] = useState<LocationState>({
-    name: "Detecting location...",
-    address: "",
-    deliveryTime: "- - - - - - - - - - - - -",
-    pincode: null,
-  });
   const [searchValue, setSearchValue] = useState('');
   const [isFocused, setIsFocused] = useState(false);
-  const [isDetecting, setIsDetecting] = useState(false);
-  const [showLocationPrompt, setShowLocationPrompt] = useState(false);
   const [cartAnimation, setCartAnimation] = useState(false);
   const [wishlistAnimation, setWishlistAnimation] = useState(false);
   const [currentSearchPlaceholder, setCurrentSearchPlaceholder] = useState(0);
@@ -100,51 +83,7 @@ export default function Navbar() {
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch location on website load and check warehouse delivery
-  useEffect(() => {
-    const initializeLocationAndDelivery = async () => {
-      const savedLocation = localStorage.getItem("userLocation");
-      if (savedLocation) {
-        const location = JSON.parse(savedLocation);
-        setCurrentLocation(location);
-        
-        // If we have a pincode, check delivery directly
-        if (location.pincode) {
-          // Show checking status first
-          setCurrentLocation(prev => ({
-            ...prev,
-            deliveryTime: "Checking delivery..."
-          }));
-          await checkDeliveryForPincode(location.pincode);
-        } 
-        // If we have coordinates but no pincode, extract pincode and check delivery
-        else if (location.coordinates) {
-          // Show checking status first
-          setCurrentLocation(prev => ({
-            ...prev,
-            deliveryTime: "Checking delivery..."
-          }));
-          await checkDeliveryForLocation(location.coordinates.lat, location.coordinates.lng);
-        }
-        // If we have neither, the saved location might be old format, re-detect
-        else {
-          await handleDetectLocationWithDeliveryCheck();
-        }
-      } else {
-        // Auto-detect location on first load
-        await handleDetectLocationWithDeliveryCheck();
-        
-        // Show location prompt if not already shown
-        const locationPromptShown = localStorage.getItem("locationPromptShown");
-        if (!locationPromptShown) {
-          setShowLocationPrompt(true);
-          localStorage.setItem("locationPromptShown", "true");
-        }
-      }
-    };
-
-    initializeLocationAndDelivery();
-  }, []);
+  // Remove duplicate location detection - now handled by LocationProvider
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -179,204 +118,7 @@ export default function Navbar() {
     }
   }, [wishlistItems.length]);
 
-  // Function to handle selected location and save to state/localStorage
-  const handleLocationSelect = (location: LocationState) => {
-    setCurrentLocation(location);
-    localStorage.setItem("userLocation", JSON.stringify(location));
-  };
-
-  // Function to extract pincode from address
-  const extractPincodeFromAddress = (address: string): string | null => {
-    const pincodeMatch = address.match(/\b\d{6}\b/);
-    return pincodeMatch ? pincodeMatch[0] : null;
-  };
-
-  // Function to check delivery for a location using pincode
-  const checkDeliveryForLocation = async (lat: number, lng: number) => {
-    try {
-      // Show checking status
-      setCurrentLocation(prev => ({
-        ...prev,
-        deliveryTime: "Checking delivery..."
-      }));
-      
-      // First try to get pincode from reverse geocoding
-      let pincode = null;
-      
-      // Try OpenStreetMap Nominatim first (free)
-      try {
-        const response = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`
-        );
-        const data = await response.json();
-        
-        if (data && data.address && data.address.postcode) {
-          pincode = data.address.postcode;
-        }
-      } catch (error) {
-        console.log("Nominatim failed, trying Google Maps API");
-      }
-      
-      // If no pincode from Nominatim, try Google Maps API
-      if (!pincode && process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) {
-        try {
-          const googleResponse = await fetch(
-            `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}`
-          );
-          const googleData = await googleResponse.json();
-          
-          if (googleData.status === "OK" && googleData.results.length > 0) {
-            const address = googleData.results[0].formatted_address;
-            pincode = extractPincodeFromAddress(address);
-          }
-        } catch (error) {
-          console.log("Google Maps API failed");
-        }
-      }
-      
-      if (pincode && /^\d{6}$/.test(pincode)) {
-        await checkDeliveryForPincode(pincode);
-      } else {
-        // No pincode found, use default
-        setCurrentLocation(prev => ({
-          ...prev,
-          deliveryTime: "May take few days"
-        }));
-      }
-    } catch (error) {
-      console.error("Error checking delivery for location:", error);
-      setCurrentLocation(prev => ({
-        ...prev,
-        deliveryTime: "May take few days"
-      }));
-    }
-  };
-
-  // Function to check delivery for a specific pincode
-  const checkDeliveryForPincode = async (pincode: string) => {
-    try {
-      const deliveryResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'}/warehouses/check-pincode`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ pincode }),
-      });
-      
-      const deliveryData = await deliveryResponse.json();
-      
-      if (deliveryData.success) {
-        let deliveryMessage = "May take few days"; // Default for global delivery
-        
-        // Priority: Custom warehouse delivering > Custom warehouse disabled > Global warehouse
-        if (deliveryData.mode === 'custom' && deliveryData.deliveryStatus?.isDelivering) {
-          deliveryMessage = deliveryData.deliveryStatus.shortMessage || "Same day delivery";
-        } else if (deliveryData.mode === 'custom-disabled') {
-          deliveryMessage = deliveryData.deliveryStatus?.shortMessage || "Store Disabled";
-        } else if (deliveryData.hasGlobalWarehouse) {
-          deliveryMessage = "May take few days";
-        }
-        
-        // Update current location with delivery info
-        setCurrentLocation(prev => {
-          const updatedLocation = {
-            ...prev,
-            deliveryTime: deliveryMessage,
-            pincode: pincode
-          };
-          
-          // Save updated location
-          localStorage.setItem("userLocation", JSON.stringify(updatedLocation));
-          return updatedLocation;
-        });
-      } else {
-        // No delivery available
-        setCurrentLocation(prev => ({
-          ...prev,
-          deliveryTime: "No delivery available",
-          pincode: pincode
-        }));
-      }
-    } catch (error) {
-      console.error("Error checking delivery for pincode:", error);
-      setCurrentLocation(prev => ({
-        ...prev,
-        deliveryTime: "May take few days",
-        pincode: pincode
-      }));
-    }
-  };
-
-  // Function to detect user's current location with delivery checking
-  const handleDetectLocationWithDeliveryCheck = async () => {
-    if (!navigator.geolocation) {
-      console.error("Geolocation is not supported by your browser");
-      return;
-    }
-
-    setIsDetecting(true);
-
-    try {
-      const position = await new Promise<GeolocationPosition>(
-        (resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, {
-            enableHighAccuracy: true,
-            timeout: 10000,
-            maximumAge: 0,
-          });
-        }
-      );
-
-      // Use Google Maps Geocoding API to get address from coordinates
-      const response = await fetch(
-        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${position.coords.latitude},${position.coords.longitude}&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}`
-      );
-
-      const data = await response.json();
-
-      if (data.status === "OK" && data.results.length > 0) {
-        const address = data.results[0].formatted_address;
-        const locationName = data.results[0].address_components[0].long_name;
-        
-        // Extract pincode from address
-        const pincode = extractPincodeFromAddress(address);
-
-        const newLocation = {
-          name: locationName,
-          address: address,
-          deliveryTime: "-----",
-          coordinates: {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-          },
-          pincode: pincode
-        };
-
-        handleLocationSelect(newLocation);
-        
-        // Update to show checking status
-        setCurrentLocation(prev => ({
-          ...prev,
-          deliveryTime: "Checking delivery..."
-        }));
-        
-        // Check delivery availability
-        await checkDeliveryForLocation(position.coords.latitude, position.coords.longitude);
-      }
-    } catch (error) {
-      console.error("Error getting location:", error);
-      setCurrentLocation({
-        name: "Location unavailable",
-        address: "",
-        deliveryTime: "Please set your location",
-        pincode: null
-      });
-      toast.error("Could not detect your location. Please set it manually.");
-    } finally {
-      setIsDetecting(false);
-      setShowLocationPrompt(false);
-    }
-  };
+  // All location logic now handled by LocationProvider
 
   const handleLogoutRedux = () => {
     dispatch(logout());
@@ -414,17 +156,14 @@ export default function Navbar() {
                   <div className="text-md font-extrabold text-green-600">
                     {locationState.isLocationDetected ? 
                       deliveryMessage : 
-                      (currentLocation.deliveryTime || "May take few days")
+                      "Detecting location..."
                     }
                   </div>
                   <div className="flex items-center text-xs text-gray-500 max-w-[200px] truncate">
                     <span className="truncate">
                       {locationState.isLocationDetected ? 
                         `PIN: ${locationState.pincode}` : 
-                        (currentLocation.pincode ? 
-                          `PIN: ${currentLocation.pincode}` : 
-                          (currentLocation.name || "Detecting location...")
-                        )
+                        "Please wait..."
                       }
                     </span>
                     <ChevronDown size={14} className="ml-1 flex-shrink-0" />
@@ -805,11 +544,7 @@ export default function Navbar() {
       {/* Cart Drawer rendered globally */}
         <CartDrawer isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />
 
-      {/* Location Modal */}
-      <PincodeLocationModal
-        isOpen={showLocationModal}
-        onClose={() => setShowLocationModal(false)}
-      />
+
 
       {/* Mobile Search Modal */}
       {showSearchModal && (

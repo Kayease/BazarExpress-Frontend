@@ -30,18 +30,20 @@ import Image from 'next/image';
 interface LocationBasedProductsProps {
   categoryId?: string;
   searchQuery?: string;
+  pincode?: string | null;
 }
 
 export default function LocationBasedProducts({ 
   categoryId, 
-  searchQuery 
+  searchQuery,
+  pincode
 }: LocationBasedProductsProps) {
   const { 
     selectedLocation, 
     locationName, 
     deliveryAvailable, 
     availableWarehouses,
-    setShowLocationModal 
+    setShowLocationModal,
   } = useLocation();
   
   const { addToCart } = useAppContext();
@@ -64,23 +66,30 @@ export default function LocationBasedProducts({
 
   // Load products when location or filters change
   useEffect(() => {
-    if (selectedLocation && deliveryAvailable) {
+    // If pincode prop is given, treat as location detected
+    if ((pincode || selectedLocation) && deliveryAvailable) {
       loadProducts();
     } else {
       setProducts([]);
       setTotalProducts(0);
     }
-  }, [selectedLocation, deliveryAvailable, categoryId, currentPage, selectedWarehouse, sortBy]);
+  }, [pincode, selectedLocation, deliveryAvailable, categoryId, currentPage, selectedWarehouse, sortBy]);
 
   // Load products from API
   const loadProducts = async () => {
-    if (!selectedLocation) return;
+    // Use pincode prop if provided, else selectedLocation
+    let locationArg = selectedLocation;
+    if (pincode) {
+      // Build a minimal location object for compatibility
+      locationArg = { pincode } as any;
+    }
+    if (!locationArg) return;
 
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await getProductsByLocation(selectedLocation, {
+      const response = await getProductsByLocation(locationArg, {
         category: categoryId,
         search: localSearchQuery || searchQuery,
         page: currentPage,

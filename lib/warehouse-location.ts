@@ -198,11 +198,29 @@ export async function getPincodeFromGeolocation(): Promise<string | null> {
         return;
       }
 
-      navigator.geolocation.getCurrentPosition(resolve, reject, {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 300000 // 5 minutes
-      });
+      navigator.geolocation.getCurrentPosition(
+        resolve, 
+        (error) => {
+          let errorMessage = 'Unknown geolocation error';
+          switch (error.code) {
+            case error.PERMISSION_DENIED:
+              errorMessage = 'Location access denied by user';
+              break;
+            case error.POSITION_UNAVAILABLE:
+              errorMessage = 'Location information unavailable';
+              break;
+            case error.TIMEOUT:
+              errorMessage = 'Location request timed out';
+              break;
+          }
+          reject(new Error(errorMessage));
+        }, 
+        {
+          enableHighAccuracy: true,
+          timeout: 8000, // Reduced timeout for faster fallback
+          maximumAge: 300000 // 5 minutes
+        }
+      );
     });
 
     const { latitude, longitude } = position.coords;
@@ -213,6 +231,10 @@ export async function getPincodeFromGeolocation(): Promise<string | null> {
       `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`
     );
 
+    if (!response.ok) {
+      throw new Error(`Reverse geocoding failed: ${response.status}`);
+    }
+
     const data = await response.json();
     
     if (data && data.address) {
@@ -222,7 +244,7 @@ export async function getPincodeFromGeolocation(): Promise<string | null> {
       }
     }
 
-    return null;
+    throw new Error('No valid pincode found in location data');
   } catch (error) {
     console.error('Error getting pincode from geolocation:', error);
     return null;

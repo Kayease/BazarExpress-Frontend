@@ -14,6 +14,7 @@ import {
   type PincodeDeliveryCheck,
   type ProductsByPincode
 } from '@/lib/warehouse-location';
+import { PincodeLocationModal } from '@/components/pincode-location-modal';
 
 interface LocationContextType {
   // Location state
@@ -44,6 +45,10 @@ interface LocationContextType {
   // Delivery info
   deliveryMessage: string;
   isGlobalMode: boolean;
+  
+  // Modal management
+  showLocationModal: boolean;
+  setShowLocationModal: (show: boolean) => void;
 }
 
 const LocationContext = createContext<LocationContextType | undefined>(undefined);
@@ -57,22 +62,32 @@ export function LocationProvider({ children }: LocationProviderProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showOverlay, setShowOverlay] = useState(false);
+  const [showLocationModal, setShowLocationModal] = useState(false);
 
   // Initialize location on mount
   useEffect(() => {
     const initializeLocation = async () => {
+      // Clean up old location data that might conflict
+      localStorage.removeItem('userLocation'); // Remove old navbar location data
+      
       const savedState = getLocationState();
+      
+      console.log('LocationProvider - Initializing with saved state:', savedState);
       
       if (savedState.pincode && savedState.isLocationDetected) {
         // Validate existing pincode and refresh delivery status
+        console.log('LocationProvider - Validating existing pincode:', savedState.pincode);
         try {
           setIsLoading(true);
           const deliveryCheck = await checkPincodeDelivery(savedState.pincode);
+          
+          console.log('LocationProvider - Delivery check result:', deliveryCheck);
           
           if (deliveryCheck.success) {
             updateLocationState(deliveryCheck);
           } else {
             // Clear invalid state
+            console.log('LocationProvider - Clearing invalid state');
             clearLocationState();
             setLocationState(getLocationState());
           }
@@ -80,6 +95,42 @@ export function LocationProvider({ children }: LocationProviderProps) {
           console.error('Error validating saved location:', err);
         } finally {
           setIsLoading(false);
+        }
+      } else {
+        // No saved location - attempt automatic location detection
+        const hasAttemptedAutoDetection = localStorage.getItem('hasAttemptedAutoDetection');
+        const hasManuallyDismissedModal = sessionStorage.getItem('hasManuallyDismissedLocationModal');
+        
+        if (!hasAttemptedAutoDetection && !hasManuallyDismissedModal) {
+          // Mark that we've attempted auto-detection to avoid repeated prompts
+          localStorage.setItem('hasAttemptedAutoDetection', 'true');
+          
+          try {
+            setIsLoading(true);
+            const pincode = await getPincodeFromGeolocation();
+            
+            if (pincode) {
+              const deliveryCheck = await checkPincodeDelivery(pincode);
+              
+              if (deliveryCheck.success) {
+                updateLocationState(deliveryCheck);
+              } else {
+                // If automatic detection got a pincode but delivery check failed,
+                // show the location modal for manual entry
+                setTimeout(() => setShowLocationModal(true), 1000);
+              }
+            } else {
+              // If automatic detection failed completely,
+              // show the location modal after a short delay
+              setTimeout(() => setShowLocationModal(true), 2000);
+            }
+          } catch (err) {
+            console.error('Error with automatic location detection:', err);
+            // Show location modal as fallback after automatic detection fails
+            setTimeout(() => setShowLocationModal(true), 2000);
+          } finally {
+            setIsLoading(false);
+          }
         }
       }
     };
@@ -99,6 +150,7 @@ export function LocationProvider({ children }: LocationProviderProps) {
       isGlobalMode: deliveryCheck.mode === 'global' || !deliveryCheck.hasCustomWarehouse
     };
 
+    console.log('LocationProvider - Updating location state:', newState);
     setLocationState(newState);
     saveLocationState(newState);
     
@@ -122,6 +174,7 @@ export function LocationProvider({ children }: LocationProviderProps) {
       
       if (deliveryCheck.success) {
         updateLocationState(deliveryCheck);
+        setShowLocationModal(false); // Close modal on success
       } else {
         setError(deliveryCheck.error || 'Failed to check delivery for this pincode');
       }
@@ -142,6 +195,7 @@ export function LocationProvider({ children }: LocationProviderProps) {
       
       if (pincode) {
         await setUserPincode(pincode);
+        // Modal will be closed by setUserPincode if successful
       } else {
         setError('Could not detect your pincode. Please enter it manually.');
       }
@@ -162,6 +216,7 @@ export function LocationProvider({ children }: LocationProviderProps) {
       isGlobalMode: true
     };
     
+    console.log('LocationProvider - Updating location state:', newState);
     setLocationState(newState);
     saveLocationState(newState);
     setShowOverlay(false);
@@ -184,7 +239,10 @@ export function LocationProvider({ children }: LocationProviderProps) {
     clearLocationState();
     setLocationState(getLocationState());
     setShowOverlay(false);
+    setShowLocationModal(false);
     setError(null);
+    // Reset auto-detection flag so user can get automatic detection again
+    localStorage.removeItem('hasAttemptedAutoDetection');
   };
 
   const fetchProductsByLocation = async (options: {
@@ -248,12 +306,22 @@ export function LocationProvider({ children }: LocationProviderProps) {
     setShowOverlay,
     overlayMessage: locationState.overlayMessage,
     deliveryMessage: locationState.deliveryMessage,
-    isGlobalMode: locationState.isGlobalMode
+    isGlobalMode: locationState.isGlobalMode,
+    showLocationModal,
+    setShowLocationModal
   };
 
   return (
     <LocationContext.Provider value={contextValue}>
       {children}
+      <PincodeLocationModal
+        isOpen={showLocationModal}
+        onClose={() => {
+          setShowLocationModal(false);
+          // Mark that user manually dismissed the modal in this session
+          sessionStorage.setItem('hasManuallyDismissedLocationModal', 'true');
+        }}
+      />
     </LocationContext.Provider>
   );
 }

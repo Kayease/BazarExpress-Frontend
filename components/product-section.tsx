@@ -154,8 +154,17 @@ export default function ProductSection({
         setLoading(true);
         setError(null);
 
+        // Debug: Log location state
+        console.log('ProductSection - Location State:', {
+          isLocationDetected: locationState.isLocationDetected,
+          pincode: locationState.pincode,
+          deliveryMode: locationState.deliveryMode,
+          isGlobalMode: isGlobalMode
+        });
+
         // If location is detected and PIN is set, use location-based product fetching
-        if (locationState.isLocationDetected && locationState.pincode) {
+        // Also allow if we have a pincode even if isLocationDetected is not yet true (race condition fix)
+        if ((locationState.isLocationDetected && locationState.pincode) || locationState.pincode) {
           const locationProducts = await fetchProductsByLocation({ limit: 100 });
           
           if (locationProducts.success && locationProducts.products.length > 0) {
@@ -238,7 +247,8 @@ export default function ProductSection({
         let searchResults = [];
 
         // If location is detected and PIN is set, use location-based search
-        if (locationState.isLocationDetected && locationState.pincode) {
+        // Also allow if we have a pincode even if isLocationDetected is not yet true (race condition fix)
+        if ((locationState.isLocationDetected && locationState.pincode) || locationState.pincode) {
           const locationProducts = await fetchProductsByLocation({ 
             search: searchQuery,
             limit: 50 

@@ -152,11 +152,9 @@ export function LocationProvider({ children }: LocationProviderProps) {
       
       toast.success('Location detected successfully', { id: 'location' });
     } catch (error) {
-      console.error('Error getting current location:', error);
-      toast.error(
-        error instanceof Error ? error.message : 'Failed to get your location',
-        { id: 'location' }
-      );
+      let errMsg = error instanceof Error ? error.message : JSON.stringify(error);
+      console.error('Error getting current location:', errMsg, error);
+      toast.error(errMsg || 'Failed to get your location', { id: 'location' });
     }
   };
 
