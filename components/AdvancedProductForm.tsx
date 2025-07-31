@@ -1441,7 +1441,25 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
           <WarehouseFormModal
             open={showWarehouseModal}
             onClose={() => setShowWarehouseModal(false)}
-            warehouse={null}
+            warehouse={{
+              name: "",
+              address: "",
+              location: { lat: null, lng: null },
+              contactPhone: "",
+              email: "",
+              capacity: 0,
+              deliverySettings: {
+                isDeliveryEnabled: true,
+                disabledMessage: "",
+                deliveryPincodes: [],
+                is24x7Delivery: true,
+                deliveryDays: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+                deliveryHours: {
+                  start: "09:00",
+                  end: "18:00"
+                }
+              }
+            }}
             onSuccess={async (newWarehouse: any) => {
               setShowWarehouseModal(false);
               // Refetch warehouses and update state
@@ -1450,6 +1468,7 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
               setWarehouses(data);
               if (newWarehouse && newWarehouse._id) {
                 setProduct((prev: any) => ({ ...prev, warehouse: newWarehouse._id }));
+                toast.success('Warehouse created successfully');
               }
             }}
           />

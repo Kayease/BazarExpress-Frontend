@@ -1,6 +1,6 @@
 "use client";
 
-import { Clock, Loader2, Star, StarHalf, Info, Package, Tag, Truck, Shield, Heart, ShoppingCart, ChevronLeft, ChevronRight } from "lucide-react";
+import { Clock, Loader2, Star, StarHalf, Info, Package, Tag, Truck, Shield, Heart, ShoppingCart, ChevronLeft, ChevronRight, Globe, Store } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useEffect, useState, useRef } from "react";
 import { useAppContext } from "@/components/app-provider";
+import { useLocation } from "@/components/location-provider";
 import { getDeliveryTimeEstimate } from "@/lib/delivery";
 
 // Define interfaces for our data types
@@ -88,6 +89,9 @@ export default function ProductSection({
 
   // Get wishlist functions from context
   const { addToWishlist, isInWishlist, addToCart, updateCartItem, cartItems } = useAppContext();
+  
+  // Get location context
+  const { locationState, fetchProductsByLocation, deliveryMessage, isGlobalMode } = useLocation();
 
   // Local quantity state for product tiles
   const [quantities, setQuantities] = useState<{ [id: string]: number }>({});
@@ -188,64 +192,122 @@ export default function ProductSection({
         setLoading(true);
         setError(null);
 
-        // Fetch all categories
-        const categoriesResponse = await fetch(`${API_URL}/categories`);
-        if (!categoriesResponse.ok) {
-          throw new Error('Failed to fetch categories');
-        }
-        const categoriesData = await categoriesResponse.json();
+        // If location is detected, use location-based product fetching
+        if (locationState.isLocationDetected && locationState.pincode) {
+          const locationProducts = await fetchProductsByLocation({ limit: 100 });
+          
+          if (locationProducts.success && locationProducts.products.length > 0) {
+            // Fetch categories to organize products
+            const categoriesResponse = await fetch(`${API_URL}/categories`);
+            if (!categoriesResponse.ok) {
+              throw new Error('Failed to fetch categories');
+            }
+            const categoriesData = await categoriesResponse.json();
 
-        // Find all parent categories with showOnHome = true
-        const homeCategories = categoriesData.filter((category: Category) =>
-          category.showOnHome === true && (!category.parentId || category.parentId === "")
-        );
+            // Find all parent categories with showOnHome = true
+            const homeCategories = categoriesData.filter((category: Category) =>
+              category.showOnHome === true && (!category.parentId || category.parentId === "")
+            );
 
-        if (homeCategories.length === 0) {
-          setProductSections([]);
-          setLoading(false);
-          return;
-        }
+            // Build a map of parentId -> subcategories
+            const subcategoriesByParent: { [parentId: string]: string[] } = {};
+            categoriesData.forEach((cat: Category) => {
+              if (cat.parentId) {
+                if (!subcategoriesByParent[cat.parentId]) subcategoriesByParent[cat.parentId] = [];
+                subcategoriesByParent[cat.parentId].push(cat._id);
+              }
+            });
 
-        // Build a map of parentId -> subcategories
-        const subcategoriesByParent: { [parentId: string]: string[] } = {};
-        categoriesData.forEach((cat: Category) => {
-          if (cat.parentId) {
-            if (!subcategoriesByParent[cat.parentId]) subcategoriesByParent[cat.parentId] = [];
-            subcategoriesByParent[cat.parentId].push(cat._id);
+            // Organize location-based products by category
+            const productSections: ProductSection[] = homeCategories.map((parentCat: Category) => {
+              // Get all subcategory IDs for this parent
+              const subcatIds = subcategoriesByParent[parentCat._id] || [];
+              // Include parent category ID as well
+              const allCatIds = [parentCat._id, ...subcatIds];
+              
+              // Filter products for this category and its subcategories
+              const catProducts = locationProducts.products.filter((product: Product) => {
+                if (!product.category) return false;
+                const categoryId = typeof product.category === 'object' ? product.category._id : product.category;
+                return allCatIds.includes(categoryId);
+              });
+              
+              // Shuffle and pick up to 15 random products
+              const shuffled = [...catProducts].sort(() => 0.5 - Math.random());
+              const selectedProducts = shuffled.slice(0, 15);
+              
+              return {
+                category: parentCat,
+                products: selectedProducts
+              };
+            }).filter((section: { products: string | any[]; }) => section.products.length > 0);
+
+            setProductSections(productSections);
+          } else {
+            // No products available for this location
+            setProductSections([]);
           }
-        });
+        } else {
+          // Fallback to original logic if location not detected
+          // Fetch all categories
+          const categoriesResponse = await fetch(`${API_URL}/categories`);
+          if (!categoriesResponse.ok) {
+            throw new Error('Failed to fetch categories');
+          }
+          const categoriesData = await categoriesResponse.json();
 
-        // Fetch all active products
-        const productsResponse = await fetch(`${API_URL}/products?status=active`);
-        if (!productsResponse.ok) {
-          throw new Error('Failed to fetch products');
+          // Find all parent categories with showOnHome = true
+          const homeCategories = categoriesData.filter((category: Category) =>
+            category.showOnHome === true && (!category.parentId || category.parentId === "")
+          );
+
+          if (homeCategories.length === 0) {
+            setProductSections([]);
+            setLoading(false);
+            return;
+          }
+
+          // Build a map of parentId -> subcategories
+          const subcategoriesByParent: { [parentId: string]: string[] } = {};
+          categoriesData.forEach((cat: Category) => {
+            if (cat.parentId) {
+              if (!subcategoriesByParent[cat.parentId]) subcategoriesByParent[cat.parentId] = [];
+              subcategoriesByParent[cat.parentId].push(cat._id);
+            }
+          });
+
+          // Fetch all active products
+          const productsResponse = await fetch(`${API_URL}/products?status=active`);
+          if (!productsResponse.ok) {
+            throw new Error('Failed to fetch products');
+          }
+          let productsData = await productsResponse.json();
+
+          // For each home category, collect its own and all subcategory IDs
+          const productSections: ProductSection[] = homeCategories.map((parentCat: Category) => {
+            // Get all subcategory IDs for this parent
+            const subcatIds = subcategoriesByParent[parentCat._id] || [];
+            // Include parent category ID as well
+            const allCatIds = [parentCat._id, ...subcatIds];
+            // Filter products for this category and its subcategories
+            const catProducts = productsData.filter((product: Product) => {
+            if (!product.category) return false;
+            const categoryId = typeof product.category === 'object' ? product.category._id : product.category;
+              return allCatIds.includes(categoryId);
+          });
+            // Shuffle and pick up to 15 random products
+            const shuffled = [...catProducts].sort(() => 0.5 - Math.random());
+          const selectedProducts = shuffled.slice(0, 15);
+            return {
+              category: parentCat,
+            products: selectedProducts
+          };
+          }).filter((section: { products: string | any[]; }) => section.products.length > 0); // Only show if there are products
+
+          setProductSections(productSections);
         }
-        let productsData = await productsResponse.json();
-
-        // For each home category, collect its own and all subcategory IDs
-        const productSections: ProductSection[] = homeCategories.map((parentCat: Category) => {
-          // Get all subcategory IDs for this parent
-          const subcatIds = subcategoriesByParent[parentCat._id] || [];
-          // Include parent category ID as well
-          const allCatIds = [parentCat._id, ...subcatIds];
-          // Filter products for this category and its subcategories
-          const catProducts = productsData.filter((product: Product) => {
-          if (!product.category) return false;
-          const categoryId = typeof product.category === 'object' ? product.category._id : product.category;
-            return allCatIds.includes(categoryId);
-        });
-          // Shuffle and pick up to 15 random products
-          const shuffled = [...catProducts].sort(() => 0.5 - Math.random());
-        const selectedProducts = shuffled.slice(0, 15);
-          return {
-            category: parentCat,
-          products: selectedProducts
-        };
-        }).filter((section: { products: string | any[]; }) => section.products.length > 0); // Only show if there are products
-
-        setProductSections(productSections);
       } catch (err) {
-        console.error('Error fetching home categories:', err);
+        console.error('Error fetching products:', err);
         setError('Failed to load products. Please try again later.');
       } finally {
         setLoading(false);
@@ -253,7 +315,7 @@ export default function ProductSection({
     };
 
     fetchProducts();
-  }, [API_URL]);
+  }, [API_URL, locationState.isLocationDetected, locationState.pincode, isGlobalMode, fetchProductsByLocation]);
 
   // Filter products based on search query if provided
   useEffect(() => {
@@ -263,19 +325,32 @@ export default function ProductSection({
       try {
         setLoading(true);
 
-        // Fetch products matching the search query
-        const searchResponse = await fetch(`${API_URL}/products/search?q=${encodeURIComponent(searchQuery)}`);
-        if (!searchResponse.ok) {
-          throw new Error('Failed to search products');
-        }
+        let searchResults = [];
 
-        const searchResults = await searchResponse.json();
+        // If location is detected, use location-based search
+        if (locationState.isLocationDetected && locationState.pincode) {
+          const locationProducts = await fetchProductsByLocation({ 
+            search: searchQuery,
+            limit: 50 
+          });
+          
+          if (locationProducts.success) {
+            searchResults = locationProducts.products;
+          }
+        } else {
+          // Fallback to regular search
+          const searchResponse = await fetch(`${API_URL}/products/search?q=${encodeURIComponent(searchQuery)}`);
+          if (!searchResponse.ok) {
+            throw new Error('Failed to search products');
+          }
+          searchResults = await searchResponse.json();
+        }
 
         // Create a single section with search results
         const searchSection: ProductSection = {
           category: {
             _id: 'search',
-            name: 'Search Results',
+            name: `Search Results for "${searchQuery}"`,
             popular: false,
             showOnHome: false,
             parentId: null,
@@ -294,7 +369,7 @@ export default function ProductSection({
     };
 
     fetchSearchedProducts();
-  }, [searchQuery, API_URL]);
+  }, [searchQuery, API_URL, locationState.isLocationDetected, locationState.pincode, fetchProductsByLocation]);
 
   const handleWishlistClick = (product: Product) => {
     // Implementation of add to wishlist
@@ -422,8 +497,26 @@ export default function ProductSection({
                               {/* Delivery Time Badge */}
                               <div className="text-[10px] text-gray-500 flex items-center gap-1 mb-2" style={{ fontFamily: 'Sinkin Sans, sans-serif' }}>
                                 <img src="/timer-logo.avif" alt="eta" className="w-3 h-3" />
-                                <span className="uppercase font-medium">{defaultDeliveryTime}</span>
-                      </div>
+                                <span className="uppercase font-medium">
+                                  {locationState.isLocationDetected ? deliveryMessage : defaultDeliveryTime}
+                                </span>
+                              </div>
+                              {/* Delivery Mode Indicator */}
+                              {locationState.isLocationDetected && (
+                                <div className="text-[9px] text-gray-400 flex items-center gap-1 mb-1" style={{ fontFamily: 'Sinkin Sans, sans-serif' }}>
+                                  {isGlobalMode ? (
+                                    <>
+                                      <Globe className="w-2.5 h-2.5" />
+                                      <span>Global Store</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Store className="w-2.5 h-2.5" />
+                                      <span>Local Store</span>
+                                    </>
+                                  )}
+                                </div>
+                              )}
                               {/* Product Name */}
                               <div className="text-[12px] font-bold text-gray-900 line-clamp-2 mb-4 leading-snug" style={{ fontFamily: 'Sinkin Sans, sans-serif' }}>
                                 {product.name}

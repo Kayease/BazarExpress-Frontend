@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useLocation } from "@/components/location-provider";
 
 interface Category {
   _id: string;
@@ -18,6 +19,9 @@ export default function CategorySection() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  
+  // Get location context for pincode-based filtering
+  const { locationState } = useLocation();
 
   const API = process.env.NEXT_PUBLIC_API_URL;
 
@@ -85,9 +89,22 @@ export default function CategorySection() {
             {categories.map((category) => (
               <button
                 key={category._id}
-                onClick={() =>
-                  router.push(`/search?category=${category._id}`)
-                }
+                onClick={() => {
+                  // Build URL with location context for pincode-based filtering
+                  let url = `/search?category=${category._id}`;
+                  
+                  // Add pincode parameter if location is detected
+                  if (locationState.isLocationDetected && locationState.pincode) {
+                    url += `&pincode=${locationState.pincode}`;
+                  }
+                  
+                  // Add delivery mode for proper warehouse filtering
+                  if (locationState.isGlobalMode) {
+                    url += `&mode=global`;
+                  }
+                  
+                  router.push(url);
+                }}
                 className="flex flex-col items-center"
               >
                 <div className="w-[150px] h-[150px] overflow-hidden">

@@ -23,11 +23,12 @@ interface Warehouse {
   capacity: number;
   status: 'active' | 'inactive';
   deliverySettings?: {
-    maxDeliveryRadius: number;
-    freeDeliveryRadius: number;
     isDeliveryEnabled: boolean;
+    disabledMessage?: string;
+    deliveryPincodes: string[];
+    is24x7Delivery: boolean;
     deliveryDays: string[];
-    deliveryHours: {
+    deliveryHours?: {
       start: string;
       end: string;
     };
@@ -42,14 +43,42 @@ export default function AdminWarehouse() {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<{
+    name: string;
+    address: string;
+    location: { lat: number | null; lng: number | null };
+    contactPhone: string;
+    email: string;
+    capacity: number;
+    deliverySettings: {
+      isDeliveryEnabled: boolean;
+      disabledMessage: string;
+      deliveryPincodes: string[];
+      is24x7Delivery: boolean;
+      deliveryDays: string[];
+      deliveryHours: {
+        start: string;
+        end: string;
+      };
+    };
+  }>({
     name: '',
     address: '',
     location: { lat: null, lng: null },
     contactPhone: '',
     email: '',
     capacity: 0,
-    status: 'active',
+    deliverySettings: {
+      isDeliveryEnabled: true,
+      disabledMessage: '',
+      deliveryPincodes: [],
+      is24x7Delivery: true,
+      deliveryDays: [],
+      deliveryHours: {
+        start: '09:00',
+        end: '18:00'
+      }
+    }
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -91,11 +120,21 @@ export default function AdminWarehouse() {
       contactPhone: '',
       email: '',
       capacity: 0,
-      status: 'active',
+      deliverySettings: {
+        isDeliveryEnabled: true,
+        disabledMessage: '',
+        deliveryPincodes: [],
+        is24x7Delivery: true,
+        deliveryDays: [],
+        deliveryHours: {
+          start: '09:00',
+          end: '18:00'
+        }
+      }
     });
     setShowModal(true);
   };
-  const openEdit = (w: any) => {
+  const openEdit = (w: Warehouse) => {
     setEditing(w);
     setForm({
       name: w.name,
@@ -104,7 +143,17 @@ export default function AdminWarehouse() {
       contactPhone: w.contactPhone,
       email: w.email,
       capacity: w.capacity,
-      status: w.status,
+      deliverySettings: {
+        isDeliveryEnabled: w.deliverySettings?.isDeliveryEnabled ?? true,
+        disabledMessage: w.deliverySettings?.disabledMessage ?? '',
+        deliveryPincodes: w.deliverySettings?.deliveryPincodes ?? [],
+        is24x7Delivery: w.deliverySettings?.is24x7Delivery ?? true,
+        deliveryDays: w.deliverySettings?.deliveryDays ?? [],
+        deliveryHours: {
+          start: w.deliverySettings?.deliveryHours?.start ?? '09:00',
+          end: w.deliverySettings?.deliveryHours?.end ?? '18:00'
+        }
+      }
     });
     setShowModal(true);
   };
@@ -170,14 +219,19 @@ export default function AdminWarehouse() {
     setDeleting(true);
     try {
       const res = await fetch(`${API_URL}/warehouses/${id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Failed to delete warehouse');
+      if (!res.ok) {
+        const error = await res.json();
+        toast.dismiss();
+        toast.error(error.error || 'Failed to delete warehouse');
+        throw new Error(error.error || 'Failed to delete warehouse');
+      }
       setWarehouses(warehouses.filter(w => w._id !== id));
       toast.dismiss();
       toast.success('Warehouse deleted');
       setConfirmDeleteId(null);
     } catch (err) {
-      toast.dismiss();
-      toast.error('Error deleting warehouse');
+      // Error is already shown by the toast above
+      console.error('Error deleting warehouse:', err);
     } finally {
       setDeleting(false);
     }
@@ -219,8 +273,8 @@ export default function AdminWarehouse() {
                 <th className="py-2 px-3 font-semibold text-sm">Name</th>
                 <th className="py-2 px-3 font-semibold text-sm">Address</th>
                 <th className="py-2 px-3 font-semibold text-sm">Contact Phone</th>
-                <th className="py-2 px-3 font-semibold text-sm">Delivery Radius</th>
-                <th className="py-2 px-3 font-semibold text-sm">Status</th>
+                <th className="py-2 px-3 font-semibold text-sm">Delivery Area</th>
+                <th className="py-2 px-3 font-semibold text-sm">Delivery Status</th>
                 <th className="py-2 px-3 font-semibold text-sm text-center">Action</th>
               </tr>
             </thead>
@@ -250,11 +304,22 @@ export default function AdminWarehouse() {
                   <td className="py-2 px-3 align-middle max-w-xs whitespace-nowrap text-xs text-gray-700 truncate">{w.address}</td>
                   <td className="py-2 px-3 align-middle text-xs text-gray-700">{w.contactPhone}</td>
                   <td className="py-2 px-3 align-middle text-xs text-gray-700">
-                    {(w as any).deliverySettings?.maxDeliveryRadius ? `${(w as any).deliverySettings.maxDeliveryRadius} km` : '50 km'}
-                    <br />
-                    <span className="text-green-600">Free: {(w as any).deliverySettings?.freeDeliveryRadius || 3} km</span>
+                    {w.deliverySettings?.is24x7Delivery ? 
+                      'All pincodes (Global)' : 
+                      (w.deliverySettings?.deliveryPincodes?.length ? 
+                        `${w.deliverySettings.deliveryPincodes.length} pincodes` : 
+                        'No pincodes set'
+                      )
+                    }
                   </td>
-                  <td className={`py-2 px-3 align-middle text-xs font-semibold ${w.status === 'active' ? 'text-green-600' : 'text-gray-400'}`}>{capitalizeFirstLetter(w.status)}</td>
+                  <td className={`py-2 px-3 align-middle text-xs font-semibold ${
+                    w.deliverySettings?.isDeliveryEnabled ? 'text-green-600' : 'text-red-500'
+                  }`}>
+                    {w.deliverySettings?.isDeliveryEnabled ? 
+                      (w.deliverySettings.is24x7Delivery ? '24/7 Global Store' : 'Custom Hours') : 
+                      'Disabled'
+                    }
+                  </td>
                   <td className="py-2 px-3 align-middle text-center">
                     <div className="flex items-center justify-center gap-2">
                       <button

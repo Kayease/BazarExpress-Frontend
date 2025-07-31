@@ -1,6 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useLocation } from "@/components/location-provider";
 
 interface SearchBarProps {
   initialValue?: string;
@@ -17,13 +18,29 @@ export default function SearchBar({
 }: SearchBarProps) {
   const [value, setValue] = useState(initialValue);
   const router = useRouter();
+  
+  // Get location context for pincode-based filtering
+  const { locationState } = useLocation();
 
   const handleSearch = (query: string) => {
     if (query.trim()) {
       if (onSearch) {
         onSearch(query.trim());
       } else {
-        router.push(`/search?q=${encodeURIComponent(query.trim())}`);
+        // Build URL with location context for pincode-based filtering
+        let url = `/search?q=${encodeURIComponent(query.trim())}`;
+        
+        // Add pincode parameter if location is detected
+        if (locationState.isLocationDetected && locationState.pincode) {
+          url += `&pincode=${locationState.pincode}`;
+        }
+        
+        // Add delivery mode for proper warehouse filtering
+        if (locationState.isGlobalMode) {
+          url += `&mode=global`;
+        }
+        
+        router.push(url);
       }
     }
   };

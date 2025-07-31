@@ -8,6 +8,8 @@ import { Slider } from "@/components/ui/slider";
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 import { Apple, Milk, Cookie, Coffee, Drumstick, Carrot, Fish, Pill, Home, Baby, Smartphone, FilterIcon, XIcon } from 'lucide-react';
 import Link from "next/link";
+import { useLocation } from "@/components/location-provider";
+import LocationStatusIndicator from "@/components/location-status-indicator";
 
 const DIETARY_OPTIONS = [
   "Organic",
@@ -63,7 +65,12 @@ export default function SearchPage() {
   const [categories, setCategories] = useState<any[]>([]);
   const categoryParam = params.get("category") || "";
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
-  const API_URL = process.env.NEXT_PUBLIC_API_URL 
+  const API_URL = process.env.NEXT_PUBLIC_API_URL;
+  
+  // Get location context for pincode-based filtering
+  const { locationState, fetchProductsByLocation, isGlobalMode } = useLocation();
+  const pincodeParam = params.get("pincode") || "";
+  const modeParam = params.get("mode") || ""; 
 
   // Fetch main/parent categories from backend (always, for both sidebar and main content)
   useEffect(() => {
@@ -113,44 +120,92 @@ export default function SearchPage() {
     return sorted;
   }, [filteredProducts, sort]);
 
-  // Search and category effect
+  // Search and category effect with location-based filtering
   useEffect(() => {
-    // If no search and no category, fetch all products
-    if (!q && !categoryParam) {
+    const fetchLocationBasedProducts = async () => {
       setLoading(true);
-      axios.get(`${API_URL}/products`).then((res) => {
-        setResults({ products: res.data, categories: [] });
+      
+      try {
+        // Determine which pincode to use (URL param or location state)
+        const activePincode = pincodeParam || locationState.pincode;
+        const activeMode = modeParam || (locationState.isGlobalMode ? 'global' : 'auto');
+        
+        // If location is detected or pincode is provided, use location-based fetching
+        if (activePincode && locationState.isLocationDetected) {
+          const options: any = {
+            page: 1,
+            limit: 100
+          };
+          
+          // Add search query if provided
+          if (q) {
+            options.search = q;
+          }
+          
+          // Add category filter if provided
+          if (categoryParam) {
+            options.category = categoryParam;
+          }
+          
+          // Add mode if specified
+          if (activeMode === 'global') {
+            options.mode = 'global';
+          }
+          
+          const locationProducts = await fetchProductsByLocation(options);
+          
+          if (locationProducts.success) {
+            setResults({ 
+              products: locationProducts.products, 
+              categories: [] 
+            });
+          } else {
+            // Fallback to regular API if location-based fails
+            await fetchRegularProducts();
+          }
+        } else {
+          // Fallback to regular API
+          await fetchRegularProducts();
+        }
+      } catch (error) {
+        console.error('Error fetching location-based products:', error);
+        await fetchRegularProducts();
+      } finally {
         setLoading(false);
-      }).catch(err => {
-        console.error('Error fetching products:', err);
-        setLoading(false);
-      });
-      return;
-    }
+      }
+    };
+    
+    const fetchRegularProducts = async () => {
+      try {
+        // If no search and no category, fetch all products
+        if (!q && !categoryParam) {
+          const res = await axios.get(`${API_URL}/products`);
+          setResults({ products: res.data, categories: [] });
+          return;
+        }
 
-    setLoading(true);
-    // If only category is selected, use the products endpoint with category filter
-    if (!q && categoryParam) {
-      axios.get(`${API_URL}/products?category=${categoryParam}`).then((res) => {
-        setResults({ products: res.data, categories: [] });
-        setLoading(false);
-      }).catch(err => {
-        console.error('Error fetching products by category:', err);
-        setLoading(false);
-      });
-      return;
-    }
+        // If only category is selected, use the products endpoint with category filter
+        if (!q && categoryParam) {
+          const res = await axios.get(`${API_URL}/products?category=${categoryParam}`);
+          setResults({ products: res.data, categories: [] });
+          return;
+        }
 
-    // If search query exists, use search endpoint
-    if (q.length > 0) {
-      let url = `/search?q=${encodeURIComponent(q)}`;
-      if (categoryParam) url += `&category=${encodeURIComponent(categoryParam)}`;
-      axios.get(url).then((res) => {
-        setResults(res.data);
-        setLoading(false);
-      });
-    }
-  }, [q, categoryParam]);
+        // If search query exists, use search endpoint
+        if (q.length > 0) {
+          let url = `/search?q=${encodeURIComponent(q)}`;
+          if (categoryParam) url += `&category=${encodeURIComponent(categoryParam)}`;
+          const res = await axios.get(url);
+          setResults(res.data);
+        }
+      } catch (err) {
+        console.error('Error fetching regular products:', err);
+        setResults({ products: [], categories: [] });
+      }
+    };
+
+    fetchLocationBasedProducts();
+  }, [q, categoryParam, pincodeParam, modeParam, locationState.pincode, locationState.isLocationDetected, fetchProductsByLocation]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -203,7 +258,20 @@ export default function SearchPage() {
                           : "hover:bg-gray-50"
                       }`}
                       onClick={() => {
-                        router.push(`/search?category=${cat._id}`);
+                        // Build URL with location context for pincode-based filtering
+                        let url = `/search?category=${cat._id}`;
+                        
+                        // Add pincode parameter if location is detected
+                        if (locationState.isLocationDetected && locationState.pincode) {
+                          url += `&pincode=${locationState.pincode}`;
+                        }
+                        
+                        // Add delivery mode for proper warehouse filtering
+                        if (isGlobalMode) {
+                          url += `&mode=global`;
+                        }
+                        
+                        router.push(url);
                         setIsMobileFilterOpen(false);
                       }}
                     >
@@ -297,7 +365,21 @@ export default function SearchPage() {
                     : "hover:bg-gray-50 text-gray-700"}`}
                   onClick={() => {
                     setLoading(true);
-                    router.push(`/search`);
+                    
+                    // Build URL with location context for pincode-based filtering
+                    let url = `/search`;
+                    
+                    // Add pincode parameter if location is detected
+                    if (locationState.isLocationDetected && locationState.pincode) {
+                      url += `?pincode=${locationState.pincode}`;
+                    }
+                    
+                    // Add delivery mode for proper warehouse filtering
+                    if (isGlobalMode) {
+                      url += locationState.isLocationDetected && locationState.pincode ? `&mode=global` : `?mode=global`;
+                    }
+                    
+                    router.push(url);
                   }}
                 >
                   All Categories
@@ -310,7 +392,21 @@ export default function SearchPage() {
                       : "hover:bg-gray-50 text-gray-700"}`}
                     onClick={() => {
                       setLoading(true);
-                      router.push(`/search?category=${cat._id}`);
+                      
+                      // Build URL with location context for pincode-based filtering
+                      let url = `/search?category=${cat._id}`;
+                      
+                      // Add pincode parameter if location is detected
+                      if (locationState.isLocationDetected && locationState.pincode) {
+                        url += `&pincode=${locationState.pincode}`;
+                      }
+                      
+                      // Add delivery mode for proper warehouse filtering
+                      if (isGlobalMode) {
+                        url += `&mode=global`;
+                      }
+                      
+                      router.push(url);
                     }}
                   >
                     {cat.name}
@@ -371,6 +467,8 @@ export default function SearchPage() {
 
           {/* Main Content */}
           <main className="flex-1">
+            {/* Location Status Indicator */}
+            <LocationStatusIndicator />
             {/* Category Header */}
             {(categoryParam || q) && (
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">

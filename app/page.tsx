@@ -5,6 +5,7 @@ import HeroSection from "@/components/hero-section"
 import CategorySection from "@/components/category-section"
 import ProductSection from "@/components/product-section"
 import CartDrawer from "@/components/cart-drawer"
+import LocationStatusIndicator from "@/components/location-status-indicator"
 import { useToast } from "@/hooks/use-toast"
 
 export default function Home() {
@@ -31,6 +32,9 @@ export default function Home() {
     <div className="min-h-screen bg-surface-primary">
       <main>
         <HeroSection />
+        <div className="max-w-7xl mx-auto px-4">
+          <LocationStatusIndicator />
+        </div>
         <CategorySection />
         <ProductSection onAddToCart={handleAddToCart} searchQuery={searchQuery} />
       </main>

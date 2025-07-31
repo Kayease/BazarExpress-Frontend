@@ -12,11 +12,11 @@ interface Warehouse {
   contactPhone: string;
   email: string;
   capacity: number;
-  status: "active" | "inactive";
-  deliverySettings?: {
-    maxDeliveryRadius: number;
-    freeDeliveryRadius: number;
+  deliverySettings: {
     isDeliveryEnabled: boolean;
+    disabledMessage: string;
+    deliveryPincodes: string[];
+    is24x7Delivery: boolean;
     deliveryDays: string[];
     deliveryHours: {
       start: string;
@@ -39,22 +39,18 @@ const defaultWarehouse: Warehouse = {
   contactPhone: "",
   email: "",
   capacity: 0,
-  status: "active",
   deliverySettings: {
-    maxDeliveryRadius: 50,
-    freeDeliveryRadius: 3,
     isDeliveryEnabled: true,
-    deliveryDays: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'],
+    disabledMessage: '',
+    deliveryPincodes: [],
+    is24x7Delivery: true,
+    deliveryDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
     deliveryHours: {
       start: '09:00',
-      end: '21:00'
+      end: '18:00'
     }
   }
 };
-
-const DAYS_OF_WEEK = [
-  'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'
-];
 
 export default function WarehouseFormModal({ open, onClose, warehouse, onSuccess }: WarehouseFormModalProps) {
   const user = useAppSelector((state) => state.auth.user);
@@ -62,6 +58,7 @@ export default function WarehouseFormModal({ open, onClose, warehouse, onSuccess
   const [loading, setLoading] = useState(false);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number } | null>(null);
+  const [pincodeInput, setPincodeInput] = useState('');
   const [marker, setMarker] = useState<any>(null);
   const [map, setMap] = useState<any>(null);
   const [autocomplete, setAutocomplete] = useState<any>(null);
@@ -70,16 +67,13 @@ export default function WarehouseFormModal({ open, onClose, warehouse, onSuccess
   const inputRef = useRef<HTMLInputElement>(null);
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
-  // Load Google Maps script
   useEffect(() => {
     if (!open) return;
-    // Only add the script if it hasn't been added yet
     if (window.google && window.google.maps) {
       setMapLoaded(true);
       return;
     }
     if (document.getElementById('google-maps-script')) {
-      // Script is already in the DOM, wait for it to load
       const checkLoaded = setInterval(() => {
         if (window.google && window.google.maps) {
           setMapLoaded(true);
@@ -94,10 +88,8 @@ export default function WarehouseFormModal({ open, onClose, warehouse, onSuccess
     script.async = true;
     script.onload = () => setMapLoaded(true);
     document.body.appendChild(script);
-    // Do not remove the script on unmount
   }, [open]);
 
-  // Fetch current location on open
   useEffect(() => {
     if (!open || !mapLoaded) return;
     if (warehouse && warehouse.location && warehouse.location.lat && warehouse.location.lng) {
@@ -118,7 +110,6 @@ export default function WarehouseFormModal({ open, onClose, warehouse, onSuccess
     }
   }, [open, mapLoaded, warehouse]);
 
-  // Initialize map and marker
   useEffect(() => {
     if (!open || !mapLoaded || !mapCenter || !mapRef.current) return;
     const gMap = new window.google.maps.Map(mapRef.current, {
@@ -136,21 +127,21 @@ export default function WarehouseFormModal({ open, onClose, warehouse, onSuccess
       draggable: true,
     });
     setMarker(gMarker);
-    // Update address on marker drag
+
     gMarker.addListener("dragend", () => {
       const pos = gMarker.getPosition();
       if (pos) {
         fetchAddress(pos.lat(), pos.lng());
       }
     });
-    // Update form on map click
+
     gMap.addListener("click", (e: any) => {
       gMarker.setPosition(e.latLng);
       fetchAddress(e.latLng.lat(), e.latLng.lng());
     });
-    // Set initial address
+
     fetchAddress(mapCenter.lat, mapCenter.lng);
-    // Autocomplete
+
     if (inputRef.current) {
       const ac = new window.google.maps.places.Autocomplete(inputRef.current);
       ac.bindTo("bounds", gMap);
@@ -166,7 +157,6 @@ export default function WarehouseFormModal({ open, onClose, warehouse, onSuccess
     }
   }, [open, mapLoaded, mapCenter]);
 
-  // Fetch address from lat/lng
   function fetchAddress(lat: number, lng: number) {
     fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}`)
       .then(res => res.json())
@@ -176,8 +166,6 @@ export default function WarehouseFormModal({ open, onClose, warehouse, onSuccess
         }
       });
   }
-
-  // Use My Location handler
   function handleUseMyLocation() {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
@@ -195,9 +183,7 @@ export default function WarehouseFormModal({ open, onClose, warehouse, onSuccess
     );
   }
 
-  if (!open) return null;
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
     setForm(f => ({ ...f, [name]: type === "number" ? Number(value) : value }));
   };
@@ -206,7 +192,7 @@ export default function WarehouseFormModal({ open, onClose, warehouse, onSuccess
     setForm(f => ({
       ...f,
       deliverySettings: {
-        ...f.deliverySettings!,
+        ...f.deliverySettings,
         [field]: value
       }
     }));
@@ -216,9 +202,9 @@ export default function WarehouseFormModal({ open, onClose, warehouse, onSuccess
     setForm(f => ({
       ...f,
       deliverySettings: {
-        ...f.deliverySettings!,
+        ...f.deliverySettings,
         deliveryHours: {
-          ...f.deliverySettings!.deliveryHours,
+          ...f.deliverySettings.deliveryHours,
           [field]: value
         }
       }
@@ -229,16 +215,58 @@ export default function WarehouseFormModal({ open, onClose, warehouse, onSuccess
     setForm(f => ({
       ...f,
       deliverySettings: {
-        ...f.deliverySettings!,
+        ...f.deliverySettings,
         deliveryDays: checked 
-          ? [...f.deliverySettings!.deliveryDays, day]
-          : f.deliverySettings!.deliveryDays.filter(d => d !== day)
+          ? [...f.deliverySettings.deliveryDays, day]
+          : f.deliverySettings.deliveryDays.filter(d => d !== day)
+      }
+    }));
+  };
+
+  const handleAddPincode = () => {
+    if (
+      pincodeInput.length === 6 &&
+      /^\d{6}$/.test(pincodeInput) &&
+      !form.deliverySettings.deliveryPincodes.includes(pincodeInput)
+    ) {
+      setForm(f => ({
+        ...f,
+        deliverySettings: {
+          ...f.deliverySettings,
+          deliveryPincodes: [...f.deliverySettings.deliveryPincodes, pincodeInput]
+        }
+      }));
+      setPincodeInput('');
+    }
+  };
+
+  const handleRemovePincode = (pincode: string) => {
+    setForm(f => ({
+      ...f,
+      deliverySettings: {
+        ...f.deliverySettings,
+        deliveryPincodes: f.deliverySettings.deliveryPincodes.filter(p => p !== pincode)
       }
     }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Require at least one pincode if delivery is enabled AND not 24x7 (custom hours)
+    if (form.deliverySettings.isDeliveryEnabled && !form.deliverySettings.is24x7Delivery && form.deliverySettings.deliveryPincodes.length === 0) {
+      toast.error("Please add at least one delivery pincode for custom hours warehouse.");
+      return;
+    }
+    // Require disabled message if delivery is disabled
+    if (!form.deliverySettings.isDeliveryEnabled && !form.deliverySettings.disabledMessage.trim()) {
+      toast.error("Please enter a disabled message.");
+      return;
+    }
+    // Require at least one delivery day if not 24x7
+    if (!form.deliverySettings.is24x7Delivery && form.deliverySettings.deliveryDays.length === 0) {
+      toast.error("Please select at least one delivery day.");
+      return;
+    }
     setLoading(true);
     try {
       let method = warehouse && warehouse._id ? "PUT" : "POST";
@@ -246,6 +274,10 @@ export default function WarehouseFormModal({ open, onClose, warehouse, onSuccess
       let payload = { ...form };
       if (method === "POST" && user && user.id) {
         payload = { ...payload, userId: user.id } as any;
+      }
+      // Remove status attribute if present
+      if ('status' in payload) {
+        delete (payload as any).status;
       }
       const res = await fetch(url, {
         method,
@@ -263,6 +295,8 @@ export default function WarehouseFormModal({ open, onClose, warehouse, onSuccess
       setLoading(false);
     }
   };
+
+  if (!open) return null;
 
   return ReactDOM.createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
@@ -355,7 +389,7 @@ export default function WarehouseFormModal({ open, onClose, warehouse, onSuccess
                     placeholder="Full Address *"
                     name="address"
                     value={form.address}
-                    onChange={handleChange as any}
+                    onChange={handleChange}
                     required
                   />
                   <div className="grid grid-cols-2 gap-3">
@@ -376,7 +410,7 @@ export default function WarehouseFormModal({ open, onClose, warehouse, onSuccess
                       onChange={handleChange}
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div>
                     <input
                       type="number"
                       className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
@@ -387,15 +421,6 @@ export default function WarehouseFormModal({ open, onClose, warehouse, onSuccess
                       min={0}
                       required
                     />
-                    <select
-                      className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                      name="status"
-                      value={form.status}
-                      onChange={handleChange}
-                    >
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                    </select>
                   </div>
                   {form.location.lat && form.location.lng && (
                     <div className="bg-gray-50 p-3 rounded-lg">
@@ -419,85 +444,137 @@ export default function WarehouseFormModal({ open, onClose, warehouse, onSuccess
                       <input
                         type="checkbox"
                         className="sr-only peer"
-                        checked={form.deliverySettings?.isDeliveryEnabled}
+                        checked={form.deliverySettings.isDeliveryEnabled}
                         onChange={(e) => handleDeliverySettingChange('isDeliveryEnabled', e.target.checked)}
                       />
                       <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-brand-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-primary"></div>
                     </label>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  {!form.deliverySettings.isDeliveryEnabled && (
                     <div>
-                      <label className="block text-sm font-medium mb-1">Max Delivery Radius (km)</label>
+                      <label className="block text-sm font-medium mb-1">Disabled Message</label>
                       <input
-                        type="number"
+                        type="text"
                         className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                        placeholder="50"
-                        value={form.deliverySettings?.maxDeliveryRadius || ''}
-                        onChange={(e) => handleDeliverySettingChange('maxDeliveryRadius', Number(e.target.value))}
-                        min={0}
+                        placeholder="Enter message to display when delivery is disabled"
+                        value={form.deliverySettings.disabledMessage}
+                        onChange={(e) => handleDeliverySettingChange('disabledMessage', e.target.value)}
                       />
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Free Delivery Radius (km)</label>
-                      <input
-                        type="number"
-                        className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                        placeholder="3"
-                        value={form.deliverySettings?.freeDeliveryRadius || ''}
-                        onChange={(e) => handleDeliverySettingChange('freeDeliveryRadius', Number(e.target.value))}
-                        min={0}
-                      />
-                    </div>
-                  </div>
+                  )}
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Delivery Start Time</label>
-                      <input
-                        type="time"
-                        className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                        value={form.deliverySettings?.deliveryHours.start || '09:00'}
-                        onChange={(e) => handleDeliveryHoursChange('start', e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Delivery End Time</label>
-                      <input
-                        type="time"
-                        className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                        value={form.deliverySettings?.deliveryHours.end || '21:00'}
-                        onChange={(e) => handleDeliveryHoursChange('end', e.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Delivery Days</label>
-                    <div className="grid grid-cols-4 gap-2">
-                      {DAYS_OF_WEEK.map((day) => (
-                        <label key={day} className="flex items-center space-x-2 text-sm">
+                  {form.deliverySettings.isDeliveryEnabled && (
+                    <>
+                      <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div>
+                          <label className="font-medium text-sm">24/7 Delivery (Global Store)</label>
+                          <p className="text-xs text-gray-500">If enabled, this warehouse can deliver to any pincode. If disabled, you must specify delivery pincodes.</p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
                           <input
                             type="checkbox"
-                            className="rounded border-gray-300 text-brand-primary focus:ring-brand-primary"
-                            checked={form.deliverySettings?.deliveryDays.includes(day)}
-                            onChange={(e) => handleDeliveryDaysChange(day, e.target.checked)}
+                            className="sr-only peer"
+                            checked={form.deliverySettings.is24x7Delivery}
+                            onChange={(e) => handleDeliverySettingChange('is24x7Delivery', e.target.checked)}
                           />
-                          <span className="capitalize">{day.slice(0, 3)}</span>
+                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-brand-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-primary"></div>
                         </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="bg-blue-50 p-3 rounded-lg">
-                    <div className="flex items-start gap-2">
-                      <Clock className="w-4 h-4 text-blue-600 mt-0.5" />
-                      <div className="text-sm text-blue-800">
-                        <p className="font-medium">Delivery Coverage</p>
-                        <p>This warehouse can deliver within {form.deliverySettings?.maxDeliveryRadius || 50} km radius. Free delivery is available within {form.deliverySettings?.freeDeliveryRadius || 3} km.</p>
                       </div>
-                    </div>
-                  </div>
+
+                      {!form.deliverySettings.is24x7Delivery && (
+                        <div>
+                          <label className="block text-sm font-medium mb-1">Delivery Pincodes (Required for Custom Hours)</label>
+                          <div className="space-y-2">
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                maxLength={6}
+                                pattern="\d{6}"
+                                className="flex-1 border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                                placeholder="Enter 6-digit pincode"
+                                value={pincodeInput}
+                                onChange={(e) => setPincodeInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleAddPincode();
+                                  }
+                                }}
+                              />
+                              <button
+                                type="button"
+                                onClick={handleAddPincode}
+                                className="px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-primary-dark"
+                                disabled={
+                                  pincodeInput.length !== 6 ||
+                                  form.deliverySettings.deliveryPincodes.includes(pincodeInput)
+                                }
+                              >
+                                Add
+                              </button>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {form.deliverySettings.deliveryPincodes.map((pincode) => (
+                                <div key={pincode} className="flex items-center gap-1 bg-gray-100 px-3 py-1 rounded-full">
+                                  <span className="text-sm">{pincode}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemovePincode(pincode)}
+                                    className="text-red-500 hover:text-red-700"
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {!form.deliverySettings.is24x7Delivery && (
+                        <>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-sm font-medium mb-1">Delivery Start Time</label>
+                              <input
+                                type="time"
+                                className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                                value={form.deliverySettings.deliveryHours.start}
+                                onChange={(e) => handleDeliveryHoursChange('start', e.target.value)}
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium mb-1">Delivery End Time</label>
+                              <input
+                                type="time"
+                                className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                                value={form.deliverySettings.deliveryHours.end}
+                                onChange={(e) => handleDeliveryHoursChange('end', e.target.value)}
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Delivery Days</label>
+                            <div className="grid grid-cols-4 gap-2">
+                              {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day) => (
+                                <label key={day} className="flex items-center space-x-2 text-sm">
+                                  <input
+                                    type="checkbox"
+                                    className="rounded border-gray-300 text-brand-primary focus:ring-brand-primary"
+                                    checked={form.deliverySettings.deliveryDays.includes(day)}
+                                    onChange={(e) => handleDeliveryDaysChange(day, e.target.checked)}
+                                  />
+                                  <span>{day.slice(0, 3)}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </>
+                  )}
                 </div>
               )}
 
@@ -526,4 +603,4 @@ export default function WarehouseFormModal({ open, onClose, warehouse, onSuccess
     </div>,
     typeof window !== 'undefined' ? document.body : (null as any)
   );
-} 
+}

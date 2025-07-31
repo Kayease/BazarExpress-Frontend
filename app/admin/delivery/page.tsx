@@ -7,22 +7,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import toast from "react-hot-toast"
-import Link from "next/link"
-import { 
-  Truck, 
-  MapPin, 
-  DollarSign, 
-  Settings, 
-  Save, 
+import {
+  Truck,
+  MapPin,
+  Settings,
+  Save,
   RefreshCw,
   Info,
   Calculator,
-  CreditCard
+  CreditCard,
+  IndianRupee
 } from "lucide-react"
 
 // Types
@@ -34,9 +32,7 @@ interface DeliverySettings {
   minimumDeliveryCharge: number
   maximumDeliveryCharge: number
   perKmCharge: number
-  codAvailable: boolean
-
-  calculationMethod: 'haversine' | 'straight_line'
+  codExtraCharges: boolean
   isActive?: boolean
   createdAt?: string
   updatedAt?: string
@@ -65,11 +61,62 @@ export default function DeliveryManagementPage() {
     minimumDeliveryCharge: 10,
     maximumDeliveryCharge: 100,
     perKmCharge: 5,
-    codAvailable: true,
-
-    calculationMethod: 'haversine'
+    codExtraCharges: false,
   })
   const [errors, setErrors] = useState<{ [key: string]: string }>({})
+
+  // Calculate delivery charge based on distance and order amount
+  const calculateDeliveryCharge = React.useCallback((distance: number, orderAmount: number) => {
+    if (!distance || !orderAmount) {
+      updateCalculatorUI(0, 0);
+      return;
+    }
+
+    // Check for free delivery based on order amount
+    if (orderAmount >= formData.freeDeliveryMinAmount && distance <= formData.freeDeliveryRadius) {
+      updateCalculatorUI(0, 0, true);
+      return;
+    }
+
+    // Calculate distance charge
+    let distanceCharge = 0;
+    if (distance > formData.freeDeliveryRadius) {
+      // Only charge for distance beyond free delivery radius
+      const chargableDistance = distance - formData.freeDeliveryRadius;
+      distanceCharge = chargableDistance * formData.perKmCharge;
+    }
+
+    // Calculate base total charge
+    let totalCharge = formData.baseDeliveryCharge + distanceCharge;
+
+    // Apply min/max limits
+    totalCharge = Math.max(formData.minimumDeliveryCharge, totalCharge);
+    totalCharge = Math.min(formData.maximumDeliveryCharge, totalCharge);
+
+    updateCalculatorUI(distanceCharge, totalCharge);
+  }, [formData]); // Add formData as dependency
+
+  // Update calculator UI elements
+  const updateCalculatorUI = (distanceCharge: number, totalCharge: number, isFreeDelivery = false) => {
+    const distanceChargeElement = document.getElementById('distanceCharge');
+    const totalChargeElement = document.getElementById('totalCharge');
+    const freeDeliveryMessage = document.getElementById('freeDeliveryMessage');
+    
+    // If not free delivery and COD extra charges are enabled, add to total
+    if (!isFreeDelivery && formData.codExtraCharges) {
+      totalCharge += 20; // Add COD extra charge to the total
+    }
+
+    if (distanceChargeElement) {
+      distanceChargeElement.textContent = `₹${distanceCharge.toFixed(2)}`;
+    }
+    if (totalChargeElement) {
+      totalChargeElement.textContent = `₹${totalCharge.toFixed(2)}`;
+    }
+    if (freeDeliveryMessage) {
+      freeDeliveryMessage.classList.toggle('hidden', !isFreeDelivery);
+    }
+  }
 
   // Fetch delivery settings
   const fetchSettings = async () => {
@@ -77,13 +124,12 @@ export default function DeliveryManagementPage() {
       setLoading(true)
       const response = await fetch(`${DELIVERY_API}/settings`)
       const data = await response.json()
-      
+
       if (data.success && data.settings) {
         setSettings(data.settings)
         setFormData(data.settings)
       } else {
         setSettings(null)
-        // Keep default form data
       }
     } catch (error) {
       console.error('Error fetching delivery settings:', error)
@@ -104,9 +150,9 @@ export default function DeliveryManagementPage() {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       })
-      
+
       const data = await response.json()
-      
+
       if (data.success) {
         toast.success('Default delivery settings initialized')
         await fetchSettings()
@@ -124,33 +170,31 @@ export default function DeliveryManagementPage() {
   // Validate form
   const validateForm = () => {
     const newErrors: { [key: string]: string } = {}
-    
+
     if (formData.freeDeliveryMinAmount < 0) {
       newErrors.freeDeliveryMinAmount = 'Free delivery minimum amount must be positive'
     }
-    
+
     if (formData.freeDeliveryRadius <= 0) {
       newErrors.freeDeliveryRadius = 'Free delivery radius must be greater than 0'
     }
-    
+
     if (formData.baseDeliveryCharge < 0) {
       newErrors.baseDeliveryCharge = 'Base delivery charge must be positive'
     }
-    
+
     if (formData.minimumDeliveryCharge < 0) {
       newErrors.minimumDeliveryCharge = 'Minimum delivery charge must be positive'
     }
-    
+
     if (formData.maximumDeliveryCharge <= formData.minimumDeliveryCharge) {
       newErrors.maximumDeliveryCharge = 'Maximum charge must be greater than minimum charge'
     }
-    
+
     if (formData.perKmCharge < 0) {
       newErrors.perKmCharge = 'Per km charge must be positive'
     }
-    
 
-    
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -161,7 +205,7 @@ export default function DeliveryManagementPage() {
       toast.error('Please fix the validation errors')
       return
     }
-    
+
     try {
       setSaving(true)
       const response = await fetch(`${DELIVERY_API}/settings`, {
@@ -172,12 +216,12 @@ export default function DeliveryManagementPage() {
         },
         body: JSON.stringify({
           ...formData,
-          _id: settings?._id // Include the ID to ensure update instead of create
+          _id: settings?._id
         })
       })
-      
+
       const data = await response.json()
-      
+
       if (data.success) {
         toast.success('Delivery settings updated successfully')
         setSettings(data.settings)
@@ -201,6 +245,15 @@ export default function DeliveryManagementPage() {
       setErrors(prev => ({ ...prev, [field]: '' }))
     }
   }
+
+  // Watch for changes in form data and calculator inputs
+  useEffect(() => {
+    const distance = Number((document.getElementById('distance') as HTMLInputElement)?.value);
+    const orderAmount = Number((document.getElementById('orderAmount') as HTMLInputElement)?.value);
+    if (distance && orderAmount) {
+      calculateDeliveryCharge(distance, orderAmount);
+    }
+  }, [formData]); // Re-run when formData changes
 
   useEffect(() => {
     fetchSettings()
@@ -302,8 +355,8 @@ export default function DeliveryManagementPage() {
                 <Separator className="my-4" />
                 <div className="flex items-center justify-between text-sm text-gray-600">
                   <span>Last updated: {new Date(settings.updatedAt!).toLocaleString()}</span>
-                  <Badge variant={settings.codAvailable ? "default" : "secondary"}>
-                    COD {settings.codAvailable ? 'Available' : 'Disabled'}
+                  <Badge variant={settings.codExtraCharges ? "default" : "secondary"}>
+                    COD Extra Charges {settings.codExtraCharges ? 'Enabled' : 'Disabled'}
                   </Badge>
                 </div>
               </CardContent>
@@ -336,7 +389,7 @@ export default function DeliveryManagementPage() {
                       <p className="text-sm text-red-500 mt-1">{errors.freeDeliveryMinAmount}</p>
                     )}
                   </div>
-                  
+
                   <div>
                     <Label htmlFor="freeDeliveryRadius">Free Delivery Radius (km)</Label>
                     <Input
@@ -361,7 +414,7 @@ export default function DeliveryManagementPage() {
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <DollarSign className="h-5 w-5" />
+                    <IndianRupee className="h-5 w-5" />
                     Delivery Charges
                   </CardTitle>
                   <CardDescription>
@@ -382,7 +435,7 @@ export default function DeliveryManagementPage() {
                       <p className="text-sm text-red-500 mt-1">{errors.baseDeliveryCharge}</p>
                     )}
                   </div>
-                  
+
                   <div>
                     <Label htmlFor="perKmCharge">Per KM Charge (₹)</Label>
                     <Input
@@ -408,10 +461,10 @@ export default function DeliveryManagementPage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Calculator className="h-5 w-5" />
-                    Charge Limits
+                    Delivery Charge Limits & COD Charges
                   </CardTitle>
                   <CardDescription>
-                    Set minimum and maximum delivery charge limits
+                    Set charge limits and payment methods
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -428,7 +481,7 @@ export default function DeliveryManagementPage() {
                       <p className="text-sm text-red-500 mt-1">{errors.minimumDeliveryCharge}</p>
                     )}
                   </div>
-                  
+
                   <div>
                     <Label htmlFor="maximumDeliveryCharge">Maximum Delivery Charge (₹)</Label>
                     <Input
@@ -442,54 +495,123 @@ export default function DeliveryManagementPage() {
                       <p className="text-sm text-red-500 mt-1">{errors.maximumDeliveryCharge}</p>
                     )}
                   </div>
+
+                  <Separator className="my-4" />
+
+                  <div className="flex items-center justify-between p-4 rounded-lg bg-gray-50/50 dark:bg-gray-800/50">
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded-full ${formData.codExtraCharges ? 'bg-green-100 dark:bg-green-900/30' : 'bg-gray-100 dark:bg-gray-700'}`}>
+                        <CreditCard className={`h-5 w-5 ${formData.codExtraCharges ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'}`} />
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium">COD Extra Charges</Label>
+                        <p className={`text-xs ${formData.codExtraCharges ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                          {formData.codExtraCharges ? 'Extra charges applied' : 'No extra charges'}
+                        </p>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={formData.codExtraCharges}
+                      onCheckedChange={(checked) => handleInputChange('codExtraCharges', checked)}
+                      className={`${formData.codExtraCharges ? 'bg-green-600 dark:bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}
+                    />
+                  </div>
                 </CardContent>
               </Card>
 
-              {/* COD & Calculation Settings */}
+              {/* Delivery Charge Calculator */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <CreditCard className="h-5 w-5" />
-                    COD & Calculation Settings
+                    <Calculator className="h-5 w-5" />
+                    Delivery Charge Calculator
                   </CardTitle>
                   <CardDescription>
-                    Configure cash on delivery and distance calculation method
+                    Calculate delivery charges based on distance and order amount
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between">
+                <CardContent className="space-y-6">
+                  <div className="space-y-4">
                     <div>
-                      <Label htmlFor="codAvailable">Cash on Delivery</Label>
-                      <p className="text-sm text-gray-500">Allow customers to pay on delivery</p>
+                      <Label htmlFor="distance">Distance (km)</Label>
+                      <Input
+                        id="distance"
+                        type="number"
+                        step="0.1"
+                        placeholder="Enter distance in kilometers"
+                        className="mt-1"
+                        onChange={(e) => {
+                          const distance = Number(e.target.value);
+                          const orderAmount = Number((document.getElementById('orderAmount') as HTMLInputElement)?.value);
+                          calculateDeliveryCharge(distance, orderAmount);
+                        }}
+                      />
                     </div>
-                    <Switch
-                      id="codAvailable"
-                      checked={formData.codAvailable}
-                      onCheckedChange={(checked) => handleInputChange('codAvailable', checked)}
-                    />
-                  </div>
-                  
 
-                  
-                  <div>
-                    <Label htmlFor="calculationMethod">Distance Calculation Method</Label>
-                    <Select
-                      value={formData.calculationMethod}
-                      onValueChange={(value: 'haversine' | 'straight_line') => 
-                        handleInputChange('calculationMethod', value)
-                      }
+                    <div>
+                      <Label htmlFor="orderAmount">Order Amount (₹)</Label>
+                      <Input
+                        id="orderAmount"
+                        type="number"
+                        placeholder="Enter order amount"
+                        className="mt-1"
+                        onChange={(e) => {
+                          const orderAmount = Number(e.target.value);
+                          const distance = Number((document.getElementById('distance') as HTMLInputElement)?.value);
+                          calculateDeliveryCharge(distance, orderAmount);
+                        }}
+                      />
+                    </div>
+
+                    <div className="flex justify-end mt-4">
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          (document.getElementById('distance') as HTMLInputElement).value = '';
+                          (document.getElementById('orderAmount') as HTMLInputElement).value = '';
+                          updateCalculatorUI(0, 0);
+                        }}
+                        className="w-24"
+                      >
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Clear
+                      </Button>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-2 p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-muted-foreground">Base Charge:</span>
+                      <span className="font-medium">₹{formData.baseDeliveryCharge}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-muted-foreground">Distance Charge:</span>
+                      <span id="distanceCharge" className="font-medium">₹0</span>
+                    </div>
+                    {formData.codExtraCharges && (
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-muted-foreground">COD Extra Charge:</span>
+                        <span className="font-medium text-orange-600">+₹20</span>
+                      </div>
+                    )}
+                    <Separator />
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium">Total Delivery Charge:</span>
+                      <span
+                        id="totalCharge"
+                        className="text-lg font-bold text-green-600 dark:text-green-400"
+                      >
+                        ₹0
+                      </span>
+                    </div>
+                    <div
+                      id="freeDeliveryMessage"
+                      className="text-sm text-center py-2 rounded text-green-600 bg-green-100 dark:bg-green-900/30 hidden"
                     >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-white border border-gray-200 shadow-lg z-50">
-                        <SelectItem value="haversine">Haversine Formula (More Accurate)</SelectItem>
-                        <SelectItem value="straight_line">Straight Line (Faster)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="text-sm text-gray-500 mt-1">
-                      Haversine is more accurate but slightly slower
-                    </p>
+                      Eligible for free delivery!
+                    </div>
                   </div>
                 </CardContent>
               </Card>

@@ -7,6 +7,7 @@ import { logout as reduxLogout } from "../lib/slices/authSlice";
 import { useRouter } from "next/navigation";
 import { getCartItems, setCartItems as persistCartItems } from "../lib/cart";
 import toast from "react-hot-toast";
+import { LocationProvider } from "@/components/location-provider";
 
 interface AppContextType {
   isCartOpen: boolean;
@@ -201,30 +202,32 @@ function AppProviderInner({ children }: { children: ReactNode }) {
 
   return (
     <ModalProvider>
-      <AppContext.Provider
-        value={{
-          isCartOpen,
-          setIsCartOpen,
-          isLoginOpen,
-          setIsLoginOpen,
-          cartItems,
-          setCartItems,
-          searchQuery,
-          setSearchQuery,
-          isLoggedIn,
-          user: reduxUser,
-          addToCart,
-          updateCartItem,
-          cartTotal,
-          handleLogout,
-          wishlistItems,
-          addToWishlist,
-          removeFromWishlist,
-          isInWishlist,
-        }}
-      >
-        {children}
-      </AppContext.Provider>
+      <LocationProvider>
+        <AppContext.Provider
+          value={{
+            isCartOpen,
+            setIsCartOpen,
+            isLoginOpen,
+            setIsLoginOpen,
+            cartItems,
+            setCartItems,
+            searchQuery,
+            setSearchQuery,
+            isLoggedIn,
+            user: reduxUser,
+            addToCart,
+            updateCartItem,
+            cartTotal,
+            handleLogout,
+            wishlistItems,
+            addToWishlist,
+            removeFromWishlist,
+            isInWishlist,
+          }}
+        >
+          {children}
+        </AppContext.Provider>
+      </LocationProvider>
     </ModalProvider>
   );
 }

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useLocation } from "@/components/location-provider";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -35,6 +36,9 @@ export default function HeroSection() {
   const [error, setError] = useState<string | null>(null);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
   const router = useRouter();
+  
+  // Get location context for pincode-based filtering
+  const { locationState } = useLocation();
 
   useEffect(() => {
     const fetchBanners = async () => {
@@ -42,8 +46,25 @@ export default function HeroSection() {
         setLoading(true);
         setError(null);
         
+        // Build banner fetch URL with location context
+        let bannerUrl = `${API_URL}/banners`;
+        let specialBannerUrl = `${API_URL}/banners/special`;
+        
+        // Add pincode parameter for location-based banner filtering if available
+        if (locationState.isLocationDetected && locationState.pincode) {
+          const params = new URLSearchParams();
+          params.append('pincode', locationState.pincode);
+          
+          if (locationState.isGlobalMode) {
+            params.append('mode', 'global');
+          }
+          
+          bannerUrl += `?${params.toString()}`;
+          specialBannerUrl += `?${params.toString()}`;
+        }
+        
         // Fetch regular banners
-        const res = await fetch(`${API_URL}/banners`);
+        const res = await fetch(bannerUrl);
         if (!res.ok) throw new Error("Failed to fetch banners");
         const data = await res.json();
         
@@ -54,7 +75,7 @@ export default function HeroSection() {
         setBanners(regularBanners);
         
         // Fetch special banners
-        const specialRes = await fetch(`${API_URL}/banners/special`);
+        const specialRes = await fetch(specialBannerUrl);
         if (specialRes.ok) {
           const specialData = await specialRes.json();
           setSpecialBanners({
@@ -72,7 +93,7 @@ export default function HeroSection() {
     };
 
     fetchBanners();
-  }, [API_URL]);
+  }, [API_URL, locationState.isLocationDetected, locationState.pincode, locationState.isGlobalMode]);
 
   const nextBanner = useCallback(() => {
     if (banners.length > 1) {
@@ -108,8 +129,22 @@ export default function HeroSection() {
         ? banner.categoryId._id 
         : banner.categoryId;
       
-      console.log('Navigating to category:', categoryId);
-      router.push(`/search?category=${categoryId}`);
+      console.log('Navigating to category:', categoryId, 'with location:', locationState.pincode);
+      
+      // Build URL with location context for pincode-based filtering
+      let url = `/search?category=${categoryId}`;
+      
+      // Add pincode parameter if location is detected
+      if (locationState.isLocationDetected && locationState.pincode) {
+        url += `&pincode=${locationState.pincode}`;
+      }
+      
+      // Add delivery mode for proper warehouse filtering
+      if (locationState.isGlobalMode) {
+        url += `&mode=global`;
+      }
+      
+      router.push(url);
     } else {
       console.log('No category ID found for banner:', banner);
     }

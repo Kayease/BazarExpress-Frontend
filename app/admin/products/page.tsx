@@ -19,7 +19,7 @@ interface Product {
   image: string;
   brand: string | { _id: string; name: string };
   category: string | { _id: string; name: string };
-  warehouse: string;
+  warehouse: string | { _id: string; name: string };
   sku: string;
   inStock?: boolean;
   stockCount?: number;
@@ -36,6 +36,7 @@ export default function AdminProducts() {
   const [filterCategory, setFilterCategory] = useState("all")
   const [filterStatus, setFilterStatus] = useState("all")
   const [filterSubcategory, setFilterSubcategory] = useState("all");
+  const [filterWarehouse, setFilterWarehouse] = useState("all");
   const router = useRouter()
   const searchRef = useRef<HTMLDivElement>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -79,10 +80,21 @@ export default function AdminProducts() {
     }
   }, [])
 
-  // Deduplicate categories by ID or value
+  // Deduplicate categories and warehouses by ID or value
   const categoryMap = new Map();
   const subcategoryMap = new Map();
+  const warehouseMap = new Map();
   productList.forEach((p) => {
+    // Extract warehouse
+    const wh = p.warehouse;
+    if (wh) {
+      const warehouseValue = typeof wh === 'object' && wh !== null ? 
+        (wh as { name?: string; _id: string }).name || (wh as { _id: string })._id : 
+        String(wh);
+      warehouseMap.set(warehouseValue, warehouseValue);
+    }
+    
+    // Extract category
     const cat = p.category;
     if (cat && typeof cat === "object" && "_id" in cat) {
       categoryMap.set(cat._id, cat);
@@ -112,32 +124,77 @@ export default function AdminProducts() {
     })
   ];
 
+  const allWarehouses = ["all", ...Array.from(warehouseMap.values())];
+
   const filteredProducts: Product[] = productList.filter((product) => {
+    if (!product) return false;
+    
+    // Safe name extraction
     const name = typeof product.name === 'string' ? product.name : '';
-    const brand = typeof product.brand === 'object' && 'name' in product.brand ? product.brand.name : product.brand;
+    
+    // Safe brand extraction
+    const brand = product.brand ? 
+      (typeof product.brand === 'object' && product.brand !== null && 'name' in product.brand ? 
+        (product.brand as { name: string }).name : 
+        String(product.brand)) 
+      : '';
+    
+    // Safe warehouse extraction
+    const warehouse = product.warehouse ? 
+      (typeof product.warehouse === 'object' && product.warehouse !== null ? 
+        (product.warehouse as { name?: string; _id: string }).name || 
+        (product.warehouse as { _id: string })._id : 
+        String(product.warehouse)) : 
+      '';
+    
+    // Search matching
     const matchesSearch =
       name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (brand && typeof brand === 'string' && brand.toLowerCase().includes(searchTerm.toLowerCase()));
-    const category = product.category && typeof product.category === 'object' && '_id' in product.category ? product.category._id : product.category;
+      (brand && brand.toLowerCase().includes(searchTerm.toLowerCase()));
+    
+    // Safe category extraction and matching
+    const category = product.category ? 
+      (typeof product.category === 'object' && product.category !== null && '_id' in product.category ? 
+        (product.category as { _id: string })._id : 
+        String(product.category)) 
+      : '';
     const matchesCategory = filterCategory === "all" || category === filterCategory;
-    // Subcategory filter
-    const subcategory = product.subcategory && typeof product.subcategory === 'object' && '_id' in product.subcategory ? product.subcategory._id : product.subcategory;
+    
+    // Safe subcategory extraction and matching
+    const subcategory = product.subcategory ? 
+      (typeof product.subcategory === 'object' && product.subcategory !== null && '_id' in product.subcategory ? 
+        (product.subcategory as { _id: string })._id : 
+        String(product.subcategory)) 
+      : '';
     const matchesSubcategory = filterSubcategory === "all" || subcategory === filterSubcategory;
+    
+    // Status matching
     const matchesStatus =
       filterStatus === "all" ||
       (filterStatus === "in-stock" && product.inStock) ||
       (filterStatus === "out-of-stock" && !product.inStock);
-    return matchesSearch && matchesCategory && matchesSubcategory && matchesStatus;
+    
+    // Warehouse filter
+    const matchesWarehouse = filterWarehouse === "all" || warehouse === filterWarehouse;
+    
+    return matchesSearch && matchesCategory && matchesSubcategory && matchesStatus && matchesWarehouse;
   })
 
   const searchSuggestions = productList
     .filter((product) => {
       const searchLower = searchTerm.toLowerCase();
       const name = typeof product.name === 'string' ? product.name : '';
-      const brand = typeof product.brand === 'object' && 'name' in product.brand ? product.brand.name : product.brand;
+      
+      // Safe brand extraction
+      const brand = product.brand ? 
+        (typeof product.brand === 'object' && product.brand !== null && 'name' in product.brand ? 
+          product.brand.name : 
+          String(product.brand)) 
+        : '';
+        
       return (
         name.toLowerCase().includes(searchLower) ||
-        (brand && typeof brand === 'string' && brand.toLowerCase().includes(searchLower))
+        brand.toLowerCase().includes(searchLower)
       );
     })
     .slice(0, 5); // Limit to 5 suggestions
@@ -300,6 +357,17 @@ export default function AdminProducts() {
               ))}
             </select>
             <select
+              value={filterWarehouse}
+              onChange={(e) => setFilterWarehouse(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+            >
+              {allWarehouses.map((warehouse) => (
+                <option key={warehouse} value={warehouse}>
+                  {warehouse === "all" ? "All Warehouses" : warehouse}
+                </option>
+              ))}
+            </select>
+            <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
               className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
@@ -353,7 +421,13 @@ export default function AdminProducts() {
                           </div>
                           <div className="min-w-0">
                             <p className="font-medium text-xs text-codGray truncate" title={product.name}>{product.name}</p>
-                            <p className="text-xs text-gray-500 truncate">{typeof product.brand === 'object' && 'name' in product.brand ? product.brand.name : product.brand}</p>
+                            <p className="text-xs text-gray-500 truncate">
+                              {product.brand ? 
+                                (typeof product.brand === 'object' && product.brand !== null && 'name' in product.brand ? 
+                                  product.brand.name : 
+                                  String(product.brand)
+                                ) : ''}
+                            </p>
                           </div>
                         </div>
                       </td>
