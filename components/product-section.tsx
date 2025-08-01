@@ -18,6 +18,10 @@ import { useAppContext } from "@/components/app-provider";
 import { useLocation } from "@/components/location-provider";
 
 // Define interfaces for our data types
+
+// Inside ProductSection component
+// (hook call moved into component body below)
+
 interface Product {
   _id: string;
   name: string;
@@ -90,7 +94,7 @@ export default function ProductSection({
   const { addToWishlist, isInWishlist, addToCart, updateCartItem, cartItems } = useAppContext();
   
   // Get location context
-  const { locationState, fetchProductsByLocation, deliveryMessage, isGlobalMode } = useLocation();
+  const { locationState, fetchProductsByLocation, deliveryMessage, isGlobalMode, isLoading } = useLocation();
 
   // Local quantity state for product tiles
   const [quantities, setQuantities] = useState<{ [id: string]: number }>({});
@@ -149,6 +153,9 @@ export default function ProductSection({
   };
 
   useEffect(() => {
+    // Clear products and show loading immediately when pincode changes
+    setLoading(true);
+    setProductSections([]);
     const fetchProducts = async () => {
       try {
         setLoading(true);
@@ -308,7 +315,22 @@ export default function ProductSection({
     );
   }
 
-  if (error) {
+  // Use location context to determine loading/error state
+  const isLocationDetected = locationState?.isLocationDetected;
+  const contextPincode = locationState?.pincode;
+
+  // Show loading while location/pincode is being fetched
+  if (isLoading || !isLocationDetected) {
+    return (
+      <div className="py-20 flex flex-col items-center justify-center">
+        <Loader2 className="h-10 w-10 animate-spin text-brand-primary" />
+        <p className="mt-4 text-text-secondary">Loading products...</p>
+      </div>
+    );
+  }
+
+  // Only show error if location is detected but pincode is missing and there is an error
+  if (isLocationDetected && !contextPincode && error) {
     return (
       <section className="py-12 bg-surface-secondary">
         <div className="max-w-7xl mx-auto px-4">
