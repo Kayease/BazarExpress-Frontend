@@ -18,14 +18,6 @@ export default function SiteFrame({ children }: { children: React.ReactNode }) {
   const { showOverlay, setShowOverlay } = useLocation();
   const [showDeliveryOverlay, setShowDeliveryOverlay] = useState(false);
 
-  // Automatically open login modal on home page if not logged in
-  useEffect(() => {
-    const hasSeenLoginPrompt = localStorage.getItem('hasSeenLoginPrompt');
-    if (isHomePage && !hasSeenLoginPrompt) {
-      setIsLoginOpen(true);
-      localStorage.setItem('hasSeenLoginPrompt', 'true');
-    }
-  }, [isHomePage, setIsLoginOpen]);
 
   // Handle delivery overlay
   useEffect(() => {

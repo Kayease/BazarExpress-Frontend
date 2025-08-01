@@ -216,7 +216,7 @@ export async function getPincodeFromGeolocation(): Promise<string | null> {
           reject(new Error(errorMessage));
         }, 
         {
-          enableHighAccuracy: true,
+          enableHighAccuracy: false,
           timeout: 8000, // Reduced timeout for faster fallback
           maximumAge: 300000 // 5 minutes
         }
