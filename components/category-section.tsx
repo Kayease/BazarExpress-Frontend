@@ -30,7 +30,11 @@ export default function CategorySection() {
   } = useCategories();
 
   // Memoize categories to prevent unnecessary re-renders
-  const categories = useMemo(() => categoriesData || [], [categoriesData]);
+  // Filter for home page display: only show categories marked for home display
+  const categories = useMemo(() => {
+    if (!categoriesData) return [];
+    return categoriesData.filter(cat => cat.showOnHome);
+  }, [categoriesData]);
 
   return (
     <section className="pt-2 pb-6 sm:py-6 bg-white">
