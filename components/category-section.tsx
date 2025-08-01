@@ -33,7 +33,7 @@ export default function CategorySection() {
   // Filter for home page display: only show categories marked for home display
   const categories = useMemo(() => {
     if (!categoriesData) return [];
-    return categoriesData.filter(cat => cat.showOnHome);
+    return categoriesData.filter(cat => cat.hide === false);
   }, [categoriesData]);
 
   return (

@@ -33,7 +33,8 @@ interface LocationBasedProductsProps {
   pincode?: string | null;
 }
 
-function LocationBasedProducts({ 
+
+export function LocationBasedProducts({ 
   categoryId, 
   searchQuery,
   pincode
@@ -74,6 +75,7 @@ function LocationBasedProducts({
       setProducts([]);
       setTotalProducts(0);
     }
+
   }, [pincode, selectedLocation, deliveryAvailable, categoryId, currentPage, selectedWarehouse, sortBy]);
 
   // Load products from API
@@ -84,6 +86,7 @@ function LocationBasedProducts({
       // Build a minimal location object for compatibility
       locationArg = { pincode } as any;
     }
+
     if (!locationArg) return;
 
     setIsLoading(true);
@@ -107,6 +110,7 @@ function LocationBasedProducts({
           );
         }
 
+
         // Sort products
         filteredProducts.sort((a, b) => {
           switch (sortBy) {
@@ -120,6 +124,7 @@ function LocationBasedProducts({
             default:
               return a.name.localeCompare(b.name);
           }
+
         });
 
         setProducts(filteredProducts);
@@ -130,6 +135,7 @@ function LocationBasedProducts({
         setTotalProducts(0);
         setError(response.message || 'No products available for delivery');
       }
+
     } catch (error) {
       console.error('Error loading products:', error);
       setError('Failed to load products. Please try again.');
@@ -138,6 +144,7 @@ function LocationBasedProducts({
     } finally {
       setIsLoading(false);
     }
+
   };
 
   // Handle search
@@ -163,6 +170,7 @@ function LocationBasedProducts({
     } catch (error) {
       toast.error('Failed to add item to cart');
     }
+
   };
 
   // No location selected
@@ -178,6 +186,7 @@ function LocationBasedProducts({
         </p>
         <Button 
           onClick={() => setShowLocationModal(true)}
+
           className="bg-green-600 hover:bg-green-700"
         >
           <MapPin className="h-4 w-4 mr-2" />
@@ -186,6 +195,7 @@ function LocationBasedProducts({
       </div>
     );
   }
+
 
   // No delivery available
   if (!deliveryAvailable) {
@@ -200,9 +210,11 @@ function LocationBasedProducts({
         </p>
         <p className="text-sm text-gray-500 mb-6">
           Location: {locationName}
+
         </p>
         <Button 
           onClick={() => setShowLocationModal(true)}
+
           variant="outline"
         >
           <MapPin className="h-4 w-4 mr-2" />
@@ -212,9 +224,11 @@ function LocationBasedProducts({
     );
   }
 
+
   return (
     <div className="space-y-6">
       {/* Location Header */}
+
       <div className="bg-green-50 border border-green-200 rounded-lg p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -222,6 +236,7 @@ function LocationBasedProducts({
             <div>
               <p className="font-medium text-green-800">
                 Delivering to: {locationName}
+
               </p>
               <p className="text-sm text-green-600">
                 {availableWarehouses.length} warehouse(s) available
@@ -230,6 +245,7 @@ function LocationBasedProducts({
           </div>
           <Button
             onClick={() => setShowLocationModal(true)}
+
             variant="outline"
             size="sm"
           >
@@ -239,8 +255,10 @@ function LocationBasedProducts({
       </div>
 
       {/* Search and Filters */}
+
       <div className="flex flex-col lg:flex-row gap-4">
         {/* Search */}
+
         <div className="flex-1">
           <div className="flex gap-2">
             <div className="flex-1 relative">
@@ -249,8 +267,11 @@ function LocationBasedProducts({
                 type="text"
                 placeholder="Search products..."
                 value={localSearchQuery}
+
                 onChange={(e) => setLocalSearchQuery(e.target.value)}
+
                 onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+
                 className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
               />
             </div>
@@ -261,10 +282,13 @@ function LocationBasedProducts({
         </div>
 
         {/* Warehouse Filter */}
+
         <div className="lg:w-48">
           <select
             value={selectedWarehouse}
+
             onChange={(e) => setSelectedWarehouse(e.target.value)}
+
             className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
           >
             <option value="all">All Warehouses</option>
@@ -273,14 +297,18 @@ function LocationBasedProducts({
                 {warehouse.warehouseName} ({formatDistance(warehouse.distance)})
               </option>
             ))}
+
           </select>
         </div>
 
         {/* Sort */}
+
         <div className="lg:w-40">
           <select
             value={sortBy}
+
             onChange={(e) => setSortBy(e.target.value)}
+
             className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
           >
             <option value="name">Name</option>
