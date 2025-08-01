@@ -1,5 +1,6 @@
 "use client";
-import { useAppContext } from "@/components/app-provider";
+import { useCartContext } from "@/components/app-provider";
+import { useWishlistContext } from "@/components/app-provider";
 import { Button } from "@/components/ui/button";
 import { Minus, Plus, Trash2, ShoppingBag, ArrowLeft, Heart, MapPin, Clock, Info } from "lucide-react";
 import Image from "next/image";
@@ -10,7 +11,8 @@ import { calculateDeliveryChargeAPI, formatDeliveryCharge, getDeliveryTimeEstima
 import DeliveryAvailabilityChecker from "@/components/DeliveryAvailabilityChecker";
 
 export default function CartPage() {
-  const { cartItems, updateCartItem, cartTotal, addToWishlist, isInWishlist } = useAppContext();
+  const { cartItems, updateCartItem, cartTotal } = useCartContext();
+  const { addToWishlist, isInWishlist } = useWishlistContext();
   const router = useRouter();
   
   // Delivery calculation states

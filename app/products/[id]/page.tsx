@@ -4,7 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useAppContext } from "@/components/app-provider";
+import { useCartContext, useWishlistContext } from "@/components/app-provider";
 import {
   Check,
   Heart,
@@ -107,7 +107,8 @@ export default function ProductDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [mainImageIdx, setMainImageIdx] = useState(0);
   const [quantity, setQuantity] = useState(1);
-  const { addToCart, addToWishlist, isInWishlist } = useAppContext();
+  const { addToCart } = useCartContext();
+  const { addToWishlist, isInWishlist } = useWishlistContext();
   const [relatedProducts, setRelatedProducts] = useState<ExtendedProduct[]>([]);
   const [reviews, setReviews] = useState<ProductReview[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(true);

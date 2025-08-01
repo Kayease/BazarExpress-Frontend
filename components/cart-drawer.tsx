@@ -3,14 +3,15 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { X, ShoppingBag, LogIn, Plus, Minus, Trash2, Heart, ShoppingCart, MapPin, Clock } from "lucide-react";
 import { getCartItems, updateCartQuantity, removeFromCart, getCartTotals } from "../lib/cart";
-import { useAppContext } from "@/components/app-provider";
-
+import { useAppContext, useCartContext, useWishlistContext } from "@/components/app-provider";
 import { useAppSelector } from "@/lib/store";
 import Image from "next/image";
 import toast from "react-hot-toast";
 
 export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
-  const { cartItems, updateCartItem, cartTotal, isLoggedIn, setIsLoginOpen, addToWishlist, isInWishlist } = useAppContext();
+  const { isLoggedIn, setIsLoginOpen } = useAppContext();
+  const { cartItems, updateCartItem, cartTotal } = useCartContext();
+  const { addToWishlist, isInWishlist } = useWishlistContext();
   const router = useRouter();
   const user = useAppSelector((state: any) => state?.auth?.user);
 

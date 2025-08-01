@@ -16,7 +16,7 @@
 
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { useAppContext } from "@/components/app-provider";
+import { useCartContext } from "@/components/app-provider";
 import { useAppSelector } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { 
@@ -41,7 +41,7 @@ import Image from "next/image";
 import PromoCodeInput from "@/components/PromoCodeInput";
 import AvailablePromocodes from "@/components/AvailablePromocodes";
 import toast from "react-hot-toast";
-import { calculateDeliveryChargeAPI, formatDeliveryCharge, getDeliveryTimeEstimate, fetchDeliverySettings } from "@/lib/delivery";
+import { calculateDeliveryChargeAPI, formatDeliveryCharge, getDeliveryTimeEstimate, fetchDeliverySettings, DeliveryCalculationResult } from "@/lib/delivery";
 import DeliveryAvailabilityChecker from "@/components/DeliveryAvailabilityChecker";
 import { validateCartDelivery, CartValidationResponse } from "@/lib/location";
 import CartValidationAlert from "@/components/CartValidationAlert";
@@ -224,7 +224,7 @@ function fetchAddress(lat: number, lng: number, setAddressForm: any) {
 }
 
 export default function PaymentPage() {
-  const { cartItems, cartTotal } = useAppContext();
+  const { cartItems, cartTotal } = useCartContext();
   const router = useRouter();
   const user = useAppSelector((state: any) => state?.auth?.user);
   const token = useAppSelector((state: any) => state?.auth?.token);
@@ -445,10 +445,11 @@ export default function PaymentPage() {
     setIsValidatingCart(true);
     
     try {
+      const selectedAddrObj = addresses.find(a => a.id === selectedAddress);
       const validation = await validateCartDelivery(validItems, {
-        lat: selectedAddress.lat!,
-        lng: selectedAddress.lng!,
-        address: `${selectedAddress.building}, ${selectedAddress.area}, ${selectedAddress.city}`
+        lat: selectedAddrObj?.lat!,
+        lng: selectedAddrObj?.lng!,
+        address: `${selectedAddrObj?.building}, ${selectedAddrObj?.area}, ${selectedAddrObj?.city}`
       });
 
       setCartValidation(validation);
@@ -753,7 +754,7 @@ export default function PaymentPage() {
           selectedPaymentMethod === 'cod' ? 'cod' : 'online'
         ),
         timeoutPromise
-      ]);
+      ]) as DeliveryCalculationResult | null;
       
       console.log('OSRM Delivery calculation result:', result);
       

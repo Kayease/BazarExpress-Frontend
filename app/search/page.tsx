@@ -1,6 +1,6 @@
 "use client";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback, memo } from "react";
 import axios from "axios";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -10,6 +10,10 @@ import { Apple, Milk, Cookie, Coffee, Drumstick, Carrot, Fish, Pill, Home, Baby,
 import Link from "next/link";
 import { useLocation } from "@/components/location-provider";
 import LocationStatusIndicator from "@/components/location-status-indicator";
+import ProductCard from "@/components/product-card";
+import { useCartContext, useWishlistContext } from "@/components/app-provider";
+import ProductGridSkeleton from "@/components/product-grid-skeleton";
+import { useCategories, useBrands, useProductsByLocation } from "@/hooks/use-api";
 
 const DIETARY_OPTIONS = [
   "Organic",
@@ -49,58 +53,80 @@ const CATEGORY_COLORS = [
   'bg-cyan-100 text-cyan-700',
 ];
 
-export default function SearchPage() {
+function SearchPage() {
+  const [loading, setLoading] = useState(false); // Used for UI spinner and navigation
+// Remove or rename any other 'loading' variables below
   const params = useSearchParams();
   const q = params.get("q") || "";
-  const [results, setResults] = useState<{ products: any[]; categories: any[] }>({ products: [], categories: [] });
-  const [loading, setLoading] = useState(false);
   const router = useRouter();
   const [minPrice, setMinPrice] = useState(0);
   const [maxPrice, setMaxPrice] = useState(1000);
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 1000]);
   const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
   const [selectedDietary, setSelectedDietary] = useState<string[]>([]);
-  const [brands, setBrands] = useState<any[]>([]);
   const [sort, setSort] = useState("relevance");
-  const [categories, setCategories] = useState<any[]>([]);
   const categoryParam = params.get("category") || "";
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
-  const API_URL = process.env.NEXT_PUBLIC_API_URL;
   
   // Get location context for pincode-based filtering
-  const { locationState, fetchProductsByLocation, isGlobalMode } = useLocation();
+  const { locationState, isGlobalMode } = useLocation();
   const pincodeParam = params.get("pincode") || "";
   const modeParam = params.get("mode") || ""; 
 
-  // Fetch main/parent categories from backend (always, for both sidebar and main content)
-  useEffect(() => {
-    fetch(`${API_URL}/categories`)
-      .then(res => res.json())
-      .then(data => {
-        setCategories(data.filter((cat: any) => !cat.hide));
-      })
-      .catch(err => console.error('Error fetching categories:', err));
-  }, []);
+  // Use React Query hooks for data fetching
+  const { data: categories = [], isLoading: categoriesLoading } = useCategories();
+  const { data: brands = [], isLoading: brandsLoading } = useBrands();
+  
+  // Get active pincode and mode
+  const activePincode = pincodeParam || locationState.pincode;
+  const activeMode = modeParam || (locationState.isGlobalMode ? 'global' : 'auto');
+  
+  // Fetch products by location using React Query
+  const { 
+    data: locationProducts, 
+    isLoading: productsLoading, 
+    error: productsError 
+  } = useProductsByLocation(
+    activePincode || '',
+    {
+      search: q || undefined,
+      category: categoryParam || undefined,
+      mode: activeMode === 'global' ? 'global' : undefined,
+      limit: 100,
+      page: 1
+    }
+  );
 
-  // Fetch brands from backend
-  useEffect(() => {
-    fetch(`${API_URL}/brands`)
-      .then(res => res.json())
-      .then(data => setBrands(data))
-      .catch(err => console.error('Error fetching brands:', err));
-  }, []);
+  const results = useMemo(() => ({
+    products: locationProducts?.products || [],
+    categories: []
+  }), [locationProducts]);
 
-  // Determine min/max price from products
-  useEffect(() => {
+  
+
+  // Memoized price calculation to prevent unnecessary recalculations
+  const priceStats = useMemo(() => {
     if (Array.isArray(results.products) && results.products.length > 0) {
       const prices = results.products.map((p) => Number(p.price)).filter(Boolean);
-      const min = Math.min(...prices);
-      const max = Math.max(...prices);
-      setMinPrice(min);
-      setMaxPrice(max);
-      setPriceRange([min, max]);
+      if (prices.length > 0) {
+        const min = Math.min(...prices);
+        const max = Math.max(...prices);
+        return { min, max };
+      }
     }
+    return { min: 0, max: 1000 };
   }, [results.products]);
+
+  // Update price range only when price stats change
+  useEffect(() => {
+    setMinPrice(priceStats.min);
+    setMaxPrice(priceStats.max);
+    setPriceRange([priceStats.min, priceStats.max]);
+  }, [priceStats]);
+
+  // Cart & Wishlist context
+  const { cartItems, addToCart, updateCartItem } = useCartContext();
+  const { addToWishlist, isInWishlist } = useWishlistContext();
 
   // Filter products client-side
   const filteredProducts = Array.isArray(results.products) ? results.products : [];
@@ -120,64 +146,16 @@ export default function SearchPage() {
     return sorted;
   }, [filteredProducts, sort]);
 
-  // Search and category effect with location-based filtering
-  useEffect(() => {
-    const fetchLocationBasedProducts = async () => {
-      setLoading(true);
-      
-      try {
-        // Determine which pincode to use (URL param or location state)
-        const activePincode = pincodeParam || locationState.pincode;
-        const activeMode = modeParam || (locationState.isGlobalMode ? 'global' : 'auto');
-        
-        // If location is detected or pincode is provided, use location-based fetching
-        if (activePincode && locationState.isLocationDetected) {
-          const options: any = {
-            page: 1,
-            limit: 100
-          };
-          
-          // Add search query if provided
-          if (q) {
-            options.search = q;
-          }
-          
-          // Add category filter if provided
-          if (categoryParam) {
-            options.category = categoryParam;
-          }
-          
-          // Add mode if specified
-          if (activeMode === 'global') {
-            options.mode = 'global';
-          }
-          
-          const locationProducts = await fetchProductsByLocation(options);
-          
-          if (locationProducts.success) {
-            setResults({ 
-              products: locationProducts.products, 
-              categories: [] 
-            });
-          } else {
-            console.error('Error fetching location-based products:', locationProducts.error);
-          }
-        } else {
-          // Block search if PIN is not set
-          setResults({ products: [], categories: [] });
-          setLoading(false);
-          alert('Please select your delivery PIN code to search products.');
-          return;
-        }
-      } catch (error) {
-        console.error('Error fetching location-based products:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    fetchLocationBasedProducts();
-  }, [q, categoryParam, pincodeParam, modeParam, locationState.pincode, locationState.isLocationDetected, fetchProductsByLocation]);
+  // Show error message if products failed to load
+  const errorMessage = useMemo(() => {
+    if (productsError) {
+      return 'Failed to load products. Please try again.';
+    }
+    if (!activePincode && locationState.isLocationDetected === false) {
+      return 'Please select your delivery PIN code to search products.';
+    }
+    return null;
+  }, [productsError, activePincode, locationState.isLocationDetected]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -336,8 +314,6 @@ export default function SearchPage() {
                     ? "bg-green-50 text-green-700 font-medium"
                     : "hover:bg-gray-50 text-gray-700"}`}
                   onClick={() => {
-                    setLoading(true);
-                    
                     // Build URL with location context for pincode-based filtering
                     let url = `/search`;
                     
@@ -363,8 +339,6 @@ export default function SearchPage() {
                       ? "bg-green-50 text-green-700 font-medium"
                       : "hover:bg-gray-50 text-gray-700"}`}
                     onClick={() => {
-                      setLoading(true);
-                      
                       // Build URL with location context for pincode-based filtering
                       let url = `/search?category=${cat._id}`;
                       
@@ -513,59 +487,45 @@ export default function SearchPage() {
 
             {/* Products Grid */}
             {loading ? (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-4 md:gap-6">
-                {[1, 2, 3, 4, 5, 6].map((n) => (
-                  <div key={n} className="bg-white rounded-xl shadow-sm border border-gray-100 animate-pulse">
-                    <div className="aspect-square w-full bg-gray-200"></div>
-                    <div className="p-4">
-                      <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
-                      <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-                    </div>
-                  </div>
-                ))}
+              <ProductGridSkeleton count={6} />
+            ) : errorMessage ? (
+              <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+                <p className="text-red-500 mb-4">{errorMessage}</p>
+                <button 
+                  onClick={() => window.location.reload()} 
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  Retry
+                </button>
               </div>
             ) : sortedProducts.length > 0 ? (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-4 md:gap-6">
                 {sortedProducts.map((product) => (
-                  <Link
-                    key={product._id}
-                    href={`/products/${product._id}`}
-                    className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-all duration-200 group block"
-                  >
-                    <div className="aspect-square relative overflow-hidden bg-gray-100">
-                      <img
-                        src={product.image || "/placeholder.jpg"}
-                        alt={product.name}
-                        className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-200"
-                      />
-                      {product.mrp && product.mrp > product.price && (
-                        <div className="absolute top-2 right-2 bg-red-500 text-white text-xs font-medium px-2 py-1 rounded">
-                          {Math.round(((product.mrp - product.price) / product.mrp) * 100)}% OFF
-                        </div>
-                      )}
-                    </div>
-                    <div className="p-4">
-                      <h3 className="font-medium text-gray-900 mb-2 line-clamp-2 min-h-[2.5rem]">{product.name}</h3>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="text-lg font-semibold text-green-600">₹{product.price}</div>
-                          {product.mrp && product.mrp > product.price && (
-                            <div className="text-sm text-gray-500 line-through">₹{product.mrp}</div>
-                          )}
-                        </div>
-                        <div className={`text-sm font-medium ${
-                          product.stock > 0 ? "text-green-600" : "text-red-600"
-                        }`}>
-                          {product.stock > 0 ? "In Stock" : "Out of Stock"}
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
+                  <ProductCard
+  key={product._id}
+  product={product}
+  isInWishlist={isInWishlist}
+  handleWishlistClick={(prod: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isInWishlist && isInWishlist(prod._id)) {
+      addToWishlist && addToWishlist(prod); // Toggle/remove logic inside
+    } else {
+      addToWishlist && addToWishlist(prod);
+    }
+  }}
+  handleAdd={(p: any) => addToCart({ ...p, id: p._id, quantity: 1 })}
+  handleInc={(p: any) => updateCartItem(p._id, (cartItems.find(i => (i.id||i._id)===p._id)?.quantity || 0) + 1)}
+  handleDec={(p: any) => updateCartItem(p._id, Math.max((cartItems.find(i => (i.id||i._id)===p._id)?.quantity || 1) - 1, 0))}
+  quantity={cartItems.find(i => (i.id||i._id)===product._id)?.quantity || 0}
+  locationState={locationState}
+  isGlobalMode={isGlobalMode}
+  onClick={() => router.push(`/products/${product._id}`)}
+/>
                 ))}
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-                <img src="/no-results.svg" alt="No products found" className="w-48 h-48 mb-6" />
+                <img src="/no-results.jpg" alt="No products found" className="w-48 h-48 mb-6" />
                 <h3 className="text-lg font-medium text-gray-900 mb-2">No products found</h3>
                 <p className="text-gray-500">Try adjusting your search or filter criteria</p>
               </div>
@@ -576,3 +536,5 @@ export default function SearchPage() {
     </div>
   );
 }
+
+export default memo(SearchPage);

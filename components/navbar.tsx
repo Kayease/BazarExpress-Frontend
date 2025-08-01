@@ -20,7 +20,7 @@ import {
 
 import Link from "next/link";
 import Image from "next/image";
-import { useAppContext } from "@/components/app-provider";
+import { useAppContext, useCartContext, useWishlistContext } from "@/components/app-provider";
 import { useAppSelector, useAppDispatch } from "../lib/store";
 import { logout } from "../lib/slices/authSlice";
 import toast from "react-hot-toast";
@@ -32,15 +32,13 @@ import { useLocation } from "@/components/location-provider";
 export default function Navbar() {
   const {
     setIsLoginOpen,
-    cartItems,
     searchQuery,
     setSearchQuery,
-    handleLogout,
-    isCartOpen,
-    setIsCartOpen,
-    wishlistItems,
-    cartTotal,
+    handleLogout
   } = useAppContext();
+  const { cartItems, cartTotal } = useCartContext();
+  const { isCartOpen, setIsCartOpen } = useAppContext();
+  const { wishlistItems } = useWishlistContext();
 
   const user = useAppSelector((state) => state.auth.user);
   const isLoggedIn = !!user;

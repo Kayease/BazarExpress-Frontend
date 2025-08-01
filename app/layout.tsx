@@ -3,6 +3,7 @@ import './globals.css'
 import { AppProvider } from '@/components/app-provider'
 import SiteFrame from '@/components/SiteFrame'
 import { Toaster } from 'react-hot-toast'
+import Script from 'next/script'
 
 export const metadata: Metadata = {
   title: 'BazarXpress | All your desired here..',
@@ -58,6 +59,34 @@ export default function RootLayout({
             }}
           />
         </AppProvider>
+        
+        {/* Performance and Service Worker Scripts */}
+        <Script
+          id="performance-init"
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `
+              // Register Service Worker
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                  navigator.serviceWorker.register('/sw.js')
+                    .then(registration => console.log('SW registered'))
+                    .catch(error => console.log('SW registration failed'));
+                });
+              }
+              
+              // Preconnect to external domains
+              const domains = ['https://res.cloudinary.com'];
+              domains.forEach(domain => {
+                const link = document.createElement('link');
+                link.rel = 'preconnect';
+                link.href = domain;
+                link.crossOrigin = 'anonymous';
+                document.head.appendChild(link);
+              });
+            `
+          }}
+        />
       </body>
     </html>
   )

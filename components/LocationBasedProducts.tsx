@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, memo } from 'react';
 import { Button } from '@/components/ui/button';
 import { 
   MapPin, 
@@ -23,7 +23,7 @@ import {
   formatDistance,
   formatDuration
 } from '@/lib/location';
-import { useAppContext } from '@/components/app-provider';
+import { useCartContext, useWishlistContext } from '@/components/app-provider';
 import toast from 'react-hot-toast';
 import Image from 'next/image';
 
@@ -33,7 +33,7 @@ interface LocationBasedProductsProps {
   pincode?: string | null;
 }
 
-export default function LocationBasedProducts({ 
+function LocationBasedProducts({ 
   categoryId, 
   searchQuery,
   pincode
@@ -46,7 +46,8 @@ export default function LocationBasedProducts({
     setShowLocationModal,
   } = useLocation();
   
-  const { addToCart } = useAppContext();
+  const { addToCart } = useCartContext();
+  const { addToWishlist, isInWishlist } = useWishlistContext();
 
   // Product states
   const [products, setProducts] = useState<ProductWithDelivery[]>([]);

@@ -3,7 +3,7 @@
     "version": "0.1.0",
     "private": true,
     "scripts": {
-        "dev": "next dev -p 1000",
+        "dev": "next dev --turbopack",
         "build": "next build",
         "start": "next start -p 1000",
         "lint": "next lint"
@@ -39,6 +39,8 @@
         "@radix-ui/react-toggle-group": "^1.1.2",
         "@radix-ui/react-tooltip": "^1.1.9",
         "@reduxjs/toolkit": "^2.2.3",
+        "@tanstack/react-query": "^5.84.0",
+        "@tanstack/react-query-devtools": "^5.84.0",
         "@tinymce/tinymce-react": "^6.2.1",
         "@tiptap/react": "^2.19.2",
         "@tiptap/starter-kit": "^2.19.2",
@@ -51,6 +53,7 @@
         "cloudinary": "^2.7.0",
         "clsx": "^2.1.1",
         "cmdk": "^1.0.6",
+        "critters": "^0.0.23",
         "date-fns": "^3.6.0",
         "deps": "^1.0.0",
         "embla-carousel-react": "^8.5.1",

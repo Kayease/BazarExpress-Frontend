@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useLocation } from "@/components/location-provider";
+import { useCategories } from "@/hooks/use-categories";
 
 interface Category {
   _id: string;
@@ -15,44 +16,21 @@ interface Category {
 }
 
 export default function CategorySection() {
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   
   // Get location context for pincode-based filtering
   const { locationState } = useLocation();
 
-  const API = process.env.NEXT_PUBLIC_API_URL;
+  // Use the cached categories hook
+  const { 
+    data: categoriesData, 
+    isLoading: loading, 
+    error,
+    refetch: fetchCategories
+  } = useCategories();
 
-  useEffect(() => {
-    fetchCategories();
-  }, []);
-
-  const fetchCategories = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const res = await fetch(`${API}/categories`);
-      if (!res.ok) throw new Error("Failed to fetch categories");
-
-      const data = await res.json();
-      const visible = data
-        .filter((cat: Category) => {
-          // Only show categories that are not hidden and are parent categories
-          return !cat.hide && (!cat.parentId || cat.parentId === "");
-        })
-        .sort((a: Category, b: Category) => a.sortOrder - b.sortOrder);
-
-      setCategories(visible);
-    } catch (err: any) {
-      console.error(err);
-      setError("Unable to load categories. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Memoize categories to prevent unnecessary re-renders
+  const categories = useMemo(() => categoriesData || [], [categoriesData]);
 
   return (
     <section className="pt-2 pb-6 sm:py-6 bg-white">
@@ -72,9 +50,9 @@ export default function CategorySection() {
           </div>
         ) : error ? (
           <div className="text-center mt-4">
-            <p className="text-red-600 mb-4">{error}</p>
+            <p className="text-red-600 mb-4">{error instanceof Error ? error.message : 'Unable to load categories. Please try again.'}</p>
             <button
-              onClick={fetchCategories}
+              onClick={() => fetchCategories()}
               className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition"
             >
               Retry

@@ -1,5 +1,5 @@
 "use client";
-import { useAppContext } from "@/components/app-provider";
+import { useWishlistContext, useCartContext } from "@/components/app-provider";
 import { Button } from "@/components/ui/button";
 import { Heart, ShoppingCart, ArrowLeft, Trash2 } from "lucide-react";
 import Image from "next/image";
@@ -7,7 +7,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 export default function WishlistPage() {
-  const { wishlistItems, removeFromWishlist, addToCart, isInWishlist } = useAppContext();
+  const { wishlistItems, removeFromWishlist, isInWishlist } = useWishlistContext();
+  const { addToCart } = useCartContext();
   const router = useRouter();
 
   const moveToCart = (item: any) => {

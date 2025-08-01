@@ -7,15 +7,17 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useEffect, useState, useRef } from "react";
-import { useAppContext } from "@/components/app-provider";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { useAppContext, useCartContext, useWishlistContext } from "@/components/app-provider";
 import { useLocation } from "@/components/location-provider";
+import { useHomeProducts, useSearchProducts } from "@/hooks/use-products";
 
 // Define interfaces for our data types
 
@@ -85,16 +87,57 @@ export default function ProductSection({
   onAddToCart,
   searchQuery,
 }: ProductSectionProps) {
-  const [productSections, setProductSections] = useState<ProductSection[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
-
   // Get wishlist functions from context
-  const { addToWishlist, isInWishlist, addToCart, updateCartItem, cartItems } = useAppContext();
+  const { addToCart, updateCartItem, cartItems } = useCartContext();
+  const { addToWishlist, isInWishlist } = useWishlistContext();
   
   // Get location context
-  const { locationState, fetchProductsByLocation, deliveryMessage, isGlobalMode, isLoading } = useLocation();
+  const { locationState, deliveryMessage, isGlobalMode, isLoading } = useLocation();
+  
+  // Router for navigation
+  const router = useRouter();
+
+  // Use cached hooks for data fetching
+  const { 
+    data: homeProductSections, 
+    isLoading: homeLoading, 
+    error: homeError 
+  } = useHomeProducts(
+    locationState.pincode || undefined, 
+    locationState.isGlobalMode
+  );
+
+  const { 
+    data: searchProductSections, 
+    isLoading: searchLoading, 
+    error: searchError 
+  } = useSearchProducts(
+    searchQuery, 
+    locationState.pincode || undefined, 
+    locationState.isGlobalMode
+  );
+
+  // Determine which data to use based on search query
+  const productSections = useMemo(() => {
+    if (searchQuery && searchQuery.trim()) {
+      return searchProductSections || [];
+    }
+    return homeProductSections || [];
+  }, [searchQuery, searchProductSections, homeProductSections]);
+
+  const loading = useMemo(() => {
+    if (searchQuery && searchQuery.trim()) {
+      return searchLoading;
+    }
+    return homeLoading;
+  }, [searchQuery, searchLoading, homeLoading]);
+
+  const error = useMemo(() => {
+    if (searchQuery && searchQuery.trim()) {
+      return searchError;
+    }
+    return homeError;
+  }, [searchQuery, searchError, homeError]);
 
   // Local quantity state for product tiles
   const [quantities, setQuantities] = useState<{ [id: string]: number }>({});
@@ -152,158 +195,30 @@ export default function ProductSection({
     }
   };
 
-  useEffect(() => {
-    // Clear products and show loading immediately when pincode changes
-    setLoading(true);
-    setProductSections([]);
-    const fetchProducts = async () => {
-      try {
-        setLoading(true);
-        setError(null);
 
-        // Debug: Log location state
-        console.log('ProductSection - Location State:', {
-          isLocationDetected: locationState.isLocationDetected,
-          pincode: locationState.pincode,
-          deliveryMode: locationState.deliveryMode,
-          isGlobalMode: isGlobalMode
-        });
 
-        // If location is detected and PIN is set, use location-based product fetching
-        // Also allow if we have a pincode even if isLocationDetected is not yet true (race condition fix)
-        if ((locationState.isLocationDetected && locationState.pincode) || locationState.pincode) {
-          const locationProducts = await fetchProductsByLocation({ limit: 100 });
-          
-          if (locationProducts.success && locationProducts.products.length > 0) {
-            // Fetch categories to organize products
-            const categoriesResponse = await fetch(`${API_URL}/categories`);
-            if (!categoriesResponse.ok) {
-              throw new Error('Failed to fetch categories');
-            }
-            const categoriesData = await categoriesResponse.json();
-
-            // Find all parent categories with showOnHome = true
-            const homeCategories = categoriesData.filter((category: Category) =>
-              category.showOnHome === true && (!category.parentId || category.parentId === "")
-            );
-
-            // Build a map of parentId -> subcategories
-            const subcategoriesByParent: { [parentId: string]: string[] } = {};
-            categoriesData.forEach((cat: Category) => {
-              if (cat.parentId) {
-                if (!subcategoriesByParent[cat.parentId]) subcategoriesByParent[cat.parentId] = [];
-                subcategoriesByParent[cat.parentId].push(cat._id);
-              }
-            });
-
-            // Organize location-based products by category
-            const productSections: ProductSection[] = homeCategories.map((parentCat: Category) => {
-              // Get all subcategory IDs for this parent
-              const subcatIds = subcategoriesByParent[parentCat._id] || [];
-              // Include parent category ID as well
-              const allCatIds = [parentCat._id, ...subcatIds];
-              
-              // Filter products for this category and its subcategories
-              const catProducts = locationProducts.products.filter((product: Product) => {
-                if (!product.category) return false;
-                const categoryId = typeof product.category === 'object' ? product.category._id : product.category;
-                return allCatIds.includes(categoryId);
-              });
-              
-              // Shuffle and pick up to 15 random products
-              const shuffled = [...catProducts].sort(() => 0.5 - Math.random());
-              const selectedProducts = shuffled.slice(0, 15);
-              
-              return {
-                category: parentCat,
-                products: selectedProducts
-              };
-            }).filter((section: { products: string | any[]; }) => section.products.length > 0);
-
-            setProductSections(productSections);
-          } else {
-            // No products available for this location
-            setProductSections([]);
-          }
-        } else {
-          // Block product display if PIN is not set
-          setProductSections([]);
-          setError('Please select your delivery PIN code to view available products.');
-          setLoading(false);
-          return;
-        }
-      } catch (err) {
-        console.error('Error fetching products:', err);
-        setError('Failed to load products. Please try again later.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchProducts();
-  }, [API_URL, locationState.isLocationDetected, locationState.pincode, isGlobalMode, fetchProductsByLocation]);
-
-  // Filter products based on search query if provided
-  useEffect(() => {
-    if (!searchQuery || searchQuery.trim() === '') return;
-
-    const fetchSearchedProducts = async () => {
-      try {
-        setLoading(true);
-
-        let searchResults = [];
-
-        // If location is detected and PIN is set, use location-based search
-        // Also allow if we have a pincode even if isLocationDetected is not yet true (race condition fix)
-        if ((locationState.isLocationDetected && locationState.pincode) || locationState.pincode) {
-          const locationProducts = await fetchProductsByLocation({ 
-            search: searchQuery,
-            limit: 50 
-          });
-          
-          if (locationProducts.success) {
-            searchResults = locationProducts.products;
-          }
-        } else {
-          // Block search if PIN is not set
-          setProductSections([]);
-          setError('Please select your delivery PIN code to search products.');
-          setLoading(false);
-          return;
-        }
-
-        // Create a single section with search results
-        const searchSection: ProductSection = {
-          category: {
-            _id: 'search',
-            name: `Search Results for "${searchQuery}"`,
-            popular: false,
-            showOnHome: false,
-            parentId: null,
-            hide: false
-          },
-          products: searchResults
-        };
-
-        setProductSections([searchSection]);
-      } catch (err) {
-        console.error('Error searching products:', err);
-        setError('Failed to search products. Please try again.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchSearchedProducts();
-  }, [searchQuery, API_URL, locationState.isLocationDetected, locationState.pincode, fetchProductsByLocation]);
-
-  const handleWishlistClick = (product: Product) => {
+  const handleWishlistClick = (product: Product, e?: React.MouseEvent) => {
+    // Stop event propagation to prevent navigation when clicking wishlist
+    if (e) {
+      e.stopPropagation();
+    }
     // Implementation of add to wishlist
     console.log('Add to wishlist:', product);
     // Call the actual wishlist function from context
     if (addToWishlist) {
       addToWishlist(product);
     }
+  };
+
+  const handleProductClick = (product: Product) => {
+    // Navigate to product detail page with correct URL format
+    router.push(`/products/${product._id}`);
+  };
+
+  const handleButtonClick = (e: React.MouseEvent, action: () => void) => {
+    // Stop event propagation to prevent navigation when clicking buttons
+    e.stopPropagation();
+    action();
   };
 
   if (loading) {
@@ -335,7 +250,7 @@ export default function ProductSection({
       <section className="py-12 bg-surface-secondary">
         <div className="max-w-7xl mx-auto px-4">
           <div className="text-center py-12">
-            <p className="text-red-500">{error}</p>
+            <p className="text-red-500">{error instanceof Error ? error.message : 'Please select your delivery PIN code to view available products.'}</p>
             <Button
               onClick={() => window.location.reload()}
               className="mt-4"
@@ -410,7 +325,12 @@ export default function ProductSection({
                         const discountPercent = hasDiscount ? Math.round((((product.mrp ?? 0) - product.price) / (product.mrp ?? 1)) * 100) : 0;
                         const showDiscountBadge = hasDiscount && discountPercent > 30;
                         return (
-                          <div key={product._id} className="min-w-[180px] max-w-[180px] bg-white border border-gray-200 rounded-xl flex-shrink-0 flex flex-col relative group" style={{ fontFamily: 'Sinkin Sans, sans-serif', boxShadow: 'none' }}>
+                          <div 
+                            key={product._id} 
+                            className="min-w-[180px] max-w-[180px] bg-white border border-gray-200 rounded-xl flex-shrink-0 flex flex-col relative group cursor-pointer hover:shadow-lg transition-shadow" 
+                            style={{ fontFamily: 'Sinkin Sans, sans-serif', boxShadow: 'none' }}
+                            onClick={() => handleProductClick(product)}
+                          >
                             {/* Discount Badge */}
                             {showDiscountBadge && (
                               <div className="absolute left-3 top-0 z-10 flex items-center justify-center" style={{ width: '29px', height: '28px' }}>
@@ -425,7 +345,7 @@ export default function ProductSection({
                             {/* Wishlist Button */}
                             <button
                               className="absolute top-2 right-2 z-10 p-1 rounded-full bg-white shadow hover:bg-gray-100"
-                              onClick={() => handleWishlistClick(product)}
+                              onClick={(e) => handleWishlistClick(product, e)}
                               aria-label={isInWishlist && isInWishlist(product._id) ? 'Remove from wishlist' : 'Add to wishlist'}
                             >
                               <Heart className={`w-5 h-5 transition-colors duration-200 ${isInWishlist && isInWishlist(product._id) ? 'text-red-500 fill-red-500' : 'text-gray-400 fill-none'}`} />
@@ -472,13 +392,13 @@ export default function ProductSection({
                                   <div className="flex items-center bg-green-700 rounded justify-between" style={{ minWidth: '80px', width: '80px', height: '32px' }}>
                                     <button
                                       className="text-white text-lg focus:outline-none flex-1 text-center h-full flex items-center justify-center"
-                                      onClick={() => handleDec(product)}
+                                      onClick={(e) => handleButtonClick(e, () => handleDec(product))}
                                       aria-label="Decrease quantity"
                                     >-</button>
                                     <span className="text-white font-bold text-base select-none text-center flex-1 h-full flex items-center justify-center">{quantities[product._id]}</span>
                                     <button
                                       className="text-white text-lg focus:outline-none flex-1 text-center h-full flex items-center justify-center"
-                                      onClick={() => handleInc(product)}
+                                      onClick={(e) => handleButtonClick(e, () => handleInc(product))}
                                       aria-label="Increase quantity"
                                     >+</button>
                                   </div>
@@ -486,7 +406,7 @@ export default function ProductSection({
                                   <button
                                     className="border border-green-600 text-green-700 font-medium text-[15px] bg-white hover:bg-green-50 transition"
                                     style={{ minWidth: '80px', width: '80px', height: '32px', fontFamily: 'Sinkin Sans, sans-serif', borderRadius: '4px', boxShadow: 'none' }}
-                                    onClick={() => handleAdd(product)}
+                                    onClick={(e) => handleButtonClick(e, () => handleAdd(product))}
                                   >ADD</button>
                                 )}
                               </div>

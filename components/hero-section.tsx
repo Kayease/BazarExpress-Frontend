@@ -1,11 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useLocation } from "@/components/location-provider";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
+import { useBanners } from "@/hooks/use-banners";
 
 interface Banner {
   _id: string;
@@ -26,74 +25,29 @@ interface SpecialBanners {
 }
 
 export default function HeroSection() {
-  const [banners, setBanners] = useState<Banner[]>([]);
-  const [specialBanners, setSpecialBanners] = useState<SpecialBanners>({
-    banner1: null,
-    banner2: null,
-    banner3: null
-  });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
   const router = useRouter();
   
   // Get location context for pincode-based filtering
   const { locationState } = useLocation();
 
-  useEffect(() => {
-    const fetchBanners = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        
-        // Build banner fetch URL with location context
-        let bannerUrl = `${API_URL}/banners`;
-        let specialBannerUrl = `${API_URL}/banners/special`;
-        
-        // Add pincode parameter for location-based banner filtering if available
-        if (locationState.isLocationDetected && locationState.pincode) {
-          const params = new URLSearchParams();
-          params.append('pincode', locationState.pincode);
-          
-          if (locationState.isGlobalMode) {
-            params.append('mode', 'global');
-          }
-          
-          bannerUrl += `?${params.toString()}`;
-          specialBannerUrl += `?${params.toString()}`;
-        }
-        
-        // Fetch regular banners
-        const res = await fetch(bannerUrl);
-        if (!res.ok) throw new Error("Failed to fetch banners");
-        const data = await res.json();
-        
-        // Filter active regular banners
-        const regularBanners = data.filter((banner: Banner) => 
-          banner.active && (!banner.bannerType || banner.bannerType === 'regular')
-        );
-        setBanners(regularBanners);
-        
-        // Fetch special banners
-        const specialRes = await fetch(specialBannerUrl);
-        if (specialRes.ok) {
-          const specialData = await specialRes.json();
-          setSpecialBanners({
-            banner1: specialData.banner1 || null,
-            banner2: specialData.banner2 || null,
-            banner3: specialData.banner3 || null
-          });
-        }
-      } catch (err) {
-        console.error("Error fetching banners:", err);
-        setError("Failed to load banners");
-      } finally {
-        setLoading(false);
-      }
-    };
+  // Use the cached banners hook
+  const { 
+    data: bannersData, 
+    isLoading: loading, 
+    error 
+  } = useBanners(
+    locationState.pincode || undefined, 
+    locationState.isGlobalMode
+  );
 
-    fetchBanners();
-  }, [API_URL, locationState.isLocationDetected, locationState.pincode, locationState.isGlobalMode]);
+  // Memoize banners and special banners to prevent unnecessary re-renders
+  const banners = useMemo(() => bannersData?.regularBanners || [], [bannersData?.regularBanners]);
+  const specialBanners = useMemo(() => bannersData?.specialBanners || {
+    banner1: null,
+    banner2: null,
+    banner3: null
+  }, [bannersData?.specialBanners]);
 
   const nextBanner = useCallback(() => {
     if (banners.length > 1) {
@@ -158,7 +112,7 @@ export default function HeroSection() {
           <div className="w-full h-64 bg-gray-200 animate-pulse rounded-xl mb-6"></div>
         ) : error ? (
           <div className="w-full h-64 bg-gray-100 flex items-center justify-center rounded-xl mb-6">
-            <p className="text-gray-500">{error}</p>
+            <p className="text-gray-500">{error instanceof Error ? error.message : 'Failed to load banners'}</p>
           </div>
         ) : banners.length === 0 ? (
           <div className="w-full h-64 bg-gray-100 flex items-center justify-center rounded-xl mb-6">

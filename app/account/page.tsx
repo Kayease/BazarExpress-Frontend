@@ -39,7 +39,7 @@ import {
 } from "lucide-react";
 import { useAppSelector, useAppDispatch } from "../../lib/store";
 import { updateProfile, fetchProfile } from "../../lib/slices/authSlice";
-import { useAppContext } from "../../components/app-provider";
+import { useCartContext, useWishlistContext } from "../../components/app-provider";
 
 // Custom event for wishlist updates
 const WISHLIST_UPDATED_EVENT = "wishlistUpdated";
@@ -49,7 +49,8 @@ import Image from "next/image";
 export default function Profile() {
   const user = useAppSelector((state) => state.auth.user);
   const token = useAppSelector((state) => state.auth.token);
-  const { cartItems, cartTotal, updateCartItem, wishlistItems, removeFromWishlist: removeFromWishlistContext, addToCart } = useAppContext();
+  const { cartItems, cartTotal, updateCartItem, addToCart } = useCartContext();
+  const { wishlistItems, removeFromWishlist: removeFromWishlistContext } = useWishlistContext();
   const cartCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
   const [isEditing, setIsEditing] = useState(false);
   const [savedAddresses, setSavedAddresses] = useState<any[]>([]);
