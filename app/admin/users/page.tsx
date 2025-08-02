@@ -195,7 +195,23 @@ export default function AdminUsers() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(updatedUser)
       });
-      if (!res.ok) throw new Error("Update failed");
+      if (!res.ok) {
+        let errorMsg = "Failed to update user";
+        try {
+          const errorData = await res.json();
+          if (
+            errorData?.error === "EMAIL_EXISTS" ||
+            (errorData?.message?.toLowerCase().includes("email") && 
+             (errorData?.message?.toLowerCase().includes("exist") || errorData?.message?.toLowerCase().includes("already")))
+          ) {
+            errorMsg = "Email already exists.";
+          }
+        } catch (e) {
+          // ignore JSON parse error, fallback to generic
+        }
+        toast.error(errorMsg);
+        return;
+      }
       setUsers(users.map(u => u.id === editUser.id ? updatedUser : u));
       toast.success("User updated");
       closeEditModal();

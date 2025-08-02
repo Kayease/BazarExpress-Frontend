@@ -197,10 +197,10 @@ export default function Profile() {
     try {
       await dispatch(updateProfile(formData)).unwrap();
       await dispatch(fetchProfile());
-      // toast.success("Profile updated successfully!");
+      toast.success("Profile updated successfully!");
       setIsEditing(false);
     } catch (err: any) {
-      // toast.error(err || "Failed to update profile");
+      toast.error(err || "Failed to update profile");
     }
   };
 
@@ -838,7 +838,7 @@ export default function Profile() {
                       first purchase.
                     </p>
                     <Link
-                      href="/products"
+                      href="/"
                       className="inline-flex items-center bg-gradient-to-r from-brand-primary to-brand-primary-dark text-white px-6 py-3 rounded-xl hover:shadow-lg transition-all duration-200"
                     >
                       <ArrowRight className="w-4 h-4 mr-2" />

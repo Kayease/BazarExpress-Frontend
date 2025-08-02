@@ -192,15 +192,24 @@ export default function AdminDashboard() {
         <div className="bg-white rounded-lg p-6 shadow-md">
           <h3 className="text-lg font-semibold text-codGray mb-4">Quick Actions</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <button className="flex items-center justify-center space-x-2 bg-brand-primary hover:bg-brand-primary-dark text-white py-3 px-4 rounded-lg transition-colors">
+            <button
+              className="flex items-center justify-center space-x-2 bg-brand-primary hover:bg-brand-primary-dark text-white py-3 px-4 rounded-lg transition-colors"
+              onClick={() => router.push('/admin/products')}
+            >
               <Package className="h-5 w-5" />
               <span>Add Product</span>
             </button>
-            <button className="flex items-center justify-center space-x-2 bg-brand-primary hover:bg-brand-primary-dark text-white py-3 px-4 rounded-lg transition-colors">
+            <button
+              className="flex items-center justify-center space-x-2 bg-brand-primary hover:bg-brand-primary-dark text-white py-3 px-4 rounded-lg transition-colors"
+              onClick={() => router.push('/admin/orders')}
+            >
               <Eye className="h-5 w-5" />
               <span>View Orders</span>
             </button>
-            <button className="flex items-center justify-center space-x-2 bg-brand-primary hover:bg-brand-primary-dark text-white py-3 px-4 rounded-lg transition-colors">
+            <button
+              className="flex items-center justify-center space-x-2 bg-brand-primary hover:bg-brand-primary-dark text-white py-3 px-4 rounded-lg transition-colors"
+              onClick={() => router.push('/admin/users')}
+            >
               <Users className="h-5 w-5" />
               <span>Manage Users</span>
             </button>

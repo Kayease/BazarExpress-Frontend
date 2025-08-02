@@ -92,7 +92,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
         body: JSON.stringify({ phone, otp, sessionId }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Invalid OTP");
+      if (!res.ok) throw new Error(data.message || data.error || "Invalid OTP");
       
       // Set the token in Redux store
       dispatch(setToken(data.token));
@@ -215,7 +215,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                             body: JSON.stringify({ phone, otp: value, sessionId }),
                           });
                           const data = await res.json();
-                          if (!res.ok) throw new Error(data.error || "Invalid OTP");
+                          if (!res.ok) throw new Error(data.message || data.error || "Invalid OTP");
                           
                           dispatch(setToken(data.token));
                           toast.success("Login successful!");

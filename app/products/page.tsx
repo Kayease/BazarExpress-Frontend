@@ -1,7 +1,7 @@
 "use client";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import LocationBasedProducts from "@/components/LocationBasedProducts";
+import { LocationBasedProducts } from "@/components/LocationBasedProducts";
 
 import { useLocation } from "@/components/location-provider";
 

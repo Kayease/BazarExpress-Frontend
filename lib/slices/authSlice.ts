@@ -44,7 +44,7 @@ export const login = createAsyncThunk(
       const res = await axios.post(`${API}/auth/login`, data);
       return res.data;
     } catch (err: any) {
-      const errorMsg = err.response?.data?.error || 'Login failed';
+      const errorMsg = err.response?.data?.message || err.response?.data?.error || 'Login failed';
       return rejectWithValue(errorMsg);
     }
   }
@@ -61,7 +61,7 @@ export const register = createAsyncThunk(
       const res = await axios.post(`${API}/auth/register`, data);
       return res.data;
     } catch (err: any) {
-      const errorMsg = err.response?.data?.error || 'Registration failed';
+      const errorMsg = err.response?.data?.message || err.response?.data?.error || 'Registration failed';
       return rejectWithValue(errorMsg);
     }
   }
@@ -82,7 +82,7 @@ export const updateProfile = createAsyncThunk(
       });
       return res.data.user;
     } catch (err: any) {
-      const errorMsg = err.response?.data?.error || 'Profile update failed';
+      const errorMsg = err.response?.data?.message || err.response?.data?.error || 'Profile update failed';
       return rejectWithValue(errorMsg);
     }
   }
@@ -100,7 +100,7 @@ export const fetchProfile = createAsyncThunk(
             });
             return res.data; // Should be { user, ...stats }
     } catch (err: any) {
-      return rejectWithValue(err.response?.data?.error || 'Failed to fetch profile');
+      return rejectWithValue(err.response?.data?.message || err.response?.data?.error || 'Failed to fetch profile');
     }
   }
 );

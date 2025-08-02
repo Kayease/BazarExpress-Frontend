@@ -237,21 +237,24 @@ export default function Footer() {
             {/* Newsletter Signup - Visible on all screens */}
             <div className="space-y-3">
               <h5 className="font-medium text-white">Stay Updated</h5>
-              <form onSubmit={handleNewsletterSubmit} className="flex">
+              <form
+  onSubmit={handleNewsletterSubmit}
+  className="flex flex-col sm:flex-row w-full max-w-md space-y-2 sm:space-y-0 sm:space-x-1"
+>
                 <input
-                  type="email"
-                  placeholder="Enter your email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded-l-lg text-white text-sm focus:outline-none focus:border-green-400 transition-colors"
-                  required
-                  disabled={isSubmitting}
-                />
-                <button 
-                  type="submit" 
-                  className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-r-lg transition-colors flex items-center justify-center"
-                  disabled={isSubmitting}
-                >
+  type="email"
+  placeholder="Enter your email"
+  value={email}
+  onChange={(e) => setEmail(e.target.value)}
+  className="flex-1 min-w-0 px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg sm:rounded-l-lg sm:rounded-r-none text-white text-sm focus:outline-none focus:border-green-400 transition-colors w-full"
+  required
+  disabled={isSubmitting}
+/>
+                <button
+  type="submit"
+  className="px-2 py-2 bg-green-600 hover:bg-green-700 rounded-lg sm:rounded-r-lg sm:rounded-l-none transition-colors flex items-center justify-center sm:w-auto w-full"
+  disabled={isSubmitting}
+>
                   {isSubmitting ? (
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                   ) : (

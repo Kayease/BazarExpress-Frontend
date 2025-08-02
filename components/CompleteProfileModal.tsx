@@ -34,7 +34,7 @@ export default function CompleteProfileModal({ isOpen, onClose, user, onProfileU
         body: JSON.stringify({ name, email, dateOfBirth }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to update profile");
+      if (!res.ok) throw new Error(data.message || data.error || "Failed to update profile");
       onProfileUpdated(data.user);
       onClose();
     } catch (err: any) {
@@ -45,7 +45,7 @@ export default function CompleteProfileModal({ isOpen, onClose, user, onProfileU
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
+    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/20">
       <div className="bg-white rounded-lg p-6 w-11/12 max-w-md relative" onClick={e => e.stopPropagation()}>
         <button
           onClick={onClose}
@@ -76,15 +76,7 @@ export default function CompleteProfileModal({ isOpen, onClose, user, onProfileU
               required
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Date of Birth</label>
-            <input
-              type="date"
-              value={dateOfBirth}
-              onChange={e => setDateOfBirth(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-            />
-          </div>
+
           {error && <div className="text-red-500 text-sm">{error}</div>}
           <button
             type="submit"

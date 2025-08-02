@@ -6,9 +6,12 @@ import { PersistGate } from "redux-persist/integration/react";
 import { logout as reduxLogout } from "../lib/slices/authSlice";
 import { useRouter } from "next/navigation";
 import { getCartItems, setCartItems as persistCartItems } from "../lib/cart";
+import { getCartFromDB, addToCartDB, updateCartItemDB, removeFromCartDB, syncCartDB } from "../lib/api/cart";
+import { getWishlistFromDB, addToWishlistDB, removeFromWishlistDB, syncWishlistDB } from "../lib/api/wishlist";
 import toast from "react-hot-toast";
 import { LocationProvider } from "@/components/location-provider";
 import { ReactQueryProvider } from "@/lib/react-query";
+import { migrateLocalStorageData, shouldRunMigration } from "@/lib/migration";
 
 interface AppContextType {
   isCartOpen: boolean;
@@ -29,6 +32,7 @@ interface CartContextType {
   addToCart: (product: any) => void;
   updateCartItem: (id: any, quantity: number, showToast?: boolean) => void;
   cartTotal: number;
+  isLoadingCart: boolean;
 }
 const CartContext = createContext<CartContextType | undefined>(undefined);
 export function useCartContext() {
@@ -43,6 +47,7 @@ interface WishlistContextType {
   addToWishlist: (product: any) => void;
   removeFromWishlist: (productId: string) => void;
   isInWishlist: (productId: string) => boolean;
+  isLoadingWishlist: boolean;
 }
 const WishlistContext = createContext<WishlistContextType | undefined>(undefined);
 export function useWishlistContext() {
@@ -96,6 +101,9 @@ export function useModal() {
 // --- Cart Provider ---
 function CartProvider({ children }: { children: ReactNode }) {
   const [cartItems, setCartItems] = useState<any[]>([]);
+  const [isLoadingCart, setIsLoadingCart] = useState(false);
+  const reduxUser = useSelector((state: RootState) => state.auth.user);
+  const isLoggedIn = !!reduxUser;
 
   // Custom updater for cart items
   const updateCartItems = (items: any[]) => {
@@ -103,38 +111,170 @@ function CartProvider({ children }: { children: ReactNode }) {
     setCartItems(items);
   };
 
+  // Load cart from database or local storage
+  const loadCart = useCallback(async () => {
+    if (isLoggedIn) {
+      try {
+        setIsLoadingCart(true);
+        const response = await getCartFromDB();
+        const dbCartItems = response.cart.map((item: any) => ({
+          id: item.productId._id,
+          _id: item.productId._id,
+          ...item.productId,
+          quantity: item.quantity
+        }));
+        setCartItems(dbCartItems);
+        // Don't persist to localStorage for logged-in users
+      } catch (error) {
+        console.error('Failed to load cart from database:', error);
+        // For logged-in users, if DB fails, show empty cart instead of local storage
+        setCartItems([]);
+      } finally {
+        setIsLoadingCart(false);
+      }
+    } else {
+      updateCartItems(getCartItems());
+    }
+  }, [isLoggedIn]);
+
+  // Sync local cart with database when user logs in
+  const syncCartWithDB = useCallback(async () => {
+    if (isLoggedIn) {
+      try {
+        const localCart = getCartItems();
+        const localCartCount = localCart.length;
+        
+        // Clear local cart immediately to prevent syncing with other accounts
+        localStorage.removeItem('cart');
+        
+        if (localCartCount > 0) {
+          const response = await syncCartDB(localCart);
+          const syncedCartItems = response.cart.map((item: any) => ({
+            id: item.productId._id,
+            _id: item.productId._id,
+            ...item.productId,
+            quantity: item.quantity
+          }));
+          setCartItems(syncedCartItems);
+          
+          // Only show toast if items were actually synced
+          toast.success(`${localCartCount} item(s) synced to your cart`);
+        } else {
+          loadCart();
+        }
+      } catch (error) {
+        console.error('Failed to sync cart:', error);
+        // Only show error toast for sync failures
+        toast.error('Failed to sync cart');
+      }
+    }
+  }, [isLoggedIn, loadCart]);
+
   useEffect(() => {
-    updateCartItems(getCartItems());
-    const sync = () => updateCartItems(getCartItems());
+    loadCart();
+    const sync = () => {
+      if (!isLoggedIn) {
+        updateCartItems(getCartItems());
+      }
+    };
     window.addEventListener('storage', sync);
     return () => window.removeEventListener('storage', sync);
-  }, []);
+  }, [loadCart, isLoggedIn]);
 
-  const addToCart = useCallback((product: any) => {
-    const items = getCartItems();
-    const productId = product.id || product._id;
-    const existing = items.find((item: any) => (item.id || item._id) === productId);
-    const quantityToAdd = product.quantity || 1;
-    if (existing) {
-      existing.quantity += quantityToAdd;
-    } else {
-      items.push({ ...product, id: productId, quantity: quantityToAdd });
+  // Clear cart state when user logs out
+  useEffect(() => {
+    if (!isLoggedIn) {
+      // Clear cart state for logged out users, they'll get data from localStorage
+      const localCart = getCartItems();
+      setCartItems(localCart);
     }
-    updateCartItems(items);
-  }, []);
+  }, [isLoggedIn]);
 
-  const updateCartItem = useCallback((id: any, quantity: number, showToast: boolean = true) => {
-    const items = getCartItems();
-    const item = items.find((item: any) => (item.id || item._id) === id);
-    if (item) {
-      item.quantity = quantity;
-      if (item.quantity <= 0) {
-        updateCartItems(items.filter((item: any) => (item.id || item._id) !== id));
-        return;
+  // Sync cart when user logs in (only once per login session)
+  useEffect(() => {
+    if (isLoggedIn) {
+      const hasCartSynced = sessionStorage.getItem('cartSynced');
+      if (!hasCartSynced) {
+        syncCartWithDB().then(() => {
+          sessionStorage.setItem('cartSynced', 'true');
+        });
+      } else {
+        loadCart();
+      }
+    } else {
+      // Clear sync flag when user logs out
+      sessionStorage.removeItem('cartSynced');
+    }
+  }, [isLoggedIn, syncCartWithDB, loadCart]);
+
+  const addToCart = useCallback(async (product: any) => {
+    const productId = product.id || product._id;
+    const quantityToAdd = product.quantity || 1;
+
+    if (isLoggedIn) {
+      try {
+        const response = await addToCartDB(productId, quantityToAdd);
+        const updatedCartItems = response.cart.map((item: any) => ({
+          id: item.productId._id,
+          _id: item.productId._id,
+          ...item.productId,
+          quantity: item.quantity
+        }));
+        setCartItems(updatedCartItems);
+        // Don't persist to localStorage for logged-in users
+        // No toast for regular add to cart operations
+      } catch (error) {
+        console.error('Failed to add to cart:', error);
+        toast.error('Failed to add item to cart');
+      }
+    } else {
+      // Local storage logic for non-logged-in users
+      const items = getCartItems();
+      const existing = items.find((item: any) => (item.id || item._id) === productId);
+      if (existing) {
+        existing.quantity += quantityToAdd;
+      } else {
+        items.push({ ...product, id: productId, quantity: quantityToAdd });
       }
       updateCartItems(items);
+      // No toast for regular add to cart operations
     }
-  }, []);
+  }, [isLoggedIn]);
+
+  const updateCartItem = useCallback(async (id: any, quantity: number, showToast: boolean = false) => {
+    if (isLoggedIn) {
+      try {
+        const response = await updateCartItemDB(id, quantity);
+        const updatedCartItems = response.cart.map((item: any) => ({
+          id: item.productId._id,
+          _id: item.productId._id,
+          ...item.productId,
+          quantity: item.quantity
+        }));
+        setCartItems(updatedCartItems);
+        // Don't persist to localStorage for logged-in users
+        // No toast for regular cart updates
+      } catch (error) {
+        console.error('Failed to update cart:', error);
+        if (showToast) {
+          toast.error('Failed to update cart');
+        }
+      }
+    } else {
+      // Local storage logic for non-logged-in users
+      const items = getCartItems();
+      const item = items.find((item: any) => (item.id || item._id) === id);
+      if (item) {
+        item.quantity = quantity;
+        if (item.quantity <= 0) {
+          updateCartItems(items.filter((item: any) => (item.id || item._id) !== id));
+          return;
+        }
+        updateCartItems(items);
+        // No toast for regular cart updates
+      }
+    }
+  }, [isLoggedIn]);
 
   const cartTotal = useMemo(() => 
     cartItems.reduce((sum: number, item: any) => sum + (item.price || 0) * item.quantity, 0),
@@ -146,8 +286,9 @@ function CartProvider({ children }: { children: ReactNode }) {
     setCartItems: updateCartItems,
     addToCart,
     updateCartItem,
-    cartTotal
-  }), [cartItems, addToCart, updateCartItem, cartTotal]);
+    cartTotal,
+    isLoadingCart
+  }), [cartItems, addToCart, updateCartItem, cartTotal, isLoadingCart]);
 
   return (
     <CartContext.Provider value={cartContextValue}>
@@ -159,33 +300,164 @@ function CartProvider({ children }: { children: ReactNode }) {
 // --- Wishlist Provider ---
 function WishlistProvider({ children }: { children: ReactNode }) {
   const [wishlistItems, setWishlistItems] = useState<any[]>([]);
+  const [isLoadingWishlist, setIsLoadingWishlist] = useState(false);
+  const reduxUser = useSelector((state: RootState) => state.auth.user);
+  const isLoggedIn = !!reduxUser;
+
+  // Load wishlist from database or local storage
+  const loadWishlist = useCallback(async () => {
+    if (isLoggedIn) {
+      try {
+        setIsLoadingWishlist(true);
+        const response = await getWishlistFromDB();
+        const dbWishlistItems = response.wishlist.map((item: any) => ({
+          id: item.productId._id,
+          _id: item.productId._id,
+          ...item.productId
+        }));
+        setWishlistItems(dbWishlistItems);
+        // Don't persist to localStorage for logged-in users
+      } catch (error) {
+        console.error('Failed to load wishlist from database:', error);
+        // For logged-in users, if DB fails, show empty wishlist instead of local storage
+        setWishlistItems([]);
+      } finally {
+        setIsLoadingWishlist(false);
+      }
+    } else {
+      const savedWishlist = localStorage.getItem('wishlistItems');
+      if (savedWishlist) setWishlistItems(JSON.parse(savedWishlist));
+    }
+  }, [isLoggedIn]);
+
+  // Sync local wishlist with database when user logs in
+  const syncWishlistWithDB = useCallback(async () => {
+    if (isLoggedIn) {
+      try {
+        const localWishlist = JSON.parse(localStorage.getItem('wishlistItems') || '[]');
+        const localWishlistCount = localWishlist.length;
+        
+        // Clear local wishlist immediately to prevent syncing with other accounts
+        localStorage.removeItem('wishlistItems');
+        
+        if (localWishlistCount > 0) {
+          const response = await syncWishlistDB(localWishlist);
+          const syncedWishlistItems = response.wishlist.map((item: any) => ({
+            id: item.productId._id,
+            _id: item.productId._id,
+            ...item.productId
+          }));
+          setWishlistItems(syncedWishlistItems);
+          
+          // Only show toast if items were actually synced
+          toast.success(`${localWishlistCount} item(s) synced to your wishlist`);
+        } else {
+          loadWishlist();
+        }
+      } catch (error) {
+        console.error('Failed to sync wishlist:', error);
+        // Only show error toast for sync failures
+        toast.error('Failed to sync wishlist');
+      }
+    }
+  }, [isLoggedIn, loadWishlist]);
 
   useEffect(() => {
-    const savedWishlist = localStorage.getItem('wishlistItems');
-    if (savedWishlist) setWishlistItems(JSON.parse(savedWishlist));
+    loadWishlist();
     const sync = () => {
-      const wishlist = localStorage.getItem('wishlistItems');
-      if (wishlist) setWishlistItems(JSON.parse(wishlist));
+      if (!isLoggedIn) {
+        const wishlist = localStorage.getItem('wishlistItems');
+        if (wishlist) setWishlistItems(JSON.parse(wishlist));
+      }
     };
     window.addEventListener('storage', sync);
     return () => window.removeEventListener('storage', sync);
-  }, []);
+  }, [loadWishlist, isLoggedIn]);
 
-  const addToWishlist = useCallback((product: any) => {
-    const id = product.id || product._id;
-    const existing = wishlistItems.find((item: any) => item.id === id);
-    if (!existing) {
-      const newWishlist = [...wishlistItems, { ...product, id }];
+  // Clear wishlist state when user logs out
+  useEffect(() => {
+    if (!isLoggedIn) {
+      // Clear wishlist state for logged out users, they'll get data from localStorage
+      const localWishlist = localStorage.getItem('wishlistItems');
+      if (localWishlist) {
+        setWishlistItems(JSON.parse(localWishlist));
+      } else {
+        setWishlistItems([]);
+      }
+    }
+  }, [isLoggedIn]);
+
+  // Sync wishlist when user logs in (only once per login session)
+  useEffect(() => {
+    if (isLoggedIn) {
+      const hasWishlistSynced = sessionStorage.getItem('wishlistSynced');
+      if (!hasWishlistSynced) {
+        syncWishlistWithDB().then(() => {
+          sessionStorage.setItem('wishlistSynced', 'true');
+        });
+      } else {
+        loadWishlist();
+      }
+    } else {
+      // Clear sync flag when user logs out
+      sessionStorage.removeItem('wishlistSynced');
+    }
+  }, [isLoggedIn, syncWishlistWithDB, loadWishlist]);
+
+  const addToWishlist = useCallback(async (product: any) => {
+    const productId = product.id || product._id;
+
+    if (isLoggedIn) {
+      try {
+        const response = await addToWishlistDB(productId);
+        const updatedWishlistItems = response.wishlist.map((item: any) => ({
+          id: item.productId._id,
+          _id: item.productId._id,
+          ...item.productId
+        }));
+        setWishlistItems(updatedWishlistItems);
+        // Don't persist to localStorage for logged-in users
+        // No toast for regular add to wishlist operations
+      } catch (error) {
+        console.error('Failed to add to wishlist:', error);
+        toast.error('Failed to add item to wishlist');
+      }
+    } else {
+      // Local storage logic for non-logged-in users
+      const existing = wishlistItems.find((item: any) => (item.id || item._id) === productId);
+      if (!existing) {
+        const newWishlist = [...wishlistItems, { ...product, id: productId }];
+        setWishlistItems(newWishlist);
+        localStorage.setItem('wishlistItems', JSON.stringify(newWishlist));
+        // No toast for regular add to wishlist operations
+      }
+    }
+  }, [wishlistItems, isLoggedIn]);
+
+  const removeFromWishlist = useCallback(async (productId: string) => {
+    if (isLoggedIn) {
+      try {
+        const response = await removeFromWishlistDB(productId);
+        const updatedWishlistItems = response.wishlist.map((item: any) => ({
+          id: item.productId._id,
+          _id: item.productId._id,
+          ...item.productId
+        }));
+        setWishlistItems(updatedWishlistItems);
+        // Don't persist to localStorage for logged-in users
+        // No toast for regular remove from wishlist operations
+      } catch (error) {
+        console.error('Failed to remove from wishlist:', error);
+        toast.error('Failed to remove item from wishlist');
+      }
+    } else {
+      // Local storage logic for non-logged-in users
+      const newWishlist = wishlistItems.filter((item: any) => item.id !== productId && item._id !== productId);
       setWishlistItems(newWishlist);
       localStorage.setItem('wishlistItems', JSON.stringify(newWishlist));
+      // No toast for regular remove from wishlist operations
     }
-  }, [wishlistItems]);
-
-  const removeFromWishlist = useCallback((productId: string) => {
-    const newWishlist = wishlistItems.filter((item: any) => item.id !== productId && item._id !== productId);
-    setWishlistItems(newWishlist);
-    localStorage.setItem('wishlistItems', JSON.stringify(newWishlist));
-  }, [wishlistItems]);
+  }, [wishlistItems, isLoggedIn]);
 
   const isInWishlist = useCallback((productId: string) => 
     wishlistItems.some((item: any) => item.id === productId || item._id === productId),
@@ -196,8 +468,9 @@ function WishlistProvider({ children }: { children: ReactNode }) {
     wishlistItems,
     addToWishlist,
     removeFromWishlist,
-    isInWishlist
-  }), [wishlistItems, addToWishlist, removeFromWishlist, isInWishlist]);
+    isInWishlist,
+    isLoadingWishlist
+  }), [wishlistItems, addToWishlist, removeFromWishlist, isInWishlist, isLoadingWishlist]);
 
   return (
     <WishlistContext.Provider value={wishlistContextValue}>
@@ -215,12 +488,30 @@ function AppProviderInner({ children }: { children: ReactNode }) {
   const dispatch = useDispatch();
   const router = useRouter();
 
+  // Run migration on app start
+  useEffect(() => {
+    if (shouldRunMigration()) {
+      migrateLocalStorageData();
+    }
+    
+    // Load debug utilities in development
+    if (process.env.NODE_ENV === 'development') {
+      import('@/lib/debug-cart-wishlist');
+    }
+  }, []);
+
 
 
   const handleLogout = useCallback(() => {
     dispatch(reduxLogout());
     // Clear any stored tokens
     localStorage.removeItem("token");
+    // Clear sync flags
+    sessionStorage.removeItem('cartSynced');
+    sessionStorage.removeItem('wishlistSynced');
+    // Clear cart and wishlist data to prevent it from syncing with next user
+    localStorage.removeItem('cart');
+    localStorage.removeItem('wishlistItems');
     // Navigate to home page using Next.js router
     router.push("/");
   }, [dispatch, router]);

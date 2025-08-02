@@ -108,6 +108,7 @@ export default function PromoCodesPage() {
   const [categories, setCategories] = useState<Category[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [fetchingCats, setFetchingCats] = useState(false)
+  const [fetchingProds, setFetchingProds] = useState(false)
   const [brands, setBrands] = useState<{ _id: string; name: string }[]>([])
   const [fetchingBrands, setFetchingBrands] = useState(false)
   const [categorySearch, setCategorySearch] = useState("")
@@ -322,22 +323,11 @@ export default function PromoCodesPage() {
     }
   }
 
-  // --- Table Columns ---
-  const columns = [
-    { label: "Code", key: "code" },
-    { label: "Type", key: "type" },
-    { label: "Discount", key: "discount" },
-    { label: "Validity", key: "validity" },
-    { label: "Status", key: "status" },
-    { label: "Actions", key: "actions" },
-  ]
-
   // --- Async Product Search State ---
   const [productSearch, setProductSearch] = useState("")
   const [productResults, setProductResults] = useState<Product[]>([])
   const [productPage, setProductPage] = useState(1)
   const [productTotalPages, setProductTotalPages] = useState(1)
-  const [fetchingProds, setFetchingProds] = useState(false)
   const productSearchTimeout = useRef<NodeJS.Timeout | null>(null)
 
   // --- Async Product Search Effect ---
@@ -355,7 +345,9 @@ export default function PromoCodesPage() {
         .catch(() => toast.error("Failed to load products"))
         .finally(() => setFetchingProds(false))
     }, 300)
-    // eslint-disable-next-line
+    return () => {
+      if (productSearchTimeout.current) clearTimeout(productSearchTimeout.current)
+    }
   }, [productSearch, productPage, form.appliesTo])
 
   // --- Reset product page on new search ---
@@ -390,7 +382,9 @@ export default function PromoCodesPage() {
         .catch(() => toast.error("Failed to load categories"))
         .finally(() => setFetchingCats(false));
     }, 300);
-    // eslint-disable-next-line
+    return () => {
+      if (categorySearchTimeout.current) clearTimeout(categorySearchTimeout.current)
+    }
   }, [categorySearch, categoryPage, form.appliesTo]);
 
   // --- Reset category page on new search ---
@@ -413,7 +407,9 @@ export default function PromoCodesPage() {
         .catch(() => toast.error("Failed to load brands"))
         .finally(() => setFetchingBrands(false));
     }, 300);
-    // eslint-disable-next-line
+    return () => {
+      if (brandSearchTimeout.current) clearTimeout(brandSearchTimeout.current)
+    }
   }, [brandSearch, brandPage, form.appliesTo]);
 
   // --- Reset brand page on new search ---
@@ -447,53 +443,60 @@ export default function PromoCodesPage() {
                 <div className="flex flex-col items-center justify-center py-8 w-full min-h-[120px] bg-brand-primary/5 rounded-xl">
                   <span className="text-brand-primary mb-2"><BadgePercent className="h-5 w-5" /></span>
                   <div className="text-base font-bold text-codGray mb-1">No Promocodes Yet</div>
-                  <div className="text-gray-500 mb-4 text-center max-w-xs text-xs">You haven’t created any promocodes for your store.</div>
-              <button
-                onClick={openAdd}
+                  <div className="text-gray-500 mb-4 text-center max-w-xs text-xs">You haven't created any promocodes for your store.</div>
+                  <button
+                    onClick={openAdd}
                     className="bg-brand-primary hover:bg-brand-primary-dark text-white px-4 py-1.5 rounded-lg text-sm font-semibold shadow-md flex items-center gap-2"
-              >
-                    <Plus className="h-4 w-4 mr-1" /> Add Your First Promocode
-              </button>
-            </div>
-          ) : (
-                paginatedPromos.map((promo) => (
-                  <div
-                    key={promo._id}
-                    className="bg-white rounded-xl shadow-md p-2 flex flex-col sm:flex-row sm:items-center gap-2 border border-gray-100 relative group hover:shadow-lg transition-all"
                   >
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <div className="w-8 h-8 rounded-full bg-gray-50 border flex items-center justify-center overflow-hidden">
-                        <BadgePercent className="h-5 w-5 text-brand-primary/60" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-base text-codGray flex items-center gap-2 truncate">
-                          {promo.code}
+                    <Plus className="h-4 w-4 mr-1" /> Add Your First Promocode
+                  </button>
+                </div>
+              ) : (
+                paginatedPromos.map((promo) => {
+                  // Determine if expired
+                  const isExpired = promo.endDate && new Date(promo.endDate) < new Date();
+                  return (
+                    <div
+                      key={promo._id}
+                      className="bg-white rounded-xl shadow-md p-2 flex flex-col sm:flex-row sm:items-center gap-2 border border-gray-100 relative group hover:shadow-lg transition-all"
+                    >
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <div className="w-8 h-8 rounded-full bg-gray-50 border flex items-center justify-center overflow-hidden">
+                          <BadgePercent className="h-5 w-5 text-brand-primary/60" />
                         </div>
-                        <div className="text-xs text-gray-500 line-clamp-2 min-h-[18px]">
-                          {promo.description || 'No description'}
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-base text-codGray flex items-center gap-2 truncate">
+                            {promo.code}
+                            {isExpired && (
+                              <span className="ml-2 px-2 py-0.5 rounded bg-red-100 text-red-700 text-xs font-bold border border-red-200">Expired</span>
+                            )}
+                          </div>
+                          <div className="text-xs text-gray-500 line-clamp-2 min-h-[18px]">
+                            {promo.description || 'No description'}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <div className="flex flex-wrap gap-1 items-center text-xs">
-                      <span className="bg-gray-100 rounded px-2 py-0.5 font-semibold capitalize">{promo.type}</span>
-                      <span className="bg-gray-100 rounded px-2 py-0.5 font-semibold">{promo.type === "percentage" ? `${promo.discount}%${promo.maxDiscount ? ` (Max ₹${promo.maxDiscount})` : ""}` : `₹${promo.discount}`}</span>
-                      <span className="bg-gray-100 rounded px-2 py-0.5 font-semibold">{promo.startDate && promo.endDate ? `${format(parseISO(promo.startDate), "dd MMM yyyy")} → ${format(parseISO(promo.endDate), "dd MMM yyyy")}` : "-"}</span>
-                      <span className={`rounded px-2 py-0.5 font-semibold ${promo.status ? "bg-green-100 text-green-700" : "bg-gray-200 text-gray-400"}`}>{promo.status ? "Active" : "Inactive"}</span>
-                    </div>
-                    <div className="flex gap-1 sm:ml-2">
+                      <div className="flex flex-wrap gap-1 items-center text-xs">
+                        <span className="bg-gray-100 rounded px-2 py-0.5 font-semibold capitalize">{promo.type}</span>
+                        <span className="bg-gray-100 rounded px-2 py-0.5 font-semibold">{promo.type === "percentage" ? `${promo.discount}%${promo.maxDiscount ? ` (Max ₹${promo.maxDiscount})` : ""}` : `₹${promo.discount}`}</span>
+                        <span className="bg-gray-100 rounded px-2 py-0.5 font-semibold">{promo.startDate && promo.endDate ? `${format(parseISO(promo.startDate), "dd MMM yyyy")} → ${format(parseISO(promo.endDate), "dd MMM yyyy")}` : "-"}</span>
+                        <span className={`rounded px-2 py-0.5 font-semibold ${(!isExpired && promo.status) ? "bg-green-100 text-green-700" : "bg-gray-200 text-gray-400"}`}>{isExpired ? "Inactive" : (promo.status ? "Active" : "Inactive")}</span>
+                      </div>
+                      <div className="flex gap-1 sm:ml-2">
                         <button
-                        className="p-1 rounded-full hover:bg-brand-primary/10 focus:bg-brand-primary/10 transition-colors"
-                        title="Edit"
+                          className="p-1 rounded-full hover:bg-brand-primary/10 focus:bg-brand-primary/10 transition-colors"
+                          title="Edit"
                           onClick={() => openEdit(promo)}
                         >
-                        <Pencil className="h-4 w-4 text-brand-primary" />
+                          <Pencil className="h-4 w-4 text-brand-primary" />
                         </button>
-                      <button className="p-1 rounded-full hover:bg-red-100 focus:bg-red-100 transition-colors" onClick={() => setShowDelete(promo)} title="Delete">
-                        <Trash2 className="h-4 w-4 text-red-500" />
+                        <button className="p-1 rounded-full hover:bg-red-100 focus:bg-red-100 transition-colors" onClick={() => setShowDelete(promo)} title="Delete">
+                          <Trash2 className="h-4 w-4 text-red-500" />
                         </button>
                       </div>
-                  </div>
-                ))
+                    </div>
+                  );
+                })
               )}
             </div>
           )}
@@ -631,7 +634,7 @@ export default function PromoCodesPage() {
                   <SelectTrigger className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary">
                     <SelectValue placeholder="Select usage type" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-white border border-gray-200 shadow-lg rounded-lg">
                     <SelectItem value="multiple_use">Multiple Use - Can be used multiple times</SelectItem>
                     <SelectItem value="single_use">Single Use - One time per user</SelectItem>
                   </SelectContent>
@@ -640,149 +643,27 @@ export default function PromoCodesPage() {
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block text-sm font-medium mb-1">Start Date</label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <button
-                        type="button"
-                        className={cn(
-                          "w-full flex items-center justify-between border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary bg-white",
-                          !form.startDate && "text-gray-400"
-                        )}
-                        aria-label="Pick start date"
-                      >
-                        {form.startDate
-                          ? (isNaN(new Date(form.startDate).getTime()) 
-                              ? "Invalid date" 
-                              : format(new Date(form.startDate), "dd/MM/yyyy"))
-                          : "dd/mm/yyyy"}
-                        <CalendarIcon className="h-5 w-5 text-gray-400 ml-2" />
-                      </button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0 bg-white border rounded-lg shadow-lg z-50">
-                      <Calendar
-                        mode="single"
-                        selected={form.startDate ? (isNaN(new Date(form.startDate).getTime()) ? undefined : new Date(form.startDate)) : undefined}
-                        onSelect={date => setForm({ ...form, startDate: date ? format(date, "yyyy-MM-dd") : "" })}
-                        disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
-                        initialFocus
-                        className="rounded-md border-0"
-                        classNames={{
-                          months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
-                          month: "space-y-4",
-                          caption: "flex justify-center pt-1 relative items-center",
-                          caption_label: "text-sm font-medium",
-                          nav: "space-x-1 flex items-center",
-                          nav_button: "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100",
-                          nav_button_previous: "absolute left-1",
-                          nav_button_next: "absolute right-1",
-                          table: "w-full border-collapse space-y-1",
-                          head_row: "flex",
-                          head_cell: "text-muted-foreground rounded-md w-9 font-normal text-[0.8rem]",
-                          row: "flex w-full mt-2",
-                          cell: "h-9 w-9 text-center text-sm p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
-                          day: "h-9 w-9 p-0 font-normal aria-selected:opacity-100",
-                          day_range_end: "day-range-end",
-                          day_selected: "bg-brand-primary text-white hover:bg-brand-primary hover:text-white focus:bg-brand-primary focus:text-white",
-                          day_today: "bg-accent text-accent-foreground",
-                          day_outside: "day-outside text-muted-foreground aria-selected:bg-accent/50 aria-selected:text-muted-foreground",
-                          day_disabled: "text-muted-foreground opacity-50",
-                          day_range_middle: "aria-selected:bg-accent aria-selected:text-accent-foreground",
-                          day_hidden: "invisible",
-                        }}
-                      />
-                      <div className="flex justify-between px-3 pb-2 pt-1 border-t">
-                        <button
-                          type="button"
-                          className="text-xs text-gray-500 hover:text-brand-primary"
-                          onClick={() => setForm({ ...form, startDate: "" })}
-                        >
-                          Clear
-                        </button>
-                        <button
-                          type="button"
-                          className="text-xs text-gray-500 hover:text-brand-primary"
-                          onClick={() => setForm({ ...form, startDate: format(new Date(), "yyyy-MM-dd") })}
-                        >
-                          Today
-                        </button>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
+                  <input
+                    type="date"
+                    name="startDate"
+                    className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                    value={form.startDate}
+                    onChange={e => setForm({ ...form, startDate: e.target.value })}
+                    required
+                    min={new Date().toISOString().split('T')[0]}
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">End Date</label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <button
-                        type="button"
-                        className={cn(
-                          "w-full flex items-center justify-between border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary bg-white",
-                          !form.endDate && "text-gray-400"
-                        )}
-                        aria-label="Pick end date"
-                      >
-                        {form.endDate
-                          ? (isNaN(new Date(form.endDate).getTime()) 
-                              ? "Invalid date" 
-                              : format(new Date(form.endDate), "dd/MM/yyyy"))
-                          : "dd/mm/yyyy"}
-                        <CalendarIcon className="h-5 w-5 text-gray-400 ml-2" />
-                      </button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0 bg-white border rounded-lg shadow-lg z-50">
-                      <Calendar
-                        mode="single"
-                        selected={form.endDate ? (isNaN(new Date(form.endDate).getTime()) ? undefined : new Date(form.endDate)) : undefined}
-                        onSelect={date => setForm({ ...form, endDate: date ? format(date, "yyyy-MM-dd") : "" })}
-                        disabled={(date) => {
-                          const today = new Date(new Date().setHours(0, 0, 0, 0));
-                          const startDate = form.startDate ? new Date(form.startDate) : today;
-                          return date < Math.max(today.getTime(), startDate.getTime());
-                        }}
-                        initialFocus
-                        className="rounded-md border-0"
-                        classNames={{
-                          months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
-                          month: "space-y-4",
-                          caption: "flex justify-center pt-1 relative items-center",
-                          caption_label: "text-sm font-medium",
-                          nav: "space-x-1 flex items-center",
-                          nav_button: "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100",
-                          nav_button_previous: "absolute left-1",
-                          nav_button_next: "absolute right-1",
-                          table: "w-full border-collapse space-y-1",
-                          head_row: "flex",
-                          head_cell: "text-muted-foreground rounded-md w-9 font-normal text-[0.8rem]",
-                          row: "flex w-full mt-2",
-                          cell: "h-9 w-9 text-center text-sm p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
-                          day: "h-9 w-9 p-0 font-normal aria-selected:opacity-100",
-                          day_range_end: "day-range-end",
-                          day_selected: "bg-brand-primary text-white hover:bg-brand-primary hover:text-white focus:bg-brand-primary focus:text-white",
-                          day_today: "bg-accent text-accent-foreground",
-                          day_outside: "day-outside text-muted-foreground aria-selected:bg-accent/50 aria-selected:text-muted-foreground",
-                          day_disabled: "text-muted-foreground opacity-50",
-                          day_range_middle: "aria-selected:bg-accent aria-selected:text-accent-foreground",
-                          day_hidden: "invisible",
-                        }}
-                      />
-                      <div className="flex justify-between px-3 pb-2 pt-1 border-t">
-                        <button
-                          type="button"
-                          className="text-xs text-gray-500 hover:text-brand-primary"
-                          onClick={() => setForm({ ...form, endDate: "" })}
-                        >
-                          Clear
-                        </button>
-                        <button
-                          type="button"
-                          className="text-xs text-gray-500 hover:text-brand-primary"
-                          onClick={() => setForm({ ...form, endDate: format(new Date(), "yyyy-MM-dd") })}
-                        >
-                          Today
-                        </button>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
+                  <input
+                    type="date"
+                    name="endDate"
+                    className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                    value={form.endDate}
+                    onChange={e => setForm({ ...form, endDate: e.target.value })}
+                    required
+                    min={form.startDate || new Date().toISOString().split('T')[0]}
+                  />
                   {formErrors.endDate && <div className="text-xs text-red-500 mt-1">{formErrors.endDate}</div>}
                 </div>
               </div>
@@ -1039,24 +920,42 @@ export default function PromoCodesPage() {
                 </div>
               )}
               <div className="flex items-center gap-3 mt-2">
-                <Switch
-                  checked={form.status}
-                  onCheckedChange={v => setForm({ ...form, status: v })}
-                  disabled={formLoading}
-                  className={form.status ? "data-[state=checked]:bg-green-600" : "data-[state=unchecked]:bg-gray-300"}
-                  id="promo-status-switch"
-                />
-                <label htmlFor="promo-status-switch" className="text-sm font-medium cursor-pointer select-none">
-                  {form.status ? "Active" : "Inactive"}
-                </label>
-                <span
-                  className={`ml-2 px-2 py-0.5 rounded text-xs font-semibold transition-colors duration-200 ${form.status
-                    ? "bg-green-50 text-green-700 border border-green-200"
-                    : "bg-gray-50 text-gray-400 border border-gray-200"
-                    }`}
-                >
-                  {form.status ? "Promo is enabled" : "Promo is disabled"}
-                </span>
+                {/* Expiry logic for edit/add modal */}
+                {form.endDate && new Date(form.endDate) < new Date() ? (
+                  <>
+                    <Switch
+                      checked={false}
+                      disabled
+                      className="data-[state=unchecked]:bg-gray-300"
+                      id="promo-status-switch"
+                    />
+                    <label htmlFor="promo-status-switch" className="text-sm font-medium cursor-not-allowed select-none text-gray-400">
+                      Inactive (Expired)
+                    </label>
+                    <span className="ml-2 px-2 py-0.5 rounded text-xs font-semibold bg-red-50 text-red-600 border border-red-200">Expired</span>
+                  </>
+                ) : (
+                  <>
+                    <Switch
+                      checked={form.status}
+                      onCheckedChange={v => setForm({ ...form, status: v })}
+                      disabled={formLoading}
+                      className={form.status ? "data-[state=checked]:bg-green-600" : "data-[state=unchecked]:bg-gray-300"}
+                      id="promo-status-switch"
+                    />
+                    <label htmlFor="promo-status-switch" className="text-sm font-medium cursor-pointer select-none">
+                      {form.status ? "Active" : "Inactive"}
+                    </label>
+                    <span
+                      className={`ml-2 px-2 py-0.5 rounded text-xs font-semibold transition-colors duration-200 ${form.status
+                        ? "bg-green-50 text-green-700 border border-green-200"
+                        : "bg-gray-50 text-gray-400 border border-gray-200"
+                        }`}
+                    >
+                      {form.status ? "Promo is enabled" : "Promo is disabled"}
+                    </span>
+                  </>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Description</label>
@@ -1104,4 +1003,4 @@ export default function PromoCodesPage() {
       </div>
     </AdminLayout>
   )
-} 
+}
