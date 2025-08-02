@@ -199,14 +199,34 @@ export default function AdminUsers() {
         let errorMsg = "Failed to update user";
         try {
           const errorData = await res.json();
+          console.log('Error response:', errorData); // Debug log
+          
+          // Check for email duplicate error
           if (
             errorData?.error === "EMAIL_EXISTS" ||
+            errorData?.error === "DUPLICATE_KEY" ||
             (errorData?.message?.toLowerCase().includes("email") && 
-             (errorData?.message?.toLowerCase().includes("exist") || errorData?.message?.toLowerCase().includes("already")))
+             (errorData?.message?.toLowerCase().includes("exist") || 
+              errorData?.message?.toLowerCase().includes("already") ||
+              errorData?.message?.toLowerCase().includes("registered")))
           ) {
-            errorMsg = "Email already exists.";
+            errorMsg = "Email already exists. Please use a different email.";
+          }
+          // Check for phone duplicate error
+          else if (
+            errorData?.error === "PHONE_EXISTS" ||
+            (errorData?.message?.toLowerCase().includes("phone") && 
+             (errorData?.message?.toLowerCase().includes("exist") || 
+              errorData?.message?.toLowerCase().includes("already")))
+          ) {
+            errorMsg = "Phone number already exists. Please use a different phone number.";
+          }
+          // Check for general duplicate error
+          else if (errorData?.message) {
+            errorMsg = errorData.message;
           }
         } catch (e) {
+          console.error('Error parsing error response:', e);
           // ignore JSON parse error, fallback to generic
         }
         toast.error(errorMsg);

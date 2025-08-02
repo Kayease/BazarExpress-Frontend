@@ -41,7 +41,7 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
     if (isOpen && cartItems.length === 0) {
       const timer = setTimeout(() => {
         onClose();
-        toast.success('Cart is now empty', { icon: '🛒' });
+        //toast.success('Cart is now empty', { icon: '🛒' });
       }, 1500); // 1.5 second delay to show empty state briefly
       
       return () => clearTimeout(timer);
@@ -60,10 +60,7 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
     addToWishlist(item);
     // Silently remove from cart without showing the removal toast
     updateCartItem(item.id, 0, false);
-    toast.success('Moved to wishlist!', {
-      icon: '❤️',
-      duration: 2000,
-    });
+    //toast.success('Moved to wishlist!', {icon: '❤️',duration: 2000,});
   };
 
   const handleProceed = () => {

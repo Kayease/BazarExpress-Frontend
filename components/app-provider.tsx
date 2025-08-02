@@ -23,6 +23,7 @@ interface AppContextType {
   isLoggedIn: boolean;
   user: any;
   handleLogout: () => void;
+  addToCart: (product: any) => void;
 }
 
 // --- Cart Context ---
@@ -31,6 +32,7 @@ interface CartContextType {
   setCartItems: (items: any[]) => void;
   addToCart: (product: any) => void;
   updateCartItem: (id: any, quantity: number, showToast?: boolean) => void;
+  clearCart: () => void;
   cartTotal: number;
   isLoadingCart: boolean;
 }
@@ -157,8 +159,24 @@ function CartProvider({ children }: { children: ReactNode }) {
           }));
           setCartItems(syncedCartItems);
           
-          // Only show toast if items were actually synced
-          toast.success(`${localCartCount} item(s) synced to your cart`);
+          // Handle partial sync with warehouse conflicts
+          if (response.isPartialSync && response.conflictingItems && response.conflictingItems.length > 0) {
+            const conflictCount = response.conflictingItems.length;
+            const validCount = response.validItems ? response.validItems.length : 0;
+            
+            toast.error(
+              `${validCount} item(s) synced successfully. ${conflictCount} item(s) could not be added due to warehouse conflicts.`,
+              {
+                duration: 8000,
+                style: {
+                  maxWidth: '500px',
+                }
+              }
+            );
+          } else {
+            // Only show success toast if items were actually synced without conflicts
+            toast.success(`${localCartCount} item(s) synced to your cart`);
+          }
         } else {
           loadCart();
         }
@@ -223,9 +241,23 @@ function CartProvider({ children }: { children: ReactNode }) {
         setCartItems(updatedCartItems);
         // Don't persist to localStorage for logged-in users
         // No toast for regular add to cart operations
-      } catch (error) {
+      } catch (error: any) {
         console.error('Failed to add to cart:', error);
-        toast.error('Failed to add item to cart');
+        
+        // Handle warehouse conflict errors
+        if (error.isWarehouseConflict) {
+          toast.error(
+            `Your cart has items from "${error.existingWarehouse}". Please clear it or choose products from the same warehouse.`,
+            {
+              duration: 6000,
+              style: {
+                maxWidth: '500px',
+              }
+            }
+          );
+        } else {
+          toast.error('Failed to add item to cart');
+        }
       }
     } else {
       // Local storage logic for non-logged-in users
@@ -276,6 +308,31 @@ function CartProvider({ children }: { children: ReactNode }) {
     }
   }, [isLoggedIn]);
 
+  const clearCart = useCallback(async () => {
+    if (isLoggedIn) {
+      try {
+        // Get token from localStorage or redux state
+        const token = localStorage.getItem('token');
+        // Clear cart in database
+        await fetch(`${process.env.NEXT_PUBLIC_API_URL}/cart/clear`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        setCartItems([]);
+      } catch (error) {
+        console.error('Failed to clear cart:', error);
+        toast.error('Failed to clear cart');
+      }
+    } else {
+      // Clear local storage cart
+      localStorage.removeItem('cart');
+      setCartItems([]);
+    }
+  }, [isLoggedIn]);
+
   const cartTotal = useMemo(() => 
     cartItems.reduce((sum: number, item: any) => sum + (item.price || 0) * item.quantity, 0),
     [cartItems]
@@ -286,9 +343,10 @@ function CartProvider({ children }: { children: ReactNode }) {
     setCartItems: updateCartItems,
     addToCart,
     updateCartItem,
+    clearCart,
     cartTotal,
     isLoadingCart
-  }), [cartItems, addToCart, updateCartItem, cartTotal, isLoadingCart]);
+  }), [cartItems, addToCart, updateCartItem, clearCart, cartTotal, isLoadingCart]);
 
   return (
     <CartContext.Provider value={cartContextValue}>
@@ -521,25 +579,69 @@ function AppProviderInner({ children }: { children: ReactNode }) {
       <LocationProvider>
         <CartProvider>
           <WishlistProvider>
-            <AppContext.Provider
-              value={useMemo(() => ({
-                isCartOpen,
-                setIsCartOpen,
-                isLoginOpen,
-                setIsLoginOpen,
-                searchQuery,
-                setSearchQuery,
-                isLoggedIn,
-                user: reduxUser,
-                handleLogout,
-              }), [isCartOpen, setIsCartOpen, isLoginOpen, setIsLoginOpen, searchQuery, setSearchQuery, isLoggedIn, reduxUser, handleLogout])}
+            <AppContextWithCart
+              isCartOpen={isCartOpen}
+              setIsCartOpen={setIsCartOpen}
+              isLoginOpen={isLoginOpen}
+              setIsLoginOpen={setIsLoginOpen}
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              isLoggedIn={isLoggedIn}
+              user={reduxUser}
+              handleLogout={handleLogout}
             >
               {children}
-            </AppContext.Provider>
+            </AppContextWithCart>
           </WishlistProvider>
         </CartProvider>
       </LocationProvider>
     </ModalProvider>
+  );
+}
+
+// Component that bridges CartContext and AppContext
+function AppContextWithCart({
+  children,
+  isCartOpen,
+  setIsCartOpen,
+  isLoginOpen,
+  setIsLoginOpen,
+  searchQuery,
+  setSearchQuery,
+  isLoggedIn,
+  user,
+  handleLogout
+}: {
+  children: ReactNode;
+  isCartOpen: boolean;
+  setIsCartOpen: (open: boolean) => void;
+  isLoginOpen: boolean;
+  setIsLoginOpen: (open: boolean) => void;
+  searchQuery: string;
+  setSearchQuery: (query: string) => void;
+  isLoggedIn: boolean;
+  user: any;
+  handleLogout: () => void;
+}) {
+  const { addToCart } = useCartContext();
+
+  return (
+    <AppContext.Provider
+      value={useMemo(() => ({
+        isCartOpen,
+        setIsCartOpen,
+        isLoginOpen,
+        setIsLoginOpen,
+        searchQuery,
+        setSearchQuery,
+        isLoggedIn,
+        user,
+        handleLogout,
+        addToCart,
+      }), [isCartOpen, setIsCartOpen, isLoginOpen, setIsLoginOpen, searchQuery, setSearchQuery, isLoggedIn, user, handleLogout, addToCart])}
+    >
+      {children}
+    </AppContext.Provider>
   );
 }
 

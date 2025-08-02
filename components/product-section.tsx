@@ -18,6 +18,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useAppContext, useCartContext, useWishlistContext } from "@/components/app-provider";
 import { useLocation } from "@/components/location-provider";
 import { useHomeProducts, useSearchProducts } from "@/hooks/use-products";
+// import { useWarehouseValidation } from "@/hooks/use-warehouse-validation";
 
 // Define interfaces for our data types
 
@@ -55,6 +56,17 @@ interface Product {
   galleryImages?: string[];
   manufacturer?: string;
   warranty?: string;
+  warehouse?: {
+    _id: string;
+    name: string;
+    deliverySettings?: {
+      is24x7Delivery?: boolean;
+      deliveryHours?: {
+        start: string;
+        end: string;
+      };
+    };
+  };
 }
 
 interface Category {
@@ -142,6 +154,40 @@ export default function ProductSection({
   // Local quantity state for product tiles
   const [quantities, setQuantities] = useState<{ [id: string]: number }>({});
   
+  // Simple warehouse validation logic
+  const canAddToCart = (product: Product) => {
+    if (cartItems.length === 0) return true; // Empty cart, can add anything
+    
+    // Check if product has warehouse info
+    if (!product.warehouse) return true;
+    
+    // Find existing custom warehouse in cart
+    let existingCustomWarehouse = null;
+    for (const cartItem of cartItems) {
+      if (cartItem.warehouse && !cartItem.warehouse.deliverySettings?.is24x7Delivery) {
+        existingCustomWarehouse = cartItem.warehouse;
+        break;
+      }
+    }
+    
+    // If no custom warehouse in cart, allow adding
+    if (!existingCustomWarehouse) return true;
+    
+    // If product is from global warehouse (24x7), allow
+    if (product.warehouse.deliverySettings?.is24x7Delivery) return true;
+    
+    // If product is from same custom warehouse, allow
+    if (existingCustomWarehouse._id === product.warehouse._id) return true;
+    
+    // Different custom warehouse, block
+    console.log('Warehouse conflict detected:', {
+      productWarehouse: product.warehouse.name,
+      existingWarehouse: existingCustomWarehouse.name,
+      productId: product._id
+    });
+    return false;
+  };
+  
 
   // Sync local quantity state with cartItems
   useEffect(() => {
@@ -156,6 +202,15 @@ export default function ProductSection({
 
   const handleAdd = (product: Product) => {
     const productId = product._id;
+    
+    // Check warehouse validation before adding
+    if (!canAddToCart(product)) {
+      // Don't add to cart if there's a warehouse conflict
+      // The backend validation and toast will handle the error display
+      console.log('Blocked: Cannot add product due to warehouse conflict');
+      return;
+    }
+    
     setQuantities(q => ({ ...q, [productId]: 1 }));
     addToCart({ ...product, id: productId, quantity: 1 });
   };
@@ -324,10 +379,35 @@ export default function ProductSection({
                         const hasDiscount = product.mrp != null && product.mrp > product.price;
                         const discountPercent = hasDiscount ? Math.round((((product.mrp ?? 0) - product.price) / (product.mrp ?? 1)) * 100) : 0;
                         const showDiscountBadge = hasDiscount && discountPercent > 30;
+                        
+                        // Warehouse validation for this product
+                        const canAddProduct = canAddToCart(product);
+                        const isInCart = quantities[product._id] > 0;
+                        
+                        // Get conflict info for display
+                        const getConflictMessage = () => {
+                          if (canAddProduct || isInCart) return '';
+                          
+                          // Find existing custom warehouse
+                          let existingWarehouse = null;
+                          for (const cartItem of cartItems) {
+                            if (cartItem.warehouse && !cartItem.warehouse.deliverySettings?.is24x7Delivery) {
+                              existingWarehouse = cartItem.warehouse;
+                              break;
+                            }
+                          }
+                          
+                          return existingWarehouse ? 
+                            `Your cart has items from "${existingWarehouse.name}". Clear cart or choose products from the same store.` :
+                            'Cannot add to cart due to warehouse conflict';
+                        };
+                        
                         return (
                           <div 
                             key={product._id} 
-                            className="min-w-[180px] max-w-[180px] bg-white border border-gray-200 rounded-xl flex-shrink-0 flex flex-col relative group cursor-pointer hover:shadow-lg transition-shadow" 
+                            className={`min-w-[180px] max-w-[180px] bg-white border rounded-xl flex-shrink-0 flex flex-col relative group cursor-pointer hover:shadow-lg transition-shadow ${
+                              !canAddProduct && !isInCart ? 'border-orange-200 bg-orange-50/30' : 'border-gray-200'
+                            }`}
                             style={{ fontFamily: 'Sinkin Sans, sans-serif', boxShadow: 'none' }}
                             onClick={() => handleProductClick(product)}
                           >
@@ -342,6 +422,19 @@ export default function ProductSection({
                       </div>
                               </div>
                             )}
+                            
+                            {/* Warehouse Conflict Warning */}
+                            {!canAddProduct && !isInCart && (
+                              <div className="absolute top-2 left-2 z-10 bg-orange-100 border border-orange-200 rounded-md px-2 py-1">
+                                <div className="flex items-center gap-1">
+                                  <svg className="w-3 h-3 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                  </svg>
+                                  <span className="text-xs text-orange-700 font-medium">Different Store</span>
+                                </div>
+                              </div>
+                            )}
+                            
                             {/* Wishlist Button */}
                             <button
                               className="absolute top-2 right-2 z-10 p-1 rounded-full bg-white shadow hover:bg-gray-100"
@@ -402,12 +495,29 @@ export default function ProductSection({
                                       aria-label="Increase quantity"
                                     >+</button>
                                   </div>
-                                ) : (
+                                ) : canAddProduct ? (
                                   <button
                                     className="border border-green-600 text-green-700 font-medium text-[15px] bg-white hover:bg-green-50 transition"
                                     style={{ minWidth: '80px', width: '80px', height: '32px', fontFamily: 'Sinkin Sans, sans-serif', borderRadius: '4px', boxShadow: 'none' }}
                                     onClick={(e) => handleButtonClick(e, () => handleAdd(product))}
                                   >ADD</button>
+                                ) : (
+                                  <button
+                                    className="border border-orange-300 text-orange-600 font-medium text-[12px] bg-orange-50 cursor-not-allowed"
+                                    style={{ minWidth: '80px', width: '80px', height: '32px', fontFamily: 'Sinkin Sans, sans-serif', borderRadius: '4px', boxShadow: 'none' }}
+                                    onClick={(e) => handleButtonClick(e, () => {
+                                      // Don't call handleAdd for blocked products
+                                      console.log('Blocked: Cannot add product due to warehouse conflict');
+                                    })}
+                                    title={getConflictMessage()}
+                                  >
+                                    <div className="flex items-center justify-center gap-1">
+                                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                      </svg>
+                                      <span>BLOCKED</span>
+                                    </div>
+                                  </button>
                                 )}
                               </div>
                             </div>

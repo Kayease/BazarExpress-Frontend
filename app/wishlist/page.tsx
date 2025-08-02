@@ -1,17 +1,23 @@
 "use client";
 import { useWishlistContext, useCartContext } from "@/components/app-provider";
 import { Button } from "@/components/ui/button";
-import { Heart, ShoppingCart, ArrowLeft, Trash2 } from "lucide-react";
+import { Heart, ShoppingCart, ArrowLeft, Trash2, AlertTriangle } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { canAddToCart, getWarehouseConflictInfo } from "@/lib/warehouse-validation";
 
 export default function WishlistPage() {
   const { wishlistItems, removeFromWishlist, isInWishlist } = useWishlistContext();
-  const { addToCart } = useCartContext();
+  const { addToCart, cartItems } = useCartContext();
   const router = useRouter();
 
   const moveToCart = (item: any) => {
+    // Check warehouse validation before moving to cart
+    if (!canAddToCart(item, cartItems)) {
+      console.log('Blocked: Cannot add product due to warehouse conflict');
+      return;
+    }
     addToCart(item);
     removeFromWishlist(item.id);
   };
@@ -81,6 +87,10 @@ export default function WishlistPage() {
           {wishlistItems.map((item) => {
             const hasDiscount = item.mrp != null && item.mrp > item.price;
             const discountPercent = hasDiscount ? Math.round((((item.mrp ?? 0) - item.price) / (item.mrp ?? 1)) * 100) : 0;
+            
+            // Warehouse validation
+            const canAddProduct = canAddToCart(item, cartItems);
+            const conflictInfo = getWarehouseConflictInfo(item, cartItems);
             return (
               <div key={item.id || item._id} className="min-w-[180px] max-w-[180px] bg-white border border-gray-200 rounded-xl flex flex-col relative group font-sans" style={{ fontFamily: 'Sinkin Sans, sans-serif', boxShadow: 'none' }}>
                 {/* Discount Badge */}
@@ -123,10 +133,26 @@ export default function WishlistPage() {
                         <div className="text-xs text-gray-400 line-through leading-none font-normal">₹{item.mrp}</div>
                       )}
                     </div>
-                    <button
-                      className="border border-green-600 text-green-700 font-medium text-[15px] bg-white hover:bg-green-50 transition rounded h-8 px-3"
-                      onClick={() => moveToCart(item)}
-                    >ADD</button>
+                    {canAddProduct ? (
+                      <button
+                        className="border border-green-600 text-green-700 font-medium text-[15px] bg-white hover:bg-green-50 transition rounded h-8 px-3"
+                        onClick={() => moveToCart(item)}
+                      >ADD</button>
+                    ) : (
+                      <button
+                        className="border border-orange-300 text-orange-600 font-medium text-[12px] bg-orange-50 cursor-not-allowed rounded h-8 px-2"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // Don't call moveToCart for blocked products - just show the conflict
+                        }}
+                        title={conflictInfo.message}
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          <AlertTriangle className="w-3 h-3" />
+                          <span>BLOCKED</span>
+                        </div>
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

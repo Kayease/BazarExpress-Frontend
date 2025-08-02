@@ -4,6 +4,7 @@ import Navbar from "@/components/navbar";
 import Footer from "@/components/footer";
 import { usePathname } from "next/navigation";
 import NoticeRibbon from "@/components/NoticeRibbon";
+import WarehouseNoticeBanner from "@/components/warehouse-notice-banner";
 import LoginModal from "@/components/login-modal";
 import { useAppContext } from "@/components/app-provider";
 
@@ -27,6 +28,7 @@ export default function SiteFrame({ children }: { children: React.ReactNode }) {
   return (
     <>
       {!isAdmin && <NoticeRibbon />}
+      {!isAdmin && <WarehouseNoticeBanner />}
 
       {!isAdmin && <Navbar />}
       {children}

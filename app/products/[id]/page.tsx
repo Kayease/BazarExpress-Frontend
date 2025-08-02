@@ -21,7 +21,9 @@ import {
   Shield,
   Award,
   Clock,
+  AlertTriangle,
 } from "lucide-react";
+import { canAddToCart, getWarehouseConflictInfo } from "@/lib/warehouse-validation";
 
 // Define the extended Product type to match backend schema
 interface ProductDimensions {
@@ -81,6 +83,7 @@ interface ExtendedProduct {
   safetyInfo?: string;
   attributes?: ProductAttribute[];
   rating?: number; // Added for related products
+  warehouse?: any; // Added for warehouse validation
   variants?: {
     [key: string]: {
       name: string;
@@ -107,7 +110,7 @@ export default function ProductDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [mainImageIdx, setMainImageIdx] = useState(0);
   const [quantity, setQuantity] = useState(1);
-  const { addToCart } = useCartContext();
+  const { addToCart, cartItems } = useCartContext();
   const { addToWishlist, isInWishlist } = useWishlistContext();
   const [relatedProducts, setRelatedProducts] = useState<ExtendedProduct[]>([]);
   const [reviews, setReviews] = useState<ProductReview[]>([]);
@@ -210,6 +213,10 @@ export default function ProductDetailsPage() {
       : typeof product.brand === "string"
       ? product.brand
       : "Generic Brand";
+
+  // Warehouse validation
+  const canAddProduct = canAddToCart(product, cartItems);
+  const conflictInfo = getWarehouseConflictInfo(product, cartItems);
   const categoryName =
     typeof product.category === "object" && product.category
       ? product.category.name
@@ -549,25 +556,37 @@ export default function ProductDetailsPage() {
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <Button
-                    className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold px-8 py-4 text-lg rounded-2xl shadow-lg hover:shadow-xl flex items-center gap-3 transition-all duration-300 hover:scale-105 flex-1"
-                    disabled={product.stock <= 0}
-                    onClick={() =>
-                      addToCart({
-                        id: product._id,
-                        name: product.name,
-                        price: product.price,
-                        image: product.image,
-                        category: categoryName,
-                        brand: brandName,
-                        sku: product.sku,
-                        quantity,
-                      })
-                    }
-                  >
-                    <ShoppingCart className="h-6 w-6" />
-                    Add to Cart
-                  </Button>
+                  {canAddProduct ? (
+                    <Button
+                      className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold px-8 py-4 text-lg rounded-2xl shadow-lg hover:shadow-xl flex items-center gap-3 transition-all duration-300 hover:scale-105 flex-1"
+                      disabled={product.stock <= 0}
+                      onClick={() =>
+                        addToCart({
+                          id: product._id,
+                          name: product.name,
+                          price: product.price,
+                          image: product.image,
+                          category: categoryName,
+                          brand: brandName,
+                          sku: product.sku,
+                          quantity,
+                          warehouse: product.warehouse,
+                        })
+                      }
+                    >
+                      <ShoppingCart className="h-6 w-6" />
+                      Add to Cart
+                    </Button>
+                  ) : (
+                    <Button
+                      className="bg-gradient-to-r from-orange-400 to-orange-500 text-white font-bold px-8 py-4 text-lg rounded-2xl shadow-lg flex items-center gap-3 cursor-not-allowed flex-1"
+                      disabled={true}
+                      title={conflictInfo.message}
+                    >
+                      <AlertTriangle className="h-6 w-6" />
+                      Cannot Add - Different Store
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     size="icon"

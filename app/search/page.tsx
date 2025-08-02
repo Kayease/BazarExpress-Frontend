@@ -14,6 +14,9 @@ import ProductCard from "@/components/product-card";
 import { useCartContext, useWishlistContext } from "@/components/app-provider";
 import ProductGridSkeleton from "@/components/product-grid-skeleton";
 import { useCategories, useBrands, useProductsByLocation } from "@/hooks/use-api";
+import { canAddToCart } from "@/lib/warehouse-validation";
+import { useWarehouseConflict } from "@/hooks/use-warehouse-conflict";
+import WarehouseConflictModal from "@/components/warehouse-conflict-modal";
 
 const DIETARY_OPTIONS = [
   "Organic",
@@ -71,7 +74,19 @@ function SearchPage() {
   // Get location context for pincode-based filtering
   const { locationState, isGlobalMode } = useLocation();
   const pincodeParam = params.get("pincode") || "";
-  const modeParam = params.get("mode") || ""; 
+  const modeParam = params.get("mode") || "";
+  
+  // Warehouse conflict handling
+  const {
+    isModalOpen,
+    conflictProduct,
+    showConflictModal,
+    handleClearCart,
+    handleSwitchToGlobal,
+    handleContinueShopping,
+    closeModal,
+    getCurrentWarehouse
+  } = useWarehouseConflict(); 
 
   // Use React Query hooks for data fetching
   const { data: categories = [], isLoading: categoriesLoading } = useCategories();
@@ -156,6 +171,15 @@ function SearchPage() {
     }
     return null;
   }, [productsError, activePincode, locationState.isLocationDetected]);
+
+  // Handle add to cart with warehouse validation
+  const handleAddToCart = (product: any) => {
+    if (!canAddToCart(product, cartItems)) {
+      showConflictModal(product);
+      return;
+    }
+    addToCart({ ...product, id: product._id, quantity: 1 });
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -513,7 +537,7 @@ function SearchPage() {
       addToWishlist && addToWishlist(prod);
     }
   }}
-  handleAdd={(p: any) => addToCart({ ...p, id: p._id, quantity: 1 })}
+  handleAdd={handleAddToCart}
   handleInc={(p: any) => updateCartItem(p._id, (cartItems.find(i => (i.id||i._id)===p._id)?.quantity || 0) + 1)}
   handleDec={(p: any) => updateCartItem(p._id, Math.max((cartItems.find(i => (i.id||i._id)===p._id)?.quantity || 1) - 1, 0))}
   quantity={cartItems.find(i => (i.id||i._id)===product._id)?.quantity || 0}
@@ -533,6 +557,17 @@ function SearchPage() {
           </main>
         </div>
       </div>
+      
+      {/* Warehouse Conflict Modal */}
+      <WarehouseConflictModal
+        isOpen={isModalOpen}
+        onClose={closeModal}
+        currentWarehouse={getCurrentWarehouse()}
+        conflictingProduct={conflictProduct?.name || ""}
+        onClearCart={handleClearCart}
+        onSwitchToGlobal={handleSwitchToGlobal}
+        onContinueShopping={handleContinueShopping}
+      />
     </div>
   );
 }

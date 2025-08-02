@@ -45,6 +45,7 @@ import { calculateDeliveryChargeAPI, formatDeliveryCharge, getDeliveryTimeEstima
 import DeliveryAvailabilityChecker from "@/components/DeliveryAvailabilityChecker";
 import { validateCartDelivery, CartValidationResponse } from "@/lib/location";
 import CartValidationAlert from "@/components/CartValidationAlert";
+import { calculateCartTax, CartTaxCalculation, isInterStateTransaction, formatTaxAmount } from "@/lib/tax-calculation";
 
 interface PaymentMethod {
   id: string;
@@ -143,6 +144,13 @@ interface CartItem {
   brandId?: string;
   productId?: string;
   codAvailable?: boolean; // New field to check if COD is available for this product
+  priceIncludesTax?: boolean; // Whether the price includes tax
+  tax?: {
+    _id: string;
+    name: string;
+    percentage: number;
+    description?: string;
+  }; // Tax information for the product
 }
 
 interface ValidationErrors {
@@ -282,6 +290,9 @@ export default function PaymentPage() {
   // Cart validation states
   const [cartValidation, setCartValidation] = useState<CartValidationResponse | null>(null);
   const [isValidatingCart, setIsValidatingCart] = useState(false);
+  
+  // Tax calculation states
+  const [taxCalculation, setTaxCalculation] = useState<CartTaxCalculation | null>(null);
 
   // Filter payment methods based on delivery settings
   const paymentMethods = allPaymentMethods.filter(method => {
@@ -806,10 +817,44 @@ export default function PaymentPage() {
     }
   };
 
-  // Calculate final total with discount and delivery
-  const finalTotal = cartTotal - discountAmount;
+  // Calculate tax for cart items
+  const calculateTaxForCart = () => {
+    if (!selectedAddress || addresses.length === 0) return null;
+    
+    const selectedAddr = addresses.find(addr => addr.id === selectedAddress);
+    if (!selectedAddr) return null;
+    
+    // For now, we'll assume warehouse is in Delhi (you can make this configurable)
+    const warehouseState = "Delhi"; // This should come from warehouse settings
+    const isInterState = isInterStateTransaction(selectedAddr.state, warehouseState);
+    
+    // Prepare cart items for tax calculation
+    const cartItemsForTax = cartItemsWithCODInfo.map((item: any) => ({
+      price: item.price,
+      priceIncludesTax: item.priceIncludesTax || false,
+      tax: item.tax ? {
+        id: item.tax._id,
+        name: item.tax.name,
+        percentage: item.tax.percentage,
+        description: item.tax.description
+      } : null,
+      quantity: item.quantity
+    }));
+    
+    return calculateCartTax(cartItemsForTax, isInterState);
+  };
+
+  // Calculate tax when cart items or address changes
+  useEffect(() => {
+    const taxCalc = calculateTaxForCart();
+    setTaxCalculation(taxCalc);
+  }, [cartItems, selectedAddress, addresses]);
+
+  // Calculate final total with discount, tax, and delivery
+  const subtotalAfterDiscount = cartTotal - discountAmount;
+  const taxAmount = taxCalculation?.totalTax || 0;
   const deliveryCharge = deliveryInfo?.deliveryCharge || 0;
-  const finalTotalWithDelivery = finalTotal + deliveryCharge;
+  const finalTotalWithDelivery = subtotalAfterDiscount + taxAmount + deliveryCharge;
 
   const handlePayment = async () => {
     setIsValidatingPayment(true);
@@ -1509,6 +1554,47 @@ export default function PaymentPage() {
                   <span>₹{cartTotal.toFixed(2)}</span>
                 </div>
                 
+                {/* Promo Discount */}
+                {discountAmount > 0 && (
+                  <div className="flex justify-between text-green-600">
+                    <span>Promo Discount ({appliedPromoCode?.code})</span>
+                    <span>-₹{discountAmount.toFixed(2)}</span>
+                  </div>
+                )}
+                
+                {/* Tax Breakdown */}
+                {taxCalculation && taxCalculation.totalTax > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-gray-600">
+                      <span>Subtotal (after discount)</span>
+                      <span>₹{subtotalAfterDiscount.toFixed(2)}</span>
+                    </div>
+                    
+                    {taxCalculation.isInterState ? (
+                      <div className="flex justify-between text-gray-600">
+                        <span>IGST @ {taxCalculation.taxBreakdown.igst.percentage.toFixed(1)}%</span>
+                        <span>{formatTaxAmount(taxCalculation.totalIGST)}</span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex justify-between text-gray-600">
+                          <span>CGST @ {taxCalculation.taxBreakdown.cgst.percentage.toFixed(1)}%</span>
+                          <span>{formatTaxAmount(taxCalculation.totalCGST)}</span>
+                        </div>
+                        <div className="flex justify-between text-gray-600">
+                          <span>SGST @ {taxCalculation.taxBreakdown.sgst.percentage.toFixed(1)}%</span>
+                          <span>{formatTaxAmount(taxCalculation.totalSGST)}</span>
+                        </div>
+                      </>
+                    )}
+                    
+                    <div className="flex justify-between text-gray-800 font-medium">
+                      <span>Total Tax</span>
+                      <span>{formatTaxAmount(taxCalculation.totalTax)}</span>
+                    </div>
+                  </div>
+                )}
+                
                 {/* Dynamic Delivery Fee */}
                 <div className="flex justify-between text-gray-600">
                   <div className="flex items-center gap-2">
@@ -1531,16 +1617,6 @@ export default function PaymentPage() {
                     )}
                   </div>
                 </div>
-                
-                {/* Promo Discount */}
-                {discountAmount > 0 && (
-                  <div className="flex justify-between text-green-600">
-                    <span>Promo Discount ({appliedPromoCode?.code})</span>
-                    <span>-₹{discountAmount.toFixed(2)}</span>
-                  </div>
-                )}
-                
-                {/* COD Charge - Single entry */}
 
                 <div className="border-t pt-3 mt-2">
                   <div className="flex justify-between text-xl font-bold text-gray-900">
@@ -1651,6 +1727,45 @@ export default function PaymentPage() {
                 </details>
               </div>
             </div>
+
+            {/* Tax Information - Compact */}
+            {taxCalculation && taxCalculation.totalTax > 0 && (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                <div className="flex items-center gap-2 text-blue-800 mb-2">
+                  <Shield className="h-4 w-4" />
+                  <span className="text-sm font-medium">Tax Information</span>
+                </div>
+                <div className="text-xs text-blue-700 space-y-1">
+                  <div className="flex justify-between">
+                    <span>Tax Type:</span>
+                    <span className="font-medium">
+                      {taxCalculation.isInterState ? 'IGST (Inter-State)' : 'CGST + SGST (Intra-State)'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Total Tax:</span>
+                    <span className="font-medium">{formatTaxAmount(taxCalculation.totalTax)}</span>
+                  </div>
+                  {taxCalculation.isInterState ? (
+                    <div className="flex justify-between">
+                      <span>IGST Rate:</span>
+                      <span className="font-medium">{taxCalculation.taxBreakdown.igst.percentage.toFixed(1)}%</span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex justify-between">
+                        <span>CGST Rate:</span>
+                        <span className="font-medium">{taxCalculation.taxBreakdown.cgst.percentage.toFixed(1)}%</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>SGST Rate:</span>
+                        <span className="font-medium">{taxCalculation.taxBreakdown.sgst.percentage.toFixed(1)}%</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Security Info - Compact */}
             <div className="bg-green-50 border border-green-200 rounded-xl p-3">

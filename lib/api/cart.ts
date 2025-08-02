@@ -33,6 +33,13 @@ export interface CartItem {
 export interface CartResponse {
   cart: CartItem[];
   message?: string;
+  error?: string;
+  existingWarehouse?: string;
+  newWarehouse?: string;
+  validItems?: any[];
+  conflictingItems?: any[];
+  warning?: string;
+  isPartialSync?: boolean;
 }
 
 // Get user's cart from database
@@ -45,8 +52,19 @@ export const getCartFromDB = async (): Promise<CartResponse> => {
 // Add item to cart in database
 export const addToCartDB = async (productId: string, quantity: number = 1): Promise<CartResponse> => {
   const api = createAuthAxios();
-  const response = await api.post('/cart/add', { productId, quantity });
-  return response.data;
+  try {
+    const response = await api.post('/cart/add', { productId, quantity });
+    return response.data;
+  } catch (error: any) {
+    if (error.response?.status === 400 && error.response?.data?.error === 'WAREHOUSE_CONFLICT') {
+      // Return the error data for handling in the UI
+      throw {
+        isWarehouseConflict: true,
+        ...error.response.data
+      };
+    }
+    throw error;
+  }
 };
 
 // Update cart item quantity in database
@@ -73,6 +91,17 @@ export const clearCartDB = async (): Promise<CartResponse> => {
 // Sync local cart with database cart
 export const syncCartDB = async (localCart: any[]): Promise<CartResponse> => {
   const api = createAuthAxios();
-  const response = await api.post('/cart/sync', { localCart });
-  return response.data;
+  try {
+    const response = await api.post('/cart/sync', { localCart });
+    return response.data;
+  } catch (error: any) {
+    if (error.response?.status === 207 && error.response?.data?.warning === 'WAREHOUSE_CONFLICT') {
+      // Return partial sync data for handling in the UI
+      return {
+        ...error.response.data,
+        isPartialSync: true
+      };
+    }
+    throw error;
+  }
 };
