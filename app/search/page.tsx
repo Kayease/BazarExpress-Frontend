@@ -80,12 +80,14 @@ function SearchPage() {
   const {
     isModalOpen,
     conflictProduct,
+    locationConflict,
     showConflictModal,
     handleClearCart,
     handleSwitchToGlobal,
     handleContinueShopping,
     closeModal,
-    getCurrentWarehouse
+    getCurrentWarehouse,
+    getConflictingProductName
   } = useWarehouseConflict(); 
 
   // Use React Query hooks for data fetching
@@ -563,10 +565,12 @@ function SearchPage() {
         isOpen={isModalOpen}
         onClose={closeModal}
         currentWarehouse={getCurrentWarehouse()}
-        conflictingProduct={conflictProduct?.name || ""}
+        conflictingProduct={getConflictingProductName()}
         onClearCart={handleClearCart}
         onSwitchToGlobal={handleSwitchToGlobal}
         onContinueShopping={handleContinueShopping}
+        isLocationConflict={!!locationConflict}
+        newWarehouse={locationConflict?.newWarehouse}
       />
     </div>
   );

@@ -75,20 +75,30 @@ export function validateWarehouseCompatibility(
 
   // No custom warehouse in cart - can add anything
   if (!existingCustomWarehouse) {
+    console.log('validateWarehouseCompatibility: Allowing - no custom warehouse in cart');
     return { isValid: true };
   }
 
   // Product is from global warehouse - can add to any cart
   if (isGlobalWarehouse(product.warehouse)) {
+    console.log('validateWarehouseCompatibility: Allowing - product is from global warehouse');
     return { isValid: true };
   }
 
   // Product is from same custom warehouse - can add
   if (existingCustomWarehouse._id === product.warehouse._id) {
+    console.log('validateWarehouseCompatibility: Allowing - product is from same warehouse', {
+      warehouseName: existingCustomWarehouse.name
+    });
     return { isValid: true };
   }
 
   // Different custom warehouse - conflict
+  console.log('validateWarehouseCompatibility: Blocking - different custom warehouses', {
+    existingWarehouse: existingCustomWarehouse.name,
+    productWarehouse: product.warehouse.name
+  });
+  
   return {
     isValid: false,
     error: `Your cart has items from "${existingCustomWarehouse.name}". Clear cart or choose products from the same warehouse.`,
@@ -101,6 +111,20 @@ export function validateWarehouseCompatibility(
  */
 export function canAddToCart(product: any, cartItems: any[]): boolean {
   if (!product || !cartItems) return true;
+  if (!product.warehouse || !product.warehouse._id) return true;
+  
+  // Check if cart items have valid warehouse information
+  const validCartItems = cartItems.filter(item => 
+    item.warehouse && 
+    item.warehouse._id && 
+    item.warehouse.name
+  );
+  
+  // If no cart items have valid warehouse info, allow adding products
+  if (validCartItems.length === 0) {
+    console.log('canAddToCart: Allowing - no cart items with valid warehouse info');
+    return true;
+  }
   
   // Convert to expected format
   const productForValidation: ProductWithWarehouse = {
@@ -117,6 +141,17 @@ export function canAddToCart(product: any, cartItems: any[]): boolean {
   }));
 
   const validation = validateWarehouseCompatibility(productForValidation, cartItemsForValidation);
+  
+  // Only log when there's a conflict
+  if (!validation.isValid) {
+    console.log('canAddToCart: Blocking product due to warehouse conflict:', {
+      productName: product.name,
+      productWarehouse: product.warehouse?.name,
+      existingWarehouse: validation.existingWarehouse?.name,
+      error: validation.error
+    });
+  }
+  
   return validation.isValid;
 }
 

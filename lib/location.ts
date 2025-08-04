@@ -8,11 +8,7 @@ export interface LocationCoordinates {
 }
 
 export interface DeliveryAddress extends LocationCoordinates {
-  address?: string;
-  building?: string;
-  area?: string;
-  city?: string;
-  state?: string;
+  address: string;
   pincode?: string;
 }
 

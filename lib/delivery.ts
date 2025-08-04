@@ -153,7 +153,8 @@ export async function calculateDeliveryChargeAPI(
   customerLng: number,
   cartTotal: number,
   paymentMethod: 'online' | 'cod' = 'online',
-  warehouseId?: string
+  warehouseId?: string,
+  customerPincode?: string
 ): Promise<DeliveryCalculationResult | null> {
   try {
     const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/delivery/calculate`, {
@@ -166,7 +167,8 @@ export async function calculateDeliveryChargeAPI(
         customerLng,
         cartTotal,
         paymentMethod,
-        warehouseId
+        warehouseId,
+        customerPincode
       })
     });
     

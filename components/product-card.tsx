@@ -35,12 +35,14 @@ const ProductCard: React.FC<ProductCardProps> = ({
   const {
     isModalOpen,
     conflictProduct,
+    locationConflict,
     showConflictModal,
     handleClearCart,
     handleSwitchToGlobal,
     handleContinueShopping,
     closeModal,
-    getCurrentWarehouse
+    getCurrentWarehouse,
+    getConflictingProductName
   } = useWarehouseConflict();
   
   const hasDiscount = product.mrp != null && product.mrp > product.price;
@@ -51,6 +53,8 @@ const ProductCard: React.FC<ProductCardProps> = ({
   const canAddProduct = canAddToCart(product, cartItems);
   const conflictInfo = getWarehouseConflictInfo(product, cartItems);
   const isInCart = quantity > 0;
+
+
 
   return (
     <div
@@ -187,10 +191,12 @@ const ProductCard: React.FC<ProductCardProps> = ({
         isOpen={isModalOpen}
         onClose={closeModal}
         currentWarehouse={getCurrentWarehouse()}
-        conflictingProduct={conflictProduct?.name || ""}
+        conflictingProduct={getConflictingProductName()}
         onClearCart={handleClearCart}
         onSwitchToGlobal={handleSwitchToGlobal}
         onContinueShopping={handleContinueShopping}
+        isLocationConflict={!!locationConflict}
+        newWarehouse={locationConflict?.newWarehouse}
       />
     </div>
   );

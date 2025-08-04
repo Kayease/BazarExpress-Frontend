@@ -1,5 +1,5 @@
 "use client";
-import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo, useCallback, useRef } from "react";
 import { Provider, useSelector, useDispatch } from "react-redux";
 import { store, persistor, RootState } from "../lib/store";
 import { PersistGate } from "redux-persist/integration/react";
@@ -106,6 +106,14 @@ function CartProvider({ children }: { children: ReactNode }) {
   const [isLoadingCart, setIsLoadingCart] = useState(false);
   const reduxUser = useSelector((state: RootState) => state.auth.user);
   const isLoggedIn = !!reduxUser;
+  
+  // Use ref to access current cart items without causing dependency issues
+  const cartItemsRef = useRef<any[]>([]);
+  
+  // Update ref whenever cart items change
+  useEffect(() => {
+    cartItemsRef.current = cartItems;
+  }, [cartItems]);
 
   // Custom updater for cart items
   const updateCartItems = (items: any[]) => {
@@ -119,12 +127,28 @@ function CartProvider({ children }: { children: ReactNode }) {
       try {
         setIsLoadingCart(true);
         const response = await getCartFromDB();
-        const dbCartItems = response.cart.map((item: any) => ({
-          id: item.productId._id,
-          _id: item.productId._id,
-          ...item.productId,
-          quantity: item.quantity
-        }));
+        const dbCartItems = response.cart.map((item: any) => {
+          const mappedItem = {
+            id: item.productId._id,
+            _id: item.productId._id,
+            ...item.productId,
+            quantity: item.quantity
+          };
+          
+          // Fallback: If warehouse info is missing from API response, try to preserve it from current cart
+          if (!mappedItem.warehouse || !mappedItem.warehouse._id) {
+            const existingItem = cartItemsRef.current.find(cartItem => cartItem.id === mappedItem.id);
+            if (existingItem && existingItem.warehouse) {
+              console.log('Preserving warehouse info from existing cart item (load):', {
+                productId: mappedItem.id,
+                warehouse: existingItem.warehouse
+              });
+              mappedItem.warehouse = existingItem.warehouse;
+            }
+          }
+          
+          return mappedItem;
+        });
         setCartItems(dbCartItems);
         // Don't persist to localStorage for logged-in users
       } catch (error) {
@@ -229,15 +253,95 @@ function CartProvider({ children }: { children: ReactNode }) {
     const productId = product.id || product._id;
     const quantityToAdd = product.quantity || 1;
 
+    // First check if adding this product would create a warehouse conflict
+    const existingCustomWarehouse = cartItems.find(item => 
+      item.warehouse && 
+      !item.warehouse.deliverySettings?.is24x7Delivery && 
+      item.warehouse._id
+    )?.warehouse;
+
+    if (existingCustomWarehouse && product.warehouse) {
+      // Block if trying to add a global product to a cart with custom warehouse items
+      if (product.warehouse.deliverySettings?.is24x7Delivery) {
+        throw {
+          isWarehouseConflict: true,
+          existingWarehouse: existingCustomWarehouse.name,
+          message: `Your cart has items from "${existingCustomWarehouse.name}". Clear cart or choose products from the same warehouse.`
+        };
+      }
+      // Block if trying to add from a different custom warehouse
+      if (existingCustomWarehouse._id !== product.warehouse._id) {
+        throw {
+          isWarehouseConflict: true,
+          existingWarehouse: existingCustomWarehouse.name,
+          message: `Your cart has items from "${existingCustomWarehouse.name}". Clear cart or choose products from the same warehouse.`
+        };
+      }
+    }
+
     if (isLoggedIn) {
       try {
         const response = await addToCartDB(productId, quantityToAdd);
-        const updatedCartItems = response.cart.map((item: any) => ({
-          id: item.productId._id,
-          _id: item.productId._id,
-          ...item.productId,
-          quantity: item.quantity
-        }));
+        
+        const updatedCartItems = response.cart.map((item: any) => {
+          // Get the warehouse info from either the response or the original product
+          const warehouseInfo = 
+            (item.productId.warehouse && typeof item.productId.warehouse === 'object')
+              ? item.productId.warehouse // Use API response warehouse if it's an object
+              : (product.warehouse && typeof product.warehouse === 'object')
+                ? product.warehouse // Use original product warehouse if it's an object
+                : null; // Fallback to null if neither is available
+          
+          const mappedItem = {
+            id: item.productId._id,
+            _id: item.productId._id,
+            ...item.productId,
+            warehouse: warehouseInfo, // Set warehouse info from above
+            quantity: item.quantity
+          };
+          
+          // Double-check: If still no warehouse info, try to preserve from current cart
+          if (!mappedItem.warehouse || !mappedItem.warehouse._id) {
+            const existingItem = cartItemsRef.current.find(cartItem => 
+              cartItem.id === mappedItem.id && cartItem.warehouse && cartItem.warehouse._id
+            );
+            if (existingItem && existingItem.warehouse) {
+              console.log('Preserving warehouse info from existing cart item:', {
+                productId: mappedItem.id,
+                warehouse: existingItem.warehouse
+              });
+              mappedItem.warehouse = existingItem.warehouse;
+            }
+          }
+          
+          console.log('Mapped cart item:', {
+            id: mappedItem.id,
+            name: mappedItem.name,
+            warehouse: mappedItem.warehouse,
+            quantity: mappedItem.quantity
+          });
+          
+          return mappedItem;
+        });
+        
+        // Additional check: Verify warehouse information is preserved and complete
+        const itemsWithInvalidWarehouse = updatedCartItems.filter(item => 
+          !item.warehouse || 
+          !item.warehouse._id || 
+          !item.warehouse.name || 
+          typeof item.warehouse !== 'object'
+        );
+        
+        if (itemsWithInvalidWarehouse.length > 0) {
+          console.warn('WARNING: Some cart items have invalid warehouse information:', {
+            itemsWithInvalidWarehouse: itemsWithInvalidWarehouse.map(item => ({
+              id: item.id,
+              name: item.name,
+              warehouse: item.warehouse
+            }))
+          });
+        }
+        
         setCartItems(updatedCartItems);
         // Don't persist to localStorage for logged-in users
         // No toast for regular add to cart operations
@@ -277,12 +381,28 @@ function CartProvider({ children }: { children: ReactNode }) {
     if (isLoggedIn) {
       try {
         const response = await updateCartItemDB(id, quantity);
-        const updatedCartItems = response.cart.map((item: any) => ({
-          id: item.productId._id,
-          _id: item.productId._id,
-          ...item.productId,
-          quantity: item.quantity
-        }));
+        const updatedCartItems = response.cart.map((item: any) => {
+          const mappedItem = {
+            id: item.productId._id,
+            _id: item.productId._id,
+            ...item.productId,
+            quantity: item.quantity
+          };
+          
+          // Fallback: If warehouse info is missing from API response, try to preserve it from current cart
+          if (!mappedItem.warehouse || !mappedItem.warehouse._id) {
+            const existingItem = cartItemsRef.current.find(cartItem => cartItem.id === mappedItem.id);
+            if (existingItem && existingItem.warehouse) {
+              console.log('Preserving warehouse info from existing cart item (update):', {
+                productId: mappedItem.id,
+                warehouse: existingItem.warehouse
+              });
+              mappedItem.warehouse = existingItem.warehouse;
+            }
+          }
+          
+          return mappedItem;
+        });
         setCartItems(updatedCartItems);
         // Don't persist to localStorage for logged-in users
         // No toast for regular cart updates

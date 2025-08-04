@@ -28,6 +28,7 @@ interface LocationContextType {
   switchToGlobalMode: () => void;
   switchToCustomMode: () => void;
   clearLocation: () => void;
+  revertToPreviousLocation: () => void;
   
   // Product fetching
   fetchProductsByLocation: (options?: {
@@ -63,6 +64,7 @@ export function LocationProvider({ children }: LocationProviderProps) {
   const [error, setError] = useState<string | null>(null);
   const [showOverlay, setShowOverlay] = useState(false);
   const [showLocationModal, setShowLocationModal] = useState(false);
+  const [previousLocation, setPreviousLocation] = useState<LocationState | null>(null);
 
   // Initialize location on mount
   useEffect(() => {
@@ -139,6 +141,11 @@ export function LocationProvider({ children }: LocationProviderProps) {
   }, []);
 
   const updateLocationState = (deliveryCheck: PincodeDeliveryCheck) => {
+    // Store previous location before updating
+    if (locationState.isLocationDetected && locationState.pincode !== deliveryCheck.pincode) {
+      setPreviousLocation(locationState);
+    }
+    
     const newState: LocationState = {
       pincode: deliveryCheck.pincode,
       isLocationDetected: true,
@@ -245,6 +252,15 @@ export function LocationProvider({ children }: LocationProviderProps) {
     localStorage.removeItem('hasAttemptedAutoDetection');
   };
 
+  const revertToPreviousLocation = () => {
+    if (previousLocation) {
+      setLocationState(previousLocation);
+      saveLocationState(previousLocation);
+      setPreviousLocation(null);
+      setShowOverlay(false);
+    }
+  };
+
   const fetchProductsByLocation = async (options: {
     page?: number;
     limit?: number;
@@ -301,6 +317,7 @@ export function LocationProvider({ children }: LocationProviderProps) {
     switchToGlobalMode,
     switchToCustomMode,
     clearLocation,
+    revertToPreviousLocation,
     fetchProductsByLocation,
     showOverlay,
     setShowOverlay,

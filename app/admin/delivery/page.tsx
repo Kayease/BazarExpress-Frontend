@@ -26,6 +26,7 @@ import {
 // Types
 interface DeliverySettings {
   _id?: string
+  warehouseType?: 'custom' | 'global'
   freeDeliveryMinAmount: number
   freeDeliveryRadius: number
   baseDeliveryCharge: number
@@ -46,15 +47,22 @@ interface DeliverySettings {
   }
 }
 
+interface AllDeliverySettings {
+  custom: DeliverySettings | null
+  global: DeliverySettings | null
+}
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL
 const DELIVERY_API = `${API_URL}/delivery`
 
 export default function DeliveryManagementPage() {
-  const [settings, setSettings] = useState<DeliverySettings | null>(null)
+  const [allSettings, setAllSettings] = useState<AllDeliverySettings>({ custom: null, global: null })
+  const [activeTab, setActiveTab] = useState<'custom' | 'global'>('custom')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [initializing, setInitializing] = useState(false)
   const [formData, setFormData] = useState<DeliverySettings>({
+    warehouseType: 'custom',
     freeDeliveryMinAmount: 500,
     freeDeliveryRadius: 3,
     baseDeliveryCharge: 20,
@@ -64,6 +72,9 @@ export default function DeliveryManagementPage() {
     codExtraCharges: false,
   })
   const [errors, setErrors] = useState<{ [key: string]: string }>({})
+
+  // Get current settings based on active tab
+  const currentSettings = allSettings[activeTab]
 
   // Calculate delivery charge based on distance and order amount
   const calculateDeliveryCharge = React.useCallback((distance: number, orderAmount: number) => {
@@ -118,18 +129,35 @@ export default function DeliveryManagementPage() {
     }
   }
 
-  // Fetch delivery settings
+  // Fetch all delivery settings (both custom and global)
   const fetchSettings = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`${DELIVERY_API}/settings`)
+      const response = await fetch(`${DELIVERY_API}/settings/all`)
       const data = await response.json()
 
       if (data.success && data.settings) {
-        setSettings(data.settings)
-        setFormData(data.settings)
+        setAllSettings(data.settings)
+        
+        // Set form data based on active tab
+        const currentTabSettings = data.settings[activeTab]
+        if (currentTabSettings) {
+          setFormData({ ...currentTabSettings, warehouseType: activeTab })
+        } else {
+          // Set default form data for the active tab
+          setFormData({
+            warehouseType: activeTab,
+            freeDeliveryMinAmount: 500,
+            freeDeliveryRadius: 3,
+            baseDeliveryCharge: 20,
+            minimumDeliveryCharge: 10,
+            maximumDeliveryCharge: 100,
+            perKmCharge: 5,
+            codExtraCharges: false,
+          })
+        }
       } else {
-        setSettings(null)
+        setAllSettings({ custom: null, global: null })
       }
     } catch (error) {
       console.error('Error fetching delivery settings:', error)
@@ -216,16 +244,23 @@ export default function DeliveryManagementPage() {
         },
         body: JSON.stringify({
           ...formData,
-          _id: settings?._id
+          warehouseType: activeTab,
+          _id: currentSettings?._id
         })
       })
 
       const data = await response.json()
 
       if (data.success) {
-        toast.success('Delivery settings updated successfully')
-        setSettings(data.settings)
-        setFormData(data.settings)
+        toast.success(`${activeTab === 'custom' ? 'Custom' : 'Global'} warehouse delivery settings updated successfully`)
+        
+        // Update the specific settings in allSettings
+        setAllSettings(prev => ({
+          ...prev,
+          [activeTab]: data.settings
+        }))
+        
+        setFormData({ ...data.settings, warehouseType: activeTab })
       } else {
         toast.error(data.error || 'Failed to update settings')
       }
@@ -246,6 +281,28 @@ export default function DeliveryManagementPage() {
     }
   }
 
+  // Handle tab switch
+  const handleTabSwitch = (tab: 'custom' | 'global') => {
+    setActiveTab(tab)
+    const tabSettings = allSettings[tab]
+    if (tabSettings) {
+      setFormData({ ...tabSettings, warehouseType: tab })
+    } else {
+      // Set default form data for the tab
+      setFormData({
+        warehouseType: tab,
+        freeDeliveryMinAmount: 500,
+        freeDeliveryRadius: 3,
+        baseDeliveryCharge: 20,
+        minimumDeliveryCharge: 10,
+        maximumDeliveryCharge: 100,
+        perKmCharge: 5,
+        codExtraCharges: false,
+      })
+    }
+    setErrors({}) // Clear errors when switching tabs
+  }
+
   // Watch for changes in form data and calculator inputs
   useEffect(() => {
     const distance = Number((document.getElementById('distance') as HTMLInputElement)?.value);
@@ -258,6 +315,11 @@ export default function DeliveryManagementPage() {
   useEffect(() => {
     fetchSettings()
   }, [])
+
+  // Refetch settings when active tab changes
+  useEffect(() => {
+    fetchSettings()
+  }, [activeTab])
 
   return (
     <AdminLayout>
@@ -277,7 +339,7 @@ export default function DeliveryManagementPage() {
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
-            {!settings && (
+            {!currentSettings && (
               <Button
                 onClick={initializeSettings}
                 disabled={initializing}
@@ -287,6 +349,44 @@ export default function DeliveryManagementPage() {
                 {initializing ? 'Initializing...' : 'Initialize Default Settings'}
               </Button>
             )}
+          </div>
+        </div>
+
+        {/* Warehouse Type Tabs */}
+        <div className="mb-6">
+          <div className="border-b border-gray-200">
+            <nav className="-mb-px flex space-x-8">
+              <button
+                onClick={() => handleTabSwitch('custom')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'custom'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Custom Hour Warehouses
+                {allSettings.custom && (
+                  <Badge variant="secondary" className="ml-2">
+                    Configured
+                  </Badge>
+                )}
+              </button>
+              <button
+                onClick={() => handleTabSwitch('global')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'global'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Global/24x7 Warehouses
+                {allSettings.global && (
+                  <Badge variant="secondary" className="ml-2">
+                    Configured
+                  </Badge>
+                )}
+              </button>
+            </nav>
           </div>
         </div>
 
@@ -305,13 +405,15 @@ export default function DeliveryManagementPage() {
               </Card>
             ))}
           </div>
-        ) : !settings ? (
+        ) : !currentSettings ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
               <Truck className="h-16 w-16 text-gray-400 mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">No Delivery Settings Found</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                No {activeTab === 'custom' ? 'Custom Hour' : 'Global/24x7'} Warehouse Settings Found
+              </h3>
               <p className="text-gray-600 text-center mb-6">
-                Initialize default delivery settings to get started with delivery management.
+                Initialize default delivery settings for {activeTab === 'custom' ? 'custom hour' : 'global/24x7'} warehouses to get started.
               </p>
               <Button
                 onClick={initializeSettings}
@@ -330,33 +432,33 @@ export default function DeliveryManagementPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Info className="h-5 w-5" />
-                  Current Settings Overview
+                  {activeTab === 'custom' ? 'Custom Hour' : 'Global/24x7'} Warehouse Settings Overview
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-green-600">₹{settings.freeDeliveryMinAmount}</div>
+                    <div className="text-2xl font-bold text-green-600">₹{currentSettings.freeDeliveryMinAmount}</div>
                     <div className="text-sm text-gray-600">Free Delivery Above</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-blue-600">{settings.freeDeliveryRadius} km</div>
+                    <div className="text-2xl font-bold text-blue-600">{currentSettings.freeDeliveryRadius} km</div>
                     <div className="text-sm text-gray-600">Free Delivery Radius</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-orange-600">₹{settings.baseDeliveryCharge}</div>
+                    <div className="text-2xl font-bold text-orange-600">₹{currentSettings.baseDeliveryCharge}</div>
                     <div className="text-sm text-gray-600">Base Charge</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-purple-600">₹{settings.perKmCharge}/km</div>
+                    <div className="text-2xl font-bold text-purple-600">₹{currentSettings.perKmCharge}/km</div>
                     <div className="text-sm text-gray-600">Per KM Charge</div>
                   </div>
                 </div>
                 <Separator className="my-4" />
                 <div className="flex items-center justify-between text-sm text-gray-600">
-                  <span>Last updated: {new Date(settings.updatedAt!).toLocaleString()}</span>
-                  <Badge variant={settings.codExtraCharges ? "default" : "secondary"}>
-                    COD Extra Charges {settings.codExtraCharges ? 'Enabled' : 'Disabled'}
+                  <span>Last updated: {new Date(currentSettings.updatedAt!).toLocaleString()}</span>
+                  <Badge variant={currentSettings.codExtraCharges ? "default" : "secondary"}>
+                    COD Extra Charges {currentSettings.codExtraCharges ? 'Enabled' : 'Disabled'}
                   </Badge>
                 </div>
               </CardContent>

@@ -71,7 +71,11 @@ const OptimizedImage = memo(({
   };
 
   if (fill) {
-    return <Image {...imageProps} fill />;
+    return (
+      <div className="relative w-full h-full">
+        <Image {...imageProps} fill sizes={sizes} />
+      </div>
+    );
   }
 
   return (

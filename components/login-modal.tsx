@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-
+import Image from "next/image";
 import { useState, useRef, useEffect } from "react";
 import { X, ChevronLeft } from "lucide-react";
 import toast from "react-hot-toast";
@@ -144,10 +144,13 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
           </button>
           
           <div className="mb-8 text-center">
-            <img 
+            <Image 
               src="/logo.png" 
               alt="BazarXpress" 
-              className="h-14 mx-auto mb-4"
+              width={56}  
+              height={56}
+              style={{ height: 'auto' }}
+              className="mx-auto mb-4"
             />
             <h2 className="text-2xl font-bold text-gray-800 mb-2">
               {step === "phone" ? "India's last minute app" : "OTP Verification"}

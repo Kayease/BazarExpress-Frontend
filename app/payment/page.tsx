@@ -3,22 +3,23 @@
  * 
  * This component implements the following validations:
  * 1. COD Availability: Checks if all cart items support Cash on Delivery
- * 2. Delivery Area: Validates if delivery address is within warehouse delivery limits
+ * 2. Delivery Area: Validates if delivery is available based on warehouse pincode settings
  * 3. Warehouse Operational Hours: Ensures warehouse is operational (6 AM - 11 PM)
  * 4. Address Selection: Ensures a delivery address is selected
  * 5. Decimal Formatting: All prices display with 2 decimal places
  * 
  * To configure:
- * - Update maxDeliveryRadius in validateDeliveryArea() for delivery limits
  * - Update openTime/closeTime in validateWarehouseOperationalHours() for operational hours
  * - Set codAvailable property on cart items to control COD availability per product
+ * - Configure warehouse pincode settings for delivery availability
  */
 
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useCartContext } from "@/components/app-provider";
 import { useAppSelector } from "@/lib/store";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { 
   CreditCard, 
   Wallet, 
@@ -143,14 +144,23 @@ interface CartItem {
   brand?: string;
   brandId?: string;
   productId?: string;
-  codAvailable?: boolean; // New field to check if COD is available for this product
-  priceIncludesTax?: boolean; // Whether the price includes tax
+  codAvailable?: boolean;
+  priceIncludesTax?: boolean;
   tax?: {
     _id: string;
     name: string;
     percentage: number;
     description?: string;
-  }; // Tax information for the product
+  };
+  warehouse?: {
+    _id: string;
+    id: string;
+    name: string;
+    deliverySettings?: {
+      is24x7Delivery: boolean;
+    };
+  };
+  warehouseId?: string;
 }
 
 interface ValidationErrors {
@@ -194,6 +204,16 @@ interface DeliverySettings {
   perKmCharge: number;
   codAvailable: boolean;
   calculationMethod: string;
+}
+
+interface MixedWarehouseDelivery {
+  totalDeliveryCharge: number;
+  warehouseResults: {
+    [warehouseId: string]: {
+      distance: number;
+      deliveryInfo: DeliveryInfo;
+    };
+  };
 }
 
 // Helper for parsing Google address components
@@ -240,9 +260,36 @@ export default function PaymentPage() {
   // Process cart items with COD availability info
   const cartItemsWithCODInfo = cartItems.map((item: any) => ({
     ...item,
-    // If the product already has codAvailable property, use it, otherwise default to true
     codAvailable: item.codAvailable !== undefined ? item.codAvailable : true
   }));
+
+  // Group cart items by warehouse
+  const groupItemsByWarehouse = useCallback((items: CartItem[]) => {
+    const grouped: { [warehouseId: string]: { items: CartItem[], warehouse: any } } = {};
+    
+    items.forEach(item => {
+      const warehouseId = item.warehouse?._id || item.warehouse?.id || item.warehouseId || 'unknown';
+      const warehouseInfo = item.warehouse || { 
+        _id: warehouseId, 
+        id: warehouseId,
+        name: 'Unknown Warehouse', 
+        deliverySettings: { is24x7Delivery: false } 
+      };
+      
+      if (!grouped[warehouseId]) {
+        grouped[warehouseId] = {
+          items: [],
+          warehouse: warehouseInfo
+        };
+      }
+      
+      grouped[warehouseId].items.push(item);
+    });
+    
+    return grouped;
+  }, []);
+
+  const itemsByWarehouse = useMemo(() => groupItemsByWarehouse(cartItemsWithCODInfo), [cartItemsWithCODInfo, groupItemsByWarehouse]);
   
   // Payment method states
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('upi');
@@ -263,9 +310,7 @@ export default function PaymentPage() {
   const [isLoadingAddresses, setIsLoadingAddresses] = useState<boolean>(false);
   const [isAddingAddress, setIsAddingAddress] = useState<boolean>(false);
   const modalRef = useRef<HTMLDivElement>(null);
-  // Add this for Add Address Modal form state
   const [addressForm, setAddressForm] = useState<Partial<Address>>({});
-  // For map and autocomplete
   const mapRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const mapInstance = useRef<any>(null);
@@ -279,10 +324,13 @@ export default function PaymentPage() {
   const [deliveryInfo, setDeliveryInfo] = useState<DeliveryInfo | null>(null);
   const [loadingDelivery, setLoadingDelivery] = useState(false);
   
+  // Mixed warehouse delivery states
+  const [mixedWarehouseDelivery, setMixedWarehouseDelivery] = useState<MixedWarehouseDelivery | null>(null);
+  const [loadingMixedDelivery, setLoadingMixedDelivery] = useState(false);
+  
   // Validation states
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
   const [isValidatingPayment, setIsValidatingPayment] = useState(false);
-  const [warehouseOperationalHours, setWarehouseOperationalHours] = useState<any>(null);
   
   // Delivery settings state
   const [deliverySettings, setDeliverySettings] = useState<DeliverySettings | null>(null);
@@ -293,6 +341,60 @@ export default function PaymentPage() {
   
   // Tax calculation states
   const [taxCalculation, setTaxCalculation] = useState<CartTaxCalculation | null>(null);
+  
+  // Error tracking to prevent duplicate toasts
+  const [lastErrorMessage, setLastErrorMessage] = useState<string>('');
+  const [lastErrorTime, setLastErrorTime] = useState<number>(0);
+  
+  // Track failed delivery calculations to prevent repeated attempts
+  const [failedDeliveryAddresses, setFailedDeliveryAddresses] = useState<Set<string>>(new Set());
+
+  // State to trigger delivery calculation retry
+  const [shouldRetryDelivery, setShouldRetryDelivery] = useState(false);
+
+  // Helper function to show error toast only if not shown recently
+  const showErrorToast = useCallback((message: string, cooldownMs: number = 3000) => {
+    const now = Date.now();
+    if (lastErrorMessage !== message || (now - lastErrorTime) > cooldownMs) {
+      toast.error(message);
+      setLastErrorMessage(message);
+      setLastErrorTime(now);
+    }
+  }, [lastErrorMessage, lastErrorTime]);
+
+  // Helper function to show success toast only if not shown recently
+  const showSuccessToast = useCallback((message: string, cooldownMs: number = 2000) => {
+    const now = Date.now();
+    if (lastErrorMessage !== message || (now - lastErrorTime) > cooldownMs) {
+      toast.success(message);
+      setLastErrorMessage(message);
+      setLastErrorTime(now);
+    }
+  }, [lastErrorMessage, lastErrorTime]);
+
+  // Helper function to create address key for tracking failed deliveries
+  const getAddressKey = useCallback((address: Address) => {
+    return `${address.lat}_${address.lng}_${address.id}`;
+  }, []);
+
+  // Function to retry delivery calculation for a failed address
+  const retryDeliveryCalculation = useCallback(() => {
+    if (selectedAddress && addresses.length > 0) {
+      const address = addresses.find(addr => addr.id === selectedAddress);
+      if (address) {
+        const addressKey = getAddressKey(address);
+        setFailedDeliveryAddresses(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(addressKey);
+          return newSet;
+        });
+        
+        setDeliveryInfo(null);
+        setMixedWarehouseDelivery(null);
+        setShouldRetryDelivery(true);
+      }
+    }
+  }, [selectedAddress, addresses, getAddressKey]);
 
   // Filter payment methods based on delivery settings
   const paymentMethods = allPaymentMethods.filter(method => {
@@ -343,32 +445,19 @@ export default function PaymentPage() {
       return false;
     }
     
-    // If delivery is currently being calculated, don't show error - just return false silently
     if (loadingDelivery) {
       setValidationErrors(prev => ({ ...prev, deliveryNotAvailable: undefined }));
       return false;
     }
     
     if (!deliveryInfo) {
-      // Only show this error if we're not loading and have no delivery info
       setValidationErrors(prev => ({
         ...prev,
         deliveryNotAvailable: 'Unable to calculate delivery for selected address. Please try selecting a different address or contact support.'
       }));
       return false;
     }
-    
-    // Check if delivery is available based on warehouse settings
-    const maxDeliveryRadius = deliveryInfo.warehouseSettings?.maxDeliveryRadius || 25;
-    if (deliveryInfo.distance && deliveryInfo.distance > maxDeliveryRadius) {
-      setValidationErrors(prev => ({
-        ...prev,
-        deliveryNotAvailable: `Delivery not available to your location. Maximum delivery distance is ${maxDeliveryRadius}km, but your location is ${deliveryInfo.distance.toFixed(2)}km away from our nearest warehouse.`
-      }));
-      return false;
-    }
 
-    // Check if warehouse delivery is enabled
     if (deliveryInfo.warehouseSettings?.isDeliveryEnabled === false) {
       setValidationErrors(prev => ({
         ...prev,
@@ -385,11 +474,10 @@ export default function PaymentPage() {
     const now = new Date();
     const currentHour = now.getHours();
     const currentMinute = now.getMinutes();
-    const currentTime = currentHour * 60 + currentMinute; // Convert to minutes
+    const currentTime = currentHour * 60 + currentMinute;
     
-    // Default operational hours: 6 AM to 11 PM (you can make this configurable)
-    const openTime = 6 * 60; // 6 AM in minutes
-    const closeTime = 23 * 60; // 11 PM in minutes
+    const openTime = 6 * 60;
+    const closeTime = 23 * 60;
     
     if (currentTime < openTime || currentTime > closeTime) {
       const openHour = Math.floor(openTime / 60);
@@ -428,20 +516,16 @@ export default function PaymentPage() {
       return false;
     }
 
-    // Prepare cart items for validation
     const cartItemsForValidation = cartItemsWithCODInfo.map((item: any) => ({
       _id: item._id || item.id,
       name: item.name,
-      warehouseId: item.warehouseId || item.warehouse?._id,
+      warehouseId: item.warehouseId || item.warehouse?._id || item.warehouse?.id,
       quantity: item.quantity
     }));
 
-    // Check if all items have warehouse information
     const itemsWithoutWarehouse = cartItemsForValidation.filter(item => !item.warehouseId);
     if (itemsWithoutWarehouse.length > 0) {
       console.warn('Some cart items missing warehouse information:', itemsWithoutWarehouse);
-      // For now, we'll skip validation for items without warehouse info
-      // In production, you should ensure all products have warehouse assignments
     }
 
     const validItems = cartItemsForValidation.filter(item => item.warehouseId);
@@ -457,10 +541,19 @@ export default function PaymentPage() {
     
     try {
       const selectedAddrObj = addresses.find(a => a.id === selectedAddress);
+      if (!selectedAddrObj) {
+        setValidationErrors(prev => ({
+          ...prev,
+          addressRequired: 'Selected address not found.'
+        }));
+        return false;
+      }
+
       const validation = await validateCartDelivery(validItems, {
-        lat: selectedAddrObj?.lat!,
-        lng: selectedAddrObj?.lng!,
-        address: `${selectedAddrObj?.building}, ${selectedAddrObj?.area}, ${selectedAddrObj?.city}`
+        lat: selectedAddrObj.lat!,
+        lng: selectedAddrObj.lng!,
+        address: `${selectedAddrObj.building}, ${selectedAddrObj.area}, ${selectedAddrObj.city}`,
+        pincode: selectedAddrObj.pincode
       });
 
       setCartValidation(validation);
@@ -503,7 +596,6 @@ export default function PaymentPage() {
     const isWarehouseOperational = validateWarehouseOperationalHours();
     const isAddressValid = validateAddress();
     
-    // Add cart validation for delivery zone
     const isCartValid = await validateCartForDelivery();
     
     return isCODValid && isDeliveryValid && isWarehouseOperational && isAddressValid && isCartValid;
@@ -561,7 +653,6 @@ export default function PaymentPage() {
         );
         setAddresses(validAddresses);
         
-        // Set default address as selected
         const defaultAddress = validAddresses.find((addr: Address) => addr.isDefault);
         if (defaultAddress) {
           setSelectedAddress(defaultAddress.id);
@@ -601,9 +692,7 @@ export default function PaymentPage() {
 
       const data = await response.json();
       if (data.address) {
-        // Refresh addresses
         await fetchUserAddresses();
-        // Select the new address if it's set as default
         if (newAddress.isDefault) {
           setSelectedAddress(data.address.id);
         }
@@ -648,13 +737,63 @@ export default function PaymentPage() {
 
   // Calculate delivery when address or payment method changes
   useEffect(() => {
-    if (selectedAddress && addresses.length > 0) {
+    if (selectedAddress && addresses.length > 0 && !loadingDelivery && !loadingMixedDelivery) {
       const address = addresses.find(addr => addr.id === selectedAddress);
       if (address) {
-        calculateDelivery(address);
+        const addressKey = getAddressKey(address);
+        if (failedDeliveryAddresses.has(addressKey)) {
+          console.log('Skipping delivery calculation for previously failed address:', addressKey);
+          return;
+        }
+        
+        const warehouseIds = Object.keys(itemsByWarehouse);
+        if (warehouseIds.length > 1) {
+          calculateMixedWarehouseDelivery(address);
+        } else {
+          calculateDelivery(address);
+        }
       }
     }
-  }, [selectedAddress, addresses, selectedPaymentMethod, discountAmount]);
+  }, [selectedAddress, addresses, selectedPaymentMethod, itemsByWarehouse, shouldRetryDelivery, failedDeliveryAddresses, loadingDelivery, loadingMixedDelivery, getAddressKey]);
+
+  // Recalculate delivery when discount amount changes (with debounce)
+  useEffect(() => {
+    if (selectedAddress && addresses.length > 0 && deliveryInfo && !loadingDelivery) {
+      const timeoutId = setTimeout(() => {
+        const address = addresses.find(addr => addr.id === selectedAddress);
+        if (address) {
+          const warehouseIds = Object.keys(itemsByWarehouse);
+          if (warehouseIds.length > 1) {
+            calculateMixedWarehouseDelivery(address);
+          } else {
+            calculateDelivery(address);
+          }
+        }
+      }, 500);
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [discountAmount]);
+
+  // Clear failed delivery addresses when user changes address
+  useEffect(() => {
+    if (selectedAddress) {
+      setFailedDeliveryAddresses(new Set());
+    }
+  }, [selectedAddress]);
+
+  // Trigger delivery calculation when retry is requested
+  useEffect(() => {
+    if (shouldRetryDelivery && selectedAddress && addresses.length > 0) {
+      const address = addresses.find(addr => addr.id === selectedAddress);
+      if (address) {
+        const addressKey = getAddressKey(address);
+        if (!failedDeliveryAddresses.has(addressKey)) {
+          setShouldRetryDelivery(false);
+        }
+      }
+    }
+  }, [shouldRetryDelivery, selectedAddress, addresses, failedDeliveryAddresses, getAddressKey]);
 
   // Run validations when relevant states change
   useEffect(() => {
@@ -685,7 +824,6 @@ export default function PaymentPage() {
   };
 
   const handlePromoCodeSelect = async (code: string) => {
-    // Auto-apply the selected promocode
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/promocodes/validate`, {
         method: 'POST',
@@ -720,102 +858,263 @@ export default function PaymentPage() {
     }
   };
 
-  // Calculate delivery charges
-  const calculateDelivery = async (address: Address) => {
-    if (!address.lat || !address.lng) {
-      console.log('Address missing coordinates:', address);
-      // Create a default delivery info for addresses without coordinates using settings
-      const defaultDeliveryInfo = {
-        distance: 10, // Default 10km distance
-        deliveryCharge: deliverySettings?.baseDeliveryCharge || 20,
-        totalDeliveryCharge: deliverySettings?.baseDeliveryCharge || 20,
-        isFreeDelivery: false,
-        freeDeliveryEligible: cartTotal >= (deliverySettings?.freeDeliveryMinAmount || 500),
-        amountNeededForFreeDelivery: Math.max(0, (deliverySettings?.freeDeliveryMinAmount || 500) - cartTotal)
-      };
-      setDeliveryInfo(defaultDeliveryInfo);
+  // Calculate mixed warehouse delivery charges
+  const calculateMixedWarehouseDelivery = useCallback(async (address: Address) => {
+    if (loadingMixedDelivery) {
+      console.log('Mixed warehouse delivery calculation already in progress, skipping...');
       return;
     }
+
+    const addressKey = getAddressKey(address);
+    if (failedDeliveryAddresses.has(addressKey)) {
+      console.log('Skipping mixed warehouse delivery calculation for previously failed address:', addressKey);
+      return;
+    }
+
+    if (!address.lat || !address.lng) {
+      console.log('Address missing coordinates:', address);
+      return;
+    }
+
+    if (!address.pincode) {
+      console.log('Address missing pincode:', address);
+      showErrorToast('Address pincode is required for delivery calculation. Please select a valid address.');
+      return;
+    }
+
+    const lat = Number(address.lat);
+    const lng = Number(address.lng);
+    if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      console.error('Invalid coordinates:', { lat, lng });
+      return;
+    }
+
+    try {
+      setLoadingMixedDelivery(true);
+      
+      const cartItemsByWarehouse: { [warehouseId: string]: any[] } = {};
+      Object.entries(itemsByWarehouse).forEach(([warehouseId, { items }]) => {
+        cartItemsByWarehouse[warehouseId] = items.map(item => ({
+          id: item.id || item._id,
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+          warehouse: item.warehouse
+        }));
+      });
+
+      console.log('Calculating mixed warehouse delivery:', {
+        customerLat: lat,
+        customerLng: lng,
+        cartItemsByWarehouse,
+        paymentMethod: selectedPaymentMethod === 'cod' ? 'cod' : 'online',
+        customerPincode: address.pincode
+      });
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/delivery/calculate-mixed`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          customerLat: lat,
+          customerLng: lng,
+          cartItemsByWarehouse,
+          paymentMethod: selectedPaymentMethod === 'cod' ? 'cod' : 'online',
+          customerPincode: address.pincode
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setMixedWarehouseDelivery(data);
+        console.log('Mixed warehouse delivery calculated:', data);
+        
+        const addressKey = getAddressKey(address);
+        setFailedDeliveryAddresses(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(addressKey);
+          return newSet;
+        });
+      } else {
+        console.error('Mixed warehouse delivery calculation failed:', data.error);
+        
+        const addressKey = getAddressKey(address);
+        setFailedDeliveryAddresses(prev => new Set(prev).add(addressKey));
+        
+        // Handle specific error cases for pincode-based delivery
+        let errorMessage = data.error || 'Unable to calculate delivery for mixed warehouse items. Please try a different address.';
+        if (errorMessage.includes('No warehouse available')) {
+          errorMessage = `Delivery not available to pincode ${address.pincode}. Please check if this pincode is covered by our delivery network or try a different address.`;
+        }
+        
+        showErrorToast(errorMessage);
+        setMixedWarehouseDelivery(null);
+      }
+    } catch (error) {
+      console.error('Error calculating mixed warehouse delivery:', error);
+      
+      const addressKey = getAddressKey(address);
+      setFailedDeliveryAddresses(prev => new Set(prev).add(addressKey));
+      
+      showErrorToast('Unable to calculate delivery for mixed warehouse items. Please try a different address.');
+      setMixedWarehouseDelivery(null);
+    } finally {
+      setLoadingMixedDelivery(false);
+    }
+  }, [loadingMixedDelivery, getAddressKey, failedDeliveryAddresses, itemsByWarehouse, selectedPaymentMethod, showErrorToast]);
+
+  // Calculate delivery charges
+  const calculateDelivery = useCallback(async (address: Address) => {
+    if (loadingDelivery) {
+      console.log('Delivery calculation already in progress, skipping...');
+      return;
+    }
+
+    const addressKey = getAddressKey(address);
+    if (failedDeliveryAddresses.has(addressKey)) {
+      console.log('Skipping delivery calculation for previously failed address:', addressKey);
+      return;
+    }
+
+    if (!address.lat || !address.lng) {
+      console.log('Address missing coordinates:', address);
+      showErrorToast('Invalid address coordinates. Please select a different address or try adding the address again.');
+      return;
+    }
+
+    const lat = Number(address.lat);
+    const lng = Number(address.lng);
+    if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      console.error('Invalid coordinates:', { lat, lng });
+      showErrorToast('Invalid address coordinates. Please select a different address.');
+      return;
+    }
+
+    console.log('Attempting delivery calculation:', {
+      address,
+      coordinates: { lat, lng },
+      cartTotal,
+      discountAmount,
+      paymentMethod: selectedPaymentMethod
+    });
     
     try {
       setLoadingDelivery(true);
       
-      // Validate coordinates
       if (!address.lat || !address.lng || isNaN(Number(address.lat)) || isNaN(Number(address.lng))) {
         throw new Error('Invalid address coordinates. Please select a valid address.');
+      }
+      
+      if (!address.pincode) {
+        throw new Error('Address pincode is required for delivery calculation. Please select a valid address.');
       }
       
       console.log('Calculating delivery for:', { 
         lat: Number(address.lat), 
         lng: Number(address.lng), 
         cartTotal: cartTotal - discountAmount, 
-        paymentMethod: selectedPaymentMethod === 'cod' ? 'cod' : 'online'
+        paymentMethod: selectedPaymentMethod === 'cod' ? 'cod' : 'online',
+        pincode: address.pincode
       });
       
-      // Add timeout to prevent hanging
       const timeoutPromise = new Promise((_, reject) => 
         setTimeout(() => reject(new Error('Delivery calculation timeout')), 15000)
       );
       
-      const result = await Promise.race([
-        calculateDeliveryChargeAPI(
-          Number(address.lat),
-          Number(address.lng),
-          cartTotal - discountAmount,
-          selectedPaymentMethod === 'cod' ? 'cod' : 'online'
-        ),
-        timeoutPromise
-      ]) as DeliveryCalculationResult | null;
-      
-      console.log('OSRM Delivery calculation result:', result);
-      
-      if (result && result.success && typeof result.distance === 'number') {
-        // Enhanced delivery info with OSRM data
-        const enhancedDeliveryInfo: DeliveryInfo = {
-          distance: result.distance,
-          duration: result.duration,
-          deliveryCharge: result.deliveryCharge || 0,
-          codCharge: result.codCharge || 0,
-          totalDeliveryCharge: result.totalDeliveryCharge || result.deliveryCharge || 0,
-          isFreeDelivery: result.isFreeDelivery || false,
-          freeDeliveryEligible: result.freeDeliveryEligible || false,
-          amountNeededForFreeDelivery: result.amountNeededForFreeDelivery || 0,
-          calculationMethod: result.calculationMethod || 'osrm',
-          estimatedDeliveryTime: result.duration ? 
-            getDeliveryTimeEstimate(result.distance, result.duration) : 
-            getDeliveryTimeEstimate(result.distance),
-          route: result.route,
-          warehouseSettings: result.warehouseSettings,
-          warehouse: result.warehouse,
-          settings: result.settings
-        };
+      try {
+        const result = await Promise.race([
+          calculateDeliveryChargeAPI(
+            lat,
+            lng,
+            cartTotal - discountAmount,
+            selectedPaymentMethod === 'cod' ? 'cod' : 'online',
+            undefined, // warehouseId
+            address.pincode // customerPincode
+          ),
+          timeoutPromise
+        ]) as DeliveryCalculationResult | null;
         
-        console.log('Enhanced delivery info with OSRM:', enhancedDeliveryInfo);
-        setDeliveryInfo(enhancedDeliveryInfo);
+        console.log('Delivery API Response:', result);
         
-        // Show success message with delivery details
-        if (result.calculationMethod === 'osrm') {
-          toast.success(`Delivery calculated: ${result.distance.toFixed(2)}km, ${result.duration?.toFixed(0) || 'N/A'} min via ${result.warehouse?.name || 'warehouse'}`);
+        if (!result) {
+          throw new Error('No response from delivery calculation API');
         }
-      } else if (result && result.error) {
-        console.error('API returned error:', result.error);
-        throw new Error(result.error);
-      } else {
-        console.error('Invalid delivery calculation result:', result);
-        throw new Error('Unable to calculate delivery. Please try again.');
+        
+        if (!result.success) {
+          // Handle specific error cases for pincode-based delivery
+          let errorMessage = result.error || 'Failed to calculate delivery charges';
+          if (errorMessage.includes('No warehouse available')) {
+            errorMessage = `Delivery not available to pincode ${address.pincode}. Please check if this pincode is covered by our delivery network or try a different address.`;
+          }
+          throw new Error(errorMessage);
+        }
+        
+        console.log('OSRM Delivery calculation result:', result);
+        
+        if (result && result.success && typeof result.distance === 'number') {
+          const enhancedDeliveryInfo: DeliveryInfo = {
+            distance: result.distance,
+            duration: result.duration,
+            deliveryCharge: result.deliveryCharge || 0,
+            codCharge: result.codCharge || 0,
+            totalDeliveryCharge: result.totalDeliveryCharge || result.deliveryCharge || 0,
+            isFreeDelivery: result.isFreeDelivery || false,
+            freeDeliveryEligible: result.freeDeliveryEligible || false,
+            amountNeededForFreeDelivery: result.amountNeededForFreeDelivery || 0,
+            calculationMethod: result.calculationMethod || 'osrm',
+            estimatedDeliveryTime: result.duration ? 
+              getDeliveryTimeEstimate(result.distance, result.duration) : 
+              getDeliveryTimeEstimate(result.distance),
+            route: result.route,
+            warehouseSettings: result.warehouseSettings,
+            warehouse: result.warehouse,
+            settings: result.settings
+          };
+          
+          console.log('Enhanced delivery info with OSRM:', enhancedDeliveryInfo);
+          setDeliveryInfo(enhancedDeliveryInfo);
+          
+          const addressKey = getAddressKey(address);
+          setFailedDeliveryAddresses(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(addressKey);
+            return newSet;
+          });
+          
+          if (result.calculationMethod === 'osrm') {
+            showSuccessToast(`Delivery calculated: ${result.distance.toFixed(2)}km, ${result.duration?.toFixed(0) || 'N/A'} min via ${result.warehouse?.name || 'warehouse'}`);
+          }
+        } else if (result && result.error) {
+          console.error('API returned error:', result.error);
+          throw new Error(result.error);
+        } else {
+          console.error('Invalid delivery calculation result:', result);
+          throw new Error('Unable to calculate delivery. Please try again.');
+        }
+      } catch (error) {
+        console.error('Error calculating delivery with OSRM:', error);
+        
+        const addressKey = getAddressKey(address);
+        setFailedDeliveryAddresses(prev => new Set(prev).add(addressKey));
+        
+        showErrorToast(error instanceof Error ? error.message : 'Unable to calculate delivery for this address. Please try a different address or contact support.');
+        
+        setDeliveryInfo(null);
       }
     } catch (error) {
-      console.error('Error calculating delivery with OSRM:', error);
+      console.error('Error in delivery calculation:', error);
       
-      // Show error message to user
-      toast.error('Unable to calculate delivery for this address. Please try a different address or contact support.');
+      const addressKey = getAddressKey(address);
+      setFailedDeliveryAddresses(prev => new Set(prev).add(addressKey));
       
-      // Clear delivery info to prevent invalid state
+      showErrorToast(error instanceof Error ? error.message : 'Unable to calculate delivery for this address. Please try a different address or contact support.');
       setDeliveryInfo(null);
     } finally {
       setLoadingDelivery(false);
     }
-  };
+  }, [loadingDelivery, getAddressKey, failedDeliveryAddresses, showErrorToast, cartTotal, discountAmount, selectedPaymentMethod, showSuccessToast]);
 
   // Calculate tax for cart items
   const calculateTaxForCart = () => {
@@ -824,11 +1123,9 @@ export default function PaymentPage() {
     const selectedAddr = addresses.find(addr => addr.id === selectedAddress);
     if (!selectedAddr) return null;
     
-    // For now, we'll assume warehouse is in Delhi (you can make this configurable)
-    const warehouseState = "Delhi"; // This should come from warehouse settings
+    const warehouseState = "Delhi";
     const isInterState = isInterStateTransaction(selectedAddr.state, warehouseState);
     
-    // Prepare cart items for tax calculation
     const cartItemsForTax = cartItemsWithCODInfo.map((item: any) => ({
       price: item.price,
       priceIncludesTax: item.priceIncludesTax || false,
@@ -853,19 +1150,18 @@ export default function PaymentPage() {
   // Calculate final total with discount, tax, and delivery
   const subtotalAfterDiscount = cartTotal - discountAmount;
   const taxAmount = taxCalculation?.totalTax || 0;
-  const deliveryCharge = deliveryInfo?.deliveryCharge || 0;
+  
+  const deliveryCharge = mixedWarehouseDelivery?.totalDeliveryCharge || deliveryInfo?.deliveryCharge || 0;
   const finalTotalWithDelivery = subtotalAfterDiscount + taxAmount + deliveryCharge;
 
   const handlePayment = async () => {
     setIsValidatingPayment(true);
     
-    // Run all validations (now async)
     const isValid = await validatePayment();
     
     if (!isValid) {
       setIsValidatingPayment(false);
       
-      // Show specific error messages for different validation failures
       if (validationErrors.deliveryNotAvailable) {
         toast.error('Delivery not available to your location. Please select a different address.', {
           duration: 5000,
@@ -893,7 +1189,6 @@ export default function PaymentPage() {
     }
 
     try {
-      // Apply promo code if one is selected
       if (appliedPromoCode && user?._id) {
         try {
           const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/promocodes/apply`, {
@@ -904,7 +1199,7 @@ export default function PaymentPage() {
             body: JSON.stringify({
               code: appliedPromoCode.code,
               userId: user._id,
-              orderId: `ORDER_${Date.now()}` // Generate order ID
+              orderId: `ORDER_${Date.now()}`
             }),
           });
 
@@ -916,13 +1211,11 @@ export default function PaymentPage() {
         }
       }
 
-      // Payment processing logic here
       console.log('Processing payment with method:', selectedPaymentMethod);
       console.log('Final amount:', finalTotalWithDelivery);
       console.log('Delivery info:', deliveryInfo);
       
       toast.success('Payment validation successful! Processing payment...');
-      // Redirect to success page or show success message
     } catch (error) {
       console.error('Payment processing error:', error);
       toast.error('Payment processing failed. Please try again.');
@@ -1043,7 +1336,6 @@ export default function PaymentPage() {
           <div className="space-y-4">
             <h3 className="font-semibold text-gray-900 mb-4">UPI Payment</h3>
             
-            {/* Existing UPI ID */}
             <div className="border-2 border-green-500 bg-green-50 rounded-lg p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -1055,7 +1347,6 @@ export default function PaymentPage() {
               <p className="text-sm text-green-700 mt-2">Ready to pay with this UPI ID</p>
             </div>
 
-            {/* Add new UPI ID */}
             <div className="space-y-3">
               <h4 className="font-medium text-gray-900">Or add new UPI ID</h4>
               <div className="flex gap-2">
@@ -1080,7 +1371,6 @@ export default function PaymentPage() {
               </div>
             </div>
 
-            {/* UPI Apps */}
             <div className="space-y-3">
               <h4 className="font-medium text-gray-900">Popular UPI Apps</h4>
               <div className="flex gap-3">
@@ -1401,8 +1691,6 @@ export default function PaymentPage() {
               </div>
             )}
 
-
-
             {/* Pay Now Button */}
             <Button 
               onClick={handlePayment}
@@ -1514,38 +1802,74 @@ export default function PaymentPage() {
             <div className="bg-white rounded-2xl p-6 shadow-xl border border-gray-100">
               <h2 className="text-lg font-bold text-gray-900 mb-4">Order Summary</h2>
               
-              <div className="space-y-3 mb-5">
-                {cartItems.map((item) => (
-                  <div key={item.id} className="flex items-center gap-4">
-                    {/* Product Image */}
-                    <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden">
-                      {item.image ? (
-                        <Image
-                          src={item.image}
-                          alt={item.name}
-                          width={48}
-                          height={48}
-                          className="object-cover w-12 h-12"
-                        />
-                      ) : (
-                        <Image
-                          src="/placeholder.svg"
-                          alt="No image"
-                          width={48}
-                          height={48}
-                          className="object-cover w-12 h-12"
-                        />
+              {/* Items grouped by warehouse */}
+              <div className="space-y-4 mb-5">
+                {Object.entries(itemsByWarehouse).map(([warehouseId, { items, warehouse }]) => {
+                  const warehouseSubtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                  const warehouseType = warehouse.deliverySettings?.is24x7Delivery ? 'Global/24x7' : 'Custom Hour';
+                  
+                  return (
+                    <div key={warehouseId} className="border border-gray-200 rounded-lg p-4">
+                      {/* Warehouse Header */}
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-semibold text-gray-800">{warehouse.name}</h3>
+                          <Badge variant={warehouse.deliverySettings?.is24x7Delivery ? "default" : "secondary"} className="text-xs">
+                            {warehouseType}
+                          </Badge>
+                        </div>
+                        <span className="text-sm font-medium text-gray-600">
+                          ₹{warehouseSubtotal.toFixed(2)}
+                        </span>
+                      </div>
+                      
+                      {/* Items from this warehouse */}
+                      <div className="space-y-2">
+                        {items.map((item) => (
+                          <div key={item.id} className="flex items-center gap-3">
+                            {/* Product Image */}
+                            <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden">
+                              {item.image ? (
+                                <Image
+                                  src={item.image}
+                                  alt={item.name}
+                                  width={40}
+                                  height={40}
+                                  className="object-cover w-10 h-10"
+                                />
+                              ) : (
+                                <Image
+                                  src="/placeholder.svg"
+                                  alt="No image"
+                                  width={40}
+                                  height={40}
+                                  className="object-cover w-10 h-10"
+                                />
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <h4 className="font-medium text-gray-900 text-sm leading-tight">{item.name}</h4>
+                              <span className="text-xs text-gray-500">Qty: {item.quantity}</span>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-semibold text-gray-900 text-sm">₹{(item.price * item.quantity).toFixed(2)}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      
+                      {/* Warehouse delivery info */}
+                      {mixedWarehouseDelivery?.warehouseResults?.[warehouseId] && (
+                        <div className="mt-3 pt-3 border-t border-gray-100">
+                          <div className="flex justify-between text-sm text-gray-600">
+                            <span>Delivery ({mixedWarehouseDelivery.warehouseResults[warehouseId].distance?.toFixed(1)} km)</span>
+                            <span>₹{mixedWarehouseDelivery.warehouseResults[warehouseId].deliveryInfo?.deliveryCharge?.toFixed(2) || '0.00'}</span>
+                          </div>
+                        </div>
                       )}
                     </div>
-                    <div className="flex-1">
-                      <h3 className="font-medium text-gray-900 text-sm leading-tight">{item.name}</h3>
-                      <span className="text-xs text-gray-500">Qty: {item.quantity}</span>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold text-gray-900">₹{(item.price * item.quantity).toFixed(2)}</p>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="border-t pt-4 space-y-3">
@@ -1577,7 +1901,7 @@ export default function PaymentPage() {
                       </div>
                     ) : (
                       <>
-                        <div className="flex justify-between text-gray-600">
+                                                <div className="flex justify-between text-gray-600">
                           <span>CGST @ {taxCalculation.taxBreakdown.cgst.percentage.toFixed(1)}%</span>
                           <span>{formatTaxAmount(taxCalculation.totalCGST)}</span>
                         </div>
@@ -1598,16 +1922,20 @@ export default function PaymentPage() {
                 {/* Dynamic Delivery Fee */}
                 <div className="flex justify-between text-gray-600">
                   <div className="flex items-center gap-2">
-                    <span>Delivery Fee</span>
-                    {deliveryInfo?.distance && (
+                    <span>Total Delivery Fee</span>
+                    {Object.keys(itemsByWarehouse).length > 1 && (
                       <span className="text-xs text-gray-400">
-                        ({deliveryInfo.distance.toFixed(1)} km)
+                        ({Object.keys(itemsByWarehouse).length} warehouses)
                       </span>
                     )}
                   </div>
                   <div className="text-right">
-                    {loadingDelivery ? (
+                    {(loadingDelivery || loadingMixedDelivery) ? (
                       <span className="text-gray-400">Calculating...</span>
+                    ) : mixedWarehouseDelivery ? (
+                      <span className="text-gray-900">
+                        ₹{mixedWarehouseDelivery.totalDeliveryCharge?.toFixed(2) || '0.00'}
+                      </span>
                     ) : deliveryInfo ? (
                       <span className={deliveryInfo.isFreeDelivery ? "text-green-600 font-medium" : "text-gray-900"}>
                         {formatDeliveryChargeWithDecimals(deliveryInfo.deliveryCharge)}
@@ -1693,6 +2021,25 @@ export default function PaymentPage() {
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400"></div>
                     Calculating delivery charges...
                   </div>
+                </div>
+              )}
+
+              {/* Show retry option for failed delivery calculations */}
+              {!loadingDelivery && !deliveryInfo && selectedAddress && addresses.length > 0 && 
+               failedDeliveryAddresses.has(getAddressKey(addresses.find(addr => addr.id === selectedAddress)!)) && (
+                <div className="mt-4 p-4 bg-red-50 rounded-xl border border-red-200">
+                  <div className="text-sm text-red-800 mb-3">
+                    <div className="font-semibold mb-1">Delivery calculation failed</div>
+                    <div>Unable to calculate delivery charges for this address.</div>
+                  </div>
+                  <Button 
+                    onClick={retryDeliveryCalculation}
+                    variant="outline" 
+                    size="sm"
+                    className="text-red-700 border-red-300 hover:bg-red-100"
+                  >
+                    Retry Calculation
+                  </Button>
                 </div>
               )}
 
@@ -1888,16 +2235,14 @@ export default function PaymentPage() {
                      </div>
                    </div>
                  </div>
-                  {/* Inline Add Address Form (copied and adapted from addresses page) */}
+                  {/* Inline Add Address Form */}
                   <form className="flex flex-col gap-2" onSubmit={async (e) => {
                     e.preventDefault();
-                    // Validate required fields
                     if ((!addressForm.building && !addressForm.area) || !addressForm.city || !addressForm.state || !addressForm.pincode) {
                       alert('Please fill in all required fields (at least building or area, city, state, and pincode)');
                       return;
                     }
                     
-                    // Warn if coordinates are missing (important for delivery calculation)
                     if (!addressForm.lat || !addressForm.lng) {
                       const confirmSave = confirm(
                         'Location coordinates are missing. This may affect delivery calculation. ' +
@@ -1926,7 +2271,6 @@ export default function PaymentPage() {
                       isActive: true,
                       createdAt: now,
                       updatedAt: now,
-                      // Include lat/lng coordinates if available
                       lat: addressForm.lat || undefined,
                       lng: addressForm.lng || undefined,
                     };
