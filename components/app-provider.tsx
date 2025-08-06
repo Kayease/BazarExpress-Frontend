@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { getCartItems, setCartItems as persistCartItems } from "../lib/cart";
 import { getCartFromDB, addToCartDB, updateCartItemDB, removeFromCartDB, syncCartDB } from "../lib/api/cart";
 import { getWishlistFromDB, addToWishlistDB, removeFromWishlistDB, syncWishlistDB } from "../lib/api/wishlist";
+import { calculateProductTax, ProductTaxInfo } from "@/lib/tax-calculation";
 import toast from "react-hot-toast";
 import { LocationProvider } from "@/components/location-provider";
 import { ReactQueryProvider } from "@/lib/react-query";
@@ -127,7 +128,16 @@ function CartProvider({ children }: { children: ReactNode }) {
       try {
         setIsLoadingCart(true);
         const response = await getCartFromDB();
+        console.log('Raw cart response from DB:', response);
+        
         const dbCartItems = response.cart.map((item: any) => {
+          console.log('Processing cart item from DB:', {
+            productId: item.productId._id,
+            productName: item.productId.name,
+            warehouse: item.productId.warehouse,
+            quantity: item.quantity
+          });
+          
           const mappedItem = {
             id: item.productId._id,
             _id: item.productId._id,
@@ -137,6 +147,7 @@ function CartProvider({ children }: { children: ReactNode }) {
           
           // Fallback: If warehouse info is missing from API response, try to preserve it from current cart
           if (!mappedItem.warehouse || !mappedItem.warehouse._id) {
+            console.warn('Warehouse info missing for product:', mappedItem.name);
             const existingItem = cartItemsRef.current.find(cartItem => cartItem.id === mappedItem.id);
             if (existingItem && existingItem.warehouse) {
               console.log('Preserving warehouse info from existing cart item (load):', {
@@ -145,6 +156,11 @@ function CartProvider({ children }: { children: ReactNode }) {
               });
               mappedItem.warehouse = existingItem.warehouse;
             }
+          } else {
+            console.log('Warehouse info found for product:', {
+              productName: mappedItem.name,
+              warehouse: mappedItem.warehouse
+            });
           }
           
           return mappedItem;
@@ -253,34 +269,26 @@ function CartProvider({ children }: { children: ReactNode }) {
     const productId = product.id || product._id;
     const quantityToAdd = product.quantity || 1;
 
-    // First check if adding this product would create a warehouse conflict
-    const existingCustomWarehouse = cartItems.find(item => 
+    // Check if adding this product would create a warehouse conflict using new validation
+    const existingWarehouse = cartItems.find(item => 
       item.warehouse && 
-      !item.warehouse.deliverySettings?.is24x7Delivery && 
       item.warehouse._id
     )?.warehouse;
 
-    if (existingCustomWarehouse && product.warehouse) {
-      // Block if trying to add a global product to a cart with custom warehouse items
-      if (product.warehouse.deliverySettings?.is24x7Delivery) {
+    if (existingWarehouse && product.warehouse) {
+      // Block if trying to add from ANY different warehouse (custom or global)
+      if (existingWarehouse._id !== product.warehouse._id) {
         throw {
           isWarehouseConflict: true,
-          existingWarehouse: existingCustomWarehouse.name,
-          message: `Your cart has items from "${existingCustomWarehouse.name}". Clear cart or choose products from the same warehouse.`
-        };
-      }
-      // Block if trying to add from a different custom warehouse
-      if (existingCustomWarehouse._id !== product.warehouse._id) {
-        throw {
-          isWarehouseConflict: true,
-          existingWarehouse: existingCustomWarehouse.name,
-          message: `Your cart has items from "${existingCustomWarehouse.name}". Clear cart or choose products from the same warehouse.`
+          existingWarehouse: existingWarehouse.name,
+          message: `Your cart has items from "${existingWarehouse.name}". Clear cart or choose products from the same warehouse.`
         };
       }
     }
 
     if (isLoggedIn) {
       try {
+        setIsLoadingCart(true);
         const response = await addToCartDB(productId, quantityToAdd);
         
         const updatedCartItems = response.cart.map((item: any) => {
@@ -362,6 +370,8 @@ function CartProvider({ children }: { children: ReactNode }) {
         } else {
           toast.error('Failed to add item to cart');
         }
+      } finally {
+        setIsLoadingCart(false);
       }
     } else {
       // Local storage logic for non-logged-in users
@@ -380,6 +390,7 @@ function CartProvider({ children }: { children: ReactNode }) {
   const updateCartItem = useCallback(async (id: any, quantity: number, showToast: boolean = false) => {
     if (isLoggedIn) {
       try {
+        setIsLoadingCart(true);
         const response = await updateCartItemDB(id, quantity);
         const updatedCartItems = response.cart.map((item: any) => {
           const mappedItem = {
@@ -411,6 +422,8 @@ function CartProvider({ children }: { children: ReactNode }) {
         if (showToast) {
           toast.error('Failed to update cart');
         }
+      } finally {
+        setIsLoadingCart(false);
       }
     } else {
       // Local storage logic for non-logged-in users
@@ -431,6 +444,7 @@ function CartProvider({ children }: { children: ReactNode }) {
   const clearCart = useCallback(async () => {
     if (isLoggedIn) {
       try {
+        setIsLoadingCart(true);
         // Get token from localStorage or redux state
         const token = localStorage.getItem('token');
         // Clear cart in database
@@ -445,6 +459,8 @@ function CartProvider({ children }: { children: ReactNode }) {
       } catch (error) {
         console.error('Failed to clear cart:', error);
         toast.error('Failed to clear cart');
+      } finally {
+        setIsLoadingCart(false);
       }
     } else {
       // Clear local storage cart
@@ -453,10 +469,33 @@ function CartProvider({ children }: { children: ReactNode }) {
     }
   }, [isLoggedIn]);
 
-  const cartTotal = useMemo(() => 
-    cartItems.reduce((sum: number, item: any) => sum + (item.price || 0) * item.quantity, 0),
-    [cartItems]
-  );
+  const cartTotal = useMemo(() => {
+    const total = cartItems.reduce((sum: number, item: any) => {
+      if (!item.tax || !item.tax.percentage) {
+        // No tax, just return price * quantity
+        return sum + (item.price || 0) * item.quantity;
+      }
+
+      // Calculate tax for this item
+      const productTaxInfo: ProductTaxInfo = {
+        price: item.price || 0,
+        priceIncludesTax: item.priceIncludesTax || false,
+        tax: {
+          id: item.tax._id || item.tax.id,
+          name: item.tax.name,
+          percentage: item.tax.percentage,
+          description: item.tax.description
+        },
+        quantity: item.quantity
+      };
+
+      const taxCalc = calculateProductTax(productTaxInfo, false); // Assuming intra-state for cart total
+      return sum + taxCalc.totalPrice;
+    }, 0);
+    
+    // Round up the total to avoid decimal payments
+    return Math.ceil(total);
+  }, [cartItems]);
 
   const cartContextValue = useMemo(() => ({
     cartItems,

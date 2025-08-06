@@ -154,36 +154,35 @@ export default function ProductSection({
   // Local quantity state for product tiles
   const [quantities, setQuantities] = useState<{ [id: string]: number }>({});
   
-  // Simple warehouse validation logic
+  // Updated warehouse validation logic - only same warehouse products allowed
   const canAddToCart = (product: Product) => {
     if (cartItems.length === 0) return true; // Empty cart, can add anything
     
     // Check if product has warehouse info
     if (!product.warehouse) return true;
     
-    // Find existing custom warehouse in cart
-    let existingCustomWarehouse = null;
+    // Find ANY existing warehouse in cart (custom or global)
+    let existingWarehouse = null;
     for (const cartItem of cartItems) {
-      if (cartItem.warehouse && !cartItem.warehouse.deliverySettings?.is24x7Delivery) {
-        existingCustomWarehouse = cartItem.warehouse;
+      if (cartItem.warehouse && cartItem.warehouse._id) {
+        existingWarehouse = cartItem.warehouse;
         break;
       }
     }
     
-    // If no custom warehouse in cart, allow adding
-    if (!existingCustomWarehouse) return true;
+    // If no warehouse in cart, allow adding
+    if (!existingWarehouse) return true;
     
-    // If product is from global warehouse (24x7), allow
-    if (product.warehouse.deliverySettings?.is24x7Delivery) return true;
+    // Only allow if product is from the SAME warehouse (custom or global)
+    if (existingWarehouse._id === product.warehouse._id) return true;
     
-    // If product is from same custom warehouse, allow
-    if (existingCustomWarehouse._id === product.warehouse._id) return true;
-    
-    // Different custom warehouse, block
+    // Different warehouse (custom or global), block
     console.log('Warehouse conflict detected:', {
       productWarehouse: product.warehouse.name,
-      existingWarehouse: existingCustomWarehouse.name,
-      productId: product._id
+      existingWarehouse: existingWarehouse.name,
+      productId: product._id,
+      productIsGlobal: product.warehouse.deliverySettings?.is24x7Delivery,
+      existingIsGlobal: existingWarehouse.deliverySettings?.is24x7Delivery
     });
     return false;
   };
@@ -388,10 +387,10 @@ export default function ProductSection({
                         const getConflictMessage = () => {
                           if (canAddProduct || isInCart) return '';
                           
-                          // Find existing custom warehouse
+                          // Find ANY existing warehouse
                           let existingWarehouse = null;
                           for (const cartItem of cartItems) {
-                            if (cartItem.warehouse && !cartItem.warehouse.deliverySettings?.is24x7Delivery) {
+                            if (cartItem.warehouse && cartItem.warehouse._id) {
                               existingWarehouse = cartItem.warehouse;
                               break;
                             }

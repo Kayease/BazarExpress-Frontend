@@ -310,7 +310,7 @@ export default function Navbar() {
                             <span>Saved Addresses</span>
                             </Link>
                             <Link
-                            href="/orders"
+                            href="/account?tab=orders"
                             onClick={() => setShowAccountDropdown(false)}
                             className="flex items-center space-x-3 px-3 py-2 text-gray-700 hover:bg-gray-50 rounded-lg"
                           >
@@ -490,7 +490,7 @@ export default function Navbar() {
 
                   {/* My Orders */}
                   <Link
-                    href="/orders"
+                    href="/account?tab=orders"
                     className="w-full flex items-center p-3 bg-white border border-gray-200 rounded-lg"
                     onClick={() => setIsMobileMenuOpen(false)}
                   >

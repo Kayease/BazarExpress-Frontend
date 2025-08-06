@@ -4,6 +4,7 @@ import React from 'react';
 import { AlertTriangle, MapPin, Clock, Store, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useLocation } from '@/components/location-provider';
+import { useCartContext } from '@/components/app-provider';
 
 interface DeliveryOverlayProps {
   isOpen: boolean;
@@ -69,10 +70,13 @@ export function DeliveryOverlay({ isOpen, onClose }: DeliveryOverlayProps) {
     switchToGlobalMode,
     setShowOverlay
   } = useLocation();
+  
+  const { cartItems } = useCartContext();
 
   if (!isOpen) return null;
 
   const handleSwitchToGlobal = () => {
+    // Always switch to global mode - the warehouse conflict hook will handle conflicts
     switchToGlobalMode();
     setShowOverlay(false);
     onClose();

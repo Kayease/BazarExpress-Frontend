@@ -13,6 +13,9 @@ import {
 } from "@/components/lazy-components";
 import DataPreloader from "@/components/data-preloader";
 import PerformanceMonitorComponent from "@/components/performance-monitor";
+import OrderSuccessModal from "@/components/OrderSuccessModal";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 export default function Home() {
   const {
@@ -25,6 +28,39 @@ export default function Home() {
   } = useAppContext();
   const { locationState, isLoading } = useLocation();
   const { toast } = useToast();
+  const router = useRouter();
+  
+  // Order success modal states
+  const [showOrderSuccessModal, setShowOrderSuccessModal] = useState(false);
+  const [orderSuccessData, setOrderSuccessData] = useState<any>(null);
+
+  // Handle order success modal from payment page redirect
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const showOrderSuccess = urlParams.get('showOrderSuccess');
+      
+      if (showOrderSuccess === 'true') {
+        const storedOrderData = localStorage.getItem('orderSuccessData');
+        if (storedOrderData) {
+          try {
+            const orderData = JSON.parse(storedOrderData);
+            setOrderSuccessData(orderData);
+            setShowOrderSuccessModal(true);
+            
+            // Clean up
+            localStorage.removeItem('orderSuccessData');
+            
+            // Remove URL parameter
+            const newUrl = window.location.pathname;
+            window.history.replaceState({}, document.title, newUrl);
+          } catch (error) {
+            console.error('Error parsing order success data:', error);
+          }
+        }
+      }
+    }
+  }, []);
 
   const handleAddToCart = (product: any) => {
     addToCart(product);
@@ -64,6 +100,23 @@ export default function Home() {
           isOpen={isCartOpen}
           onClose={() => setIsCartOpen(false)}
         />
+
+        {/* Order Success Modal */}
+        {showOrderSuccessModal && orderSuccessData && (
+          <OrderSuccessModal
+            isOpen={showOrderSuccessModal}
+            onClose={() => {
+              setShowOrderSuccessModal(false);
+              setOrderSuccessData(null);
+            }}
+            orderData={orderSuccessData}
+            onViewOrder={() => {
+              setShowOrderSuccessModal(false);
+              setOrderSuccessData(null);
+              router.push('/account?tab=orders');
+            }}
+          />
+        )}
       </div>
     </DataPreloader>
   )

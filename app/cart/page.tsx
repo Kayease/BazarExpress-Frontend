@@ -167,7 +167,15 @@ export default function CartPage() {
                     <div className="flex justify-between items-start mb-2">
                       <div>
                         <h3 className="font-semibold text-gray-900 text-lg truncate">{item.name}</h3>
-                        <p className="text-sm text-gray-500">{item.category} • {item.brand}</p>
+                        <p className="text-sm text-gray-500">
+                          {item.category && typeof item.category === "object" && item.category !== null 
+                            ? item.category.name || item.categoryId || 'Unknown Category'
+                            : item.category || item.categoryId || 'Unknown Category'}
+                          {" • "}
+                          {item.brand && typeof item.brand === "object" && item.brand !== null 
+                            ? item.brand.name || item.brandId || 'Unknown Brand'
+                            : item.brand || item.brandId || 'Unknown Brand'}
+                        </p>
                         {item.sku && <p className="text-xs text-gray-400">SKU: {item.sku}</p>}
                       </div>
                       <button

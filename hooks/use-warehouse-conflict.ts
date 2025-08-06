@@ -2,7 +2,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { useCartContext } from "@/components/app-provider";
 import { useLocation } from "@/components/location-provider";
-import { getWarehouseConflictInfo, findCustomWarehouseInCart, isGlobalWarehouse } from "@/lib/warehouse-validation";
+import { getWarehouseConflictInfo, findAnyWarehouseInCart, isGlobalWarehouse } from "@/lib/warehouse-validation";
 import toast from "react-hot-toast";
 
 export function useWarehouseConflict() {
@@ -60,46 +60,74 @@ export function useWarehouseConflict() {
       return;
     }
 
-    if (locationState.matchedWarehouse && !locationState.isGlobalMode) {
-      const existingCustomWarehouse = findCustomWarehouseInCart(cartItems);
-      
-      // Debug: Log cart items structure
-      console.log('Warehouse conflict check:', {
-        cartItemsCount: cartItems.length,
-        cartItemsWithWarehouseCount: cartItemsWithWarehouse.length,
-        isLoadingCart,
-        hasInitialized,
-        locationState: {
-          matchedWarehouse: locationState.matchedWarehouse?.name,
-          isGlobalMode: locationState.isGlobalMode
-        },
-        cartItems: cartItems.map(item => ({
-          id: item.id || item._id,
-          name: item.name,
-          warehouse: item.warehouse ? {
-            _id: item.warehouse._id,
-            name: item.warehouse.name,
-            isGlobal: isGlobalWarehouse(item.warehouse)
-          } : null
-        })),
-        existingCustomWarehouse: existingCustomWarehouse ? {
-          _id: existingCustomWarehouse._id,
-          name: existingCustomWarehouse.name
+    // Check for warehouse conflicts when location state changes
+    const existingWarehouse = findAnyWarehouseInCart(cartItems);
+    
+    // Debug: Log cart items structure
+    console.log('Warehouse conflict check:', {
+      cartItemsCount: cartItems.length,
+      cartItemsWithWarehouseCount: cartItemsWithWarehouse.length,
+      isLoadingCart,
+      hasInitialized,
+      locationState: {
+        matchedWarehouse: locationState.matchedWarehouse?.name,
+        isGlobalMode: locationState.isGlobalMode
+      },
+      cartItems: cartItems.map(item => ({
+        id: item.id || item._id,
+        name: item.name,
+        warehouse: item.warehouse ? {
+          _id: item.warehouse._id,
+          name: item.warehouse.name,
+          isGlobal: isGlobalWarehouse(item.warehouse)
         } : null
-      });
+      })),
+      existingWarehouse: existingWarehouse ? {
+        _id: existingWarehouse._id,
+        name: existingWarehouse.name
+      } : null
+    });
+    
+    // Show conflict modal when changing locations/modes with items in cart
+    if (cartItems.length > 0 && existingWarehouse) {
+      let conflictDetected = false;
+      let newWarehouse = null;
       
-      // Always show conflict modal when changing locations with items in cart
-      if (cartItems.length > 0) {
-        const currentWarehouse = existingCustomWarehouse || (cartItems[0].warehouse?.name ? cartItems[0].warehouse : null);
-        
-        // Only show conflict if changing to a different warehouse
-        if (currentWarehouse && currentWarehouse._id !== locationState.matchedWarehouse._id) {
-          setLocationConflict({
-            newWarehouse: locationState.matchedWarehouse,
-            existingWarehouse: currentWarehouse
-          });
-          setIsModalOpen(true);
+      if (locationState.isGlobalMode) {
+        // In global mode, check if cart has items from a specific custom warehouse
+        if (!isGlobalWarehouse(existingWarehouse)) {
+          conflictDetected = true;
+          newWarehouse = { name: 'Global Store', _id: 'global', isGlobal: true };
         }
+      } else if (locationState.matchedWarehouse) {
+        // In custom mode, check if cart has items from a different warehouse
+        if (existingWarehouse._id !== locationState.matchedWarehouse._id) {
+          conflictDetected = true;
+          newWarehouse = locationState.matchedWarehouse;
+        }
+      }
+      
+      if (conflictDetected && newWarehouse) {
+        console.log('🚨 WAREHOUSE CONFLICT DETECTED - SHOWING MODAL:', {
+          existingWarehouse: existingWarehouse.name,
+          newWarehouse: newWarehouse.name,
+          isGlobalMode: locationState.isGlobalMode,
+          cartItemsCount: cartItems.length
+        });
+        
+        setLocationConflict({
+          newWarehouse: newWarehouse,
+          existingWarehouse: existingWarehouse
+        });
+        setIsModalOpen(true);
+      } else {
+        console.log('No warehouse conflict detected:', {
+          conflictDetected,
+          hasNewWarehouse: !!newWarehouse,
+          existingWarehouse: existingWarehouse?.name,
+          isGlobalMode: locationState.isGlobalMode,
+          cartItemsCount: cartItems.length
+        });
       }
     }
   }, [locationState.matchedWarehouse, locationState.isGlobalMode, cartItems, isLoadingCart, hasInitialized]);
@@ -123,11 +151,12 @@ export function useWarehouseConflict() {
   }, [clearCart]);
 
   const handleSwitchToGlobal = useCallback(() => {
-    switchToGlobalMode();
+    // This function is kept for compatibility but should not be used
+    // since we removed the "Switch to Global" option
+    console.warn("handleSwitchToGlobal called but this option has been removed");
     setIsModalOpen(false);
     setLocationConflict(null);
-    toast.success("Switched to Global Store! You can now access all products.");
-  }, [switchToGlobalMode]);
+  }, []);
 
   const handleContinueShopping = useCallback(() => {
     if (locationConflict) {

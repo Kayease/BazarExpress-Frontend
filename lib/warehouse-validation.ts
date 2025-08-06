@@ -34,7 +34,14 @@ export interface CartItemWithWarehouse {
  * Check if a warehouse is a global warehouse (24x7 delivery)
  */
 export function isGlobalWarehouse(warehouse: WarehouseInfo): boolean {
-  return warehouse.deliverySettings?.is24x7Delivery === true;
+  const isGlobal = warehouse.deliverySettings?.is24x7Delivery === true;
+  console.log('isGlobalWarehouse check:', {
+    warehouseName: warehouse.name,
+    deliverySettings: warehouse.deliverySettings,
+    is24x7Delivery: warehouse.deliverySettings?.is24x7Delivery,
+    isGlobal
+  });
+  return isGlobal;
 }
 
 /**
@@ -50,7 +57,20 @@ export function findCustomWarehouseInCart(cartItems: CartItemWithWarehouse[]): W
 }
 
 /**
+ * Find the first warehouse in cart items (either custom or global)
+ */
+export function findAnyWarehouseInCart(cartItems: CartItemWithWarehouse[]): WarehouseInfo | null {
+  for (const cartItem of cartItems) {
+    if (cartItem.warehouse && cartItem.warehouse._id) {
+      return cartItem.warehouse;
+    }
+  }
+  return null;
+}
+
+/**
  * Validate if a product can be added to cart based on warehouse rules
+ * NEW RULE: Only products from the SAME warehouse (custom OR global) can be added to cart
  */
 export function validateWarehouseCompatibility(
   product: ProductWithWarehouse, 
@@ -70,39 +90,35 @@ export function validateWarehouseCompatibility(
     return { isValid: true };
   }
 
-  // Find existing custom warehouse in cart
-  const existingCustomWarehouse = findCustomWarehouseInCart(cartItems);
+  // Find ANY existing warehouse in cart (custom or global)
+  const existingWarehouse = findAnyWarehouseInCart(cartItems);
 
-  // No custom warehouse in cart - can add anything
-  if (!existingCustomWarehouse) {
-    console.log('validateWarehouseCompatibility: Allowing - no custom warehouse in cart');
+  // No warehouse in cart - can add anything
+  if (!existingWarehouse) {
+    console.log('validateWarehouseCompatibility: Allowing - no warehouse in cart');
     return { isValid: true };
   }
 
-  // Product is from global warehouse - can add to any cart
-  if (isGlobalWarehouse(product.warehouse)) {
-    console.log('validateWarehouseCompatibility: Allowing - product is from global warehouse');
-    return { isValid: true };
-  }
-
-  // Product is from same custom warehouse - can add
-  if (existingCustomWarehouse._id === product.warehouse._id) {
+  // Product is from same warehouse (custom or global) - can add
+  if (existingWarehouse._id === product.warehouse._id) {
     console.log('validateWarehouseCompatibility: Allowing - product is from same warehouse', {
-      warehouseName: existingCustomWarehouse.name
+      warehouseName: existingWarehouse.name
     });
     return { isValid: true };
   }
 
-  // Different custom warehouse - conflict
-  console.log('validateWarehouseCompatibility: Blocking - different custom warehouses', {
-    existingWarehouse: existingCustomWarehouse.name,
-    productWarehouse: product.warehouse.name
+  // Different warehouse (custom or global) - conflict
+  console.log('validateWarehouseCompatibility: Blocking - different warehouses', {
+    existingWarehouse: existingWarehouse.name,
+    productWarehouse: product.warehouse.name,
+    existingIsGlobal: isGlobalWarehouse(existingWarehouse),
+    productIsGlobal: isGlobalWarehouse(product.warehouse)
   });
   
   return {
     isValid: false,
-    error: `Your cart has items from "${existingCustomWarehouse.name}". Clear cart or choose products from the same warehouse.`,
-    existingWarehouse: existingCustomWarehouse
+    error: `Your cart has items from "${existingWarehouse.name}". Clear cart or choose products from the same warehouse.`,
+    existingWarehouse: existingWarehouse
   };
 }
 

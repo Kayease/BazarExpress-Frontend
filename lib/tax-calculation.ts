@@ -44,6 +44,8 @@ export interface CartTaxCalculation {
   totalIGST: number;
   finalTotal: number;
   isInterState: boolean;
+  warehouseState?: string;
+  customerState?: string;
   taxBreakdown: {
     subtotal: number;
     cgst: { amount: number; percentage: number };
@@ -134,7 +136,9 @@ export function calculateProductTax(
  */
 export function calculateCartTax(
   cartItems: ProductTaxInfo[],
-  isInterState: boolean = false
+  isInterState: boolean = false,
+  warehouseState?: string,
+  customerState?: string
 ): CartTaxCalculation {
   let subtotal = 0;
   let totalTax = 0;
@@ -156,11 +160,38 @@ export function calculateCartTax(
 
   const finalTotal = subtotal + totalTax;
 
-  // Calculate overall percentages for breakdown
-  const totalAmount = subtotal > 0 ? subtotal : 1; // Avoid division by zero
-  const cgstPercentage = subtotal > 0 ? (totalCGST / totalAmount) * 100 : 0;
-  const sgstPercentage = subtotal > 0 ? (totalSGST / totalAmount) * 100 : 0;
-  const igstPercentage = subtotal > 0 ? (totalIGST / totalAmount) * 100 : 0;
+  // Calculate weighted average tax rates for display
+  let cgstPercentage = 0;
+  let sgstPercentage = 0;
+  let igstPercentage = 0;
+
+  if (cartItems.length > 0) {
+    // Calculate weighted average tax rate based on item values and their tax rates
+    let totalValue = 0;
+    let weightedCGST = 0;
+    let weightedSGST = 0;
+    let weightedIGST = 0;
+
+    cartItems.forEach((item, index) => {
+      if (item.tax && item.tax.percentage > 0) {
+        const itemValue = item.price * item.quantity;
+        totalValue += itemValue;
+        
+        if (isInterState) {
+          weightedIGST += itemValue * item.tax.percentage;
+        } else {
+          weightedCGST += itemValue * (item.tax.percentage / 2);
+          weightedSGST += itemValue * (item.tax.percentage / 2);
+        }
+      }
+    });
+
+    if (totalValue > 0) {
+      cgstPercentage = weightedCGST / totalValue;
+      sgstPercentage = weightedSGST / totalValue;
+      igstPercentage = weightedIGST / totalValue;
+    }
+  }
 
   return {
     subtotal,
@@ -170,6 +201,8 @@ export function calculateCartTax(
     totalIGST,
     finalTotal,
     isInterState,
+    warehouseState,
+    customerState,
     taxBreakdown: {
       subtotal,
       cgst: { amount: totalCGST, percentage: cgstPercentage },

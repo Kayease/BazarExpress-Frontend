@@ -609,6 +609,7 @@ export default function ProductDetailsPage() {
                         category: categoryName,
                         brand: brandName,
                         sku: product.sku,
+                        warehouse: product.warehouse,
                       })
                     }
                   >

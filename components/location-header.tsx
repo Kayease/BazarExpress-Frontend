@@ -5,6 +5,7 @@ import { MapPin, ChevronDown, Store, Clock, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useLocation } from '@/components/location-provider';
 import { PincodeLocationModal } from '@/components/pincode-location-modal';
+import { useCartContext } from '@/components/app-provider';
 
 export function LocationHeader() {
   const {
@@ -14,6 +15,8 @@ export function LocationHeader() {
     switchToGlobalMode,
     switchToCustomMode
   } = useLocation();
+  
+  const { cartItems } = useCartContext();
 
   const [showLocationModal, setShowLocationModal] = useState(false);
 
@@ -25,6 +28,7 @@ export function LocationHeader() {
     if (isGlobalMode) {
       switchToCustomMode();
     } else {
+      // Always switch to global mode - the warehouse conflict hook will handle conflicts
       switchToGlobalMode();
     }
   };

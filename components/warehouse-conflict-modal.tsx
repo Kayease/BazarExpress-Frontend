@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, { useEffect } from "react";
 import { AlertTriangle, Globe, ShoppingCart, X, Store, Clock, Truck, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -26,41 +26,66 @@ const WarehouseConflictModal: React.FC<WarehouseConflictModalProps> = ({
   isLocationConflict = false,
   newWarehouse
 }) => {
+  // Prevent body scrolling and interactions when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+      document.body.classList.add('modal-blocking');
+      
+      // Add global style to block interactions
+      const style = document.createElement('style');
+      style.id = 'warehouse-conflict-modal-styles';
+      style.textContent = `
+        .modal-blocking * {
+          pointer-events: none !important;
+        }
+        .modal-blocking .warehouse-conflict-modal,
+        .modal-blocking .warehouse-conflict-modal * {
+          pointer-events: auto !important;
+        }
+      `;
+      document.head.appendChild(style);
+      
+      return () => {
+        document.body.style.overflow = 'unset';
+        document.body.classList.remove('modal-blocking');
+        const existingStyle = document.getElementById('warehouse-conflict-modal-styles');
+        if (existingStyle) {
+          existingStyle.remove();
+        }
+      };
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const isLocationChange = isLocationConflict && newWarehouse;
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center"
+      className="fixed inset-0 z-[9999] flex items-center justify-center"
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-title"
       aria-describedby="modal-description"
     >
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      {/* Backdrop - No onClick to prevent closing */}
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
       
       {/* Modal */}
       <div 
-        className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden"
+        className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden warehouse-conflict-modal"
         role="alertdialog">
-        {/* Header */}
+        {/* Header - No close button */}
         <div className="bg-gradient-to-r from-orange-500 to-red-500 px-6 py-4 text-white">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <AlertTriangle className="h-6 w-6" />
+          <div className="flex items-center space-x-3">
+            <AlertTriangle className="h-6 w-6" />
+            <div>
               <h2 className="text-lg font-bold" id="modal-title">
                 {isLocationChange ? "Location Changed" : "Different Store Detected"}
               </h2>
+              <p className="text-orange-100 text-sm">Action required - Choose an option below</p>
             </div>
-            <button
-              onClick={onClose}
-              aria-label="Close dialog"
-              className="p-1 hover:bg-white/20 rounded-full transition-colors"
-            >
-              <X className="h-5 w-5" />
-            </button>
           </div>
         </div>
 
@@ -95,26 +120,7 @@ const WarehouseConflictModal: React.FC<WarehouseConflictModalProps> = ({
             <h3 className="font-semibold text-gray-900 mb-3">Choose your solution:</h3>
             
             <div className="space-y-3">
-              {/* Option 1: Switch to Global */}
-              <div className="border border-blue-200 rounded-lg p-3 bg-blue-50">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2 mb-1">
-                      <Globe className="h-4 w-4 text-blue-600" />
-                      <span className="font-medium text-blue-900">Switch to Global Store</span>
-                    </div>
-                    <p className="text-xs text-blue-700">Access all products from global warehouses</p>
-                  </div>
-                  <Button
-                    onClick={onSwitchToGlobal}
-                    className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-2"
-                  >
-                    Switch
-                  </Button>
-                </div>
-              </div>
-
-              {/* Option 2: Clear Cart */}
+              {/* Option 1: Clear Cart */}
               <div className="border border-gray-200 rounded-lg p-3">
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
@@ -141,7 +147,7 @@ const WarehouseConflictModal: React.FC<WarehouseConflictModalProps> = ({
                 </div>
               </div>
 
-              {/* Option 3: Continue Shopping */}
+              {/* Option 2: Continue Shopping */}
               <div className="border border-gray-200 rounded-lg p-3">
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
@@ -168,7 +174,7 @@ const WarehouseConflictModal: React.FC<WarehouseConflictModalProps> = ({
         {/* Footer */}
         <div className="bg-gray-50 px-6 py-3 text-center">
           <p className="text-xs text-gray-500">
-            💡 Tip: Use Global Store mode to access products from all warehouses
+            💡 Tip: Clear your cart to shop from a different warehouse
           </p>
         </div>
       </div>

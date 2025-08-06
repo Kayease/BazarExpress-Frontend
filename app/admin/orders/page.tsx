@@ -4,129 +4,193 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import AdminLayout from "../../../components/AdminLayout"
 import { useAppSelector } from '../../../lib/store'
-import { Search, Filter, MoreHorizontal, Edit, Eye, Package, Truck, CheckCircle, X, RefreshCw } from "lucide-react"
+import { Search, Filter, MoreHorizontal, Edit, Eye, Package, Truck, CheckCircle, X, RefreshCw, Loader2 } from "lucide-react"
 import { Pencil } from "lucide-react"
+import toast from 'react-hot-toast'
 
-// Mock orders data
-const mockOrders = [
-  {
-    id: "ORD-001",
-    customer: "John Doe",
-    email: "john@example.com",
-    amount: 299.99,
-    status: "delivered",
-    date: "2024-03-15",
-    items: 2,
-    paymentMethod: "Credit Card",
-    shippingAddress: "123 Main St, New York, NY 10001",
-  },
-  {
-    id: "ORD-002",
-    customer: "Jane Smith",
-    email: "jane@example.com",
-    amount: 149.99,
-    status: "shipped",
-    date: "2024-03-15",
-    items: 1,
-    paymentMethod: "PayPal",
-    shippingAddress: "456 Oak Ave, Los Angeles, CA 90210",
-  },
-  {
-    id: "ORD-003",
-    customer: "Mike Johnson",
-    email: "mike@example.com",
-    amount: 89.97,
-    status: "processing",
-    date: "2024-03-14",
-    items: 3,
-    paymentMethod: "Credit Card",
-    shippingAddress: "789 Pine St, Chicago, IL 60601",
-  },
-  {
-    id: "ORD-004",
-    customer: "Sarah Wilson",
-    email: "sarah@example.com",
-    amount: 199.99,
-    status: "delivered",
-    date: "2024-03-14",
-    items: 1,
-    paymentMethod: "Debit Card",
-    shippingAddress: "321 Elm St, Houston, TX 77001",
-  },
-  {
-    id: "ORD-005",
-    customer: "Tom Brown",
-    email: "tom@example.com",
-    amount: 79.99,
-    status: "cancelled",
-    date: "2024-03-13",
-    items: 1,
-    paymentMethod: "Credit Card",
-    shippingAddress: "654 Maple Dr, Phoenix, AZ 85001",
-  },
-  {
-    id: "ORD-006",
-    customer: "Alice Cooper",
-    email: "alice@example.com",
-    amount: 59.99,
-    status: "refunded",
-    date: "2024-03-12",
-    items: 1,
-    paymentMethod: "Credit Card",
-    shippingAddress: "987 Willow St, Miami, FL 33101",
-  },
-]
-
-const statusConfig = {
-  processing: { icon: Package, color: "text-yellow-600", bg: "bg-yellow-100" },
-  shipped: { icon: Truck, color: "text-blue-600", bg: "bg-blue-100" },
-  delivered: { icon: CheckCircle, color: "text-green-600", bg: "bg-green-100" },
-  cancelled: { icon: X, color: "text-red-600", bg: "bg-red-100" },
-  refunded: { icon: RefreshCw, color: "text-purple-600", bg: "bg-purple-100" },
+interface OrderItem {
+  productId: string
+  name: string
+  price: number
+  quantity: number
+  image?: string
+  category?: string
+  brand?: string
 }
 
-const statusOptions = ["Processing", "Shipped", "Delivered", "Cancelled", "Refunded"]
+interface Order {
+  _id: string
+  orderId: string
+  status: 'new' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'refunded'
+  createdAt: string
+  pricing: {
+    total: number
+    subtotal: number
+    taxAmount: number
+    discountAmount: number
+    deliveryCharge: number
+    codCharge: number
+  }
+  items: OrderItem[]
+  customerInfo: {
+    name: string
+    email: string
+    phone: string
+  }
+  deliveryInfo: {
+    address: {
+      building: string
+      area: string
+      city: string
+      state: string
+      pincode: string
+      landmark?: string
+    }
+    estimatedDeliveryTime?: string
+  }
+  paymentInfo: {
+    method: 'cod' | 'online'
+    paymentMethod: string
+    status: string
+  }
+  warehouseInfo: {
+    warehouseName: string
+  }
+  tracking?: {
+    trackingNumber?: string
+    carrier?: string
+  }
+}
+
+const statusConfig = {
+  new: { icon: Package, color: "text-blue-600", bg: "bg-blue-100" },
+  processing: { icon: Package, color: "text-yellow-600", bg: "bg-yellow-100" },
+  shipped: { icon: Truck, color: "text-purple-600", bg: "bg-purple-100" },
+  delivered: { icon: CheckCircle, color: "text-green-600", bg: "bg-green-100" },
+  cancelled: { icon: X, color: "text-red-600", bg: "bg-red-100" },
+  refunded: { icon: RefreshCw, color: "text-gray-600", bg: "bg-gray-100" },
+}
+
+const statusOptions = ["new", "processing", "shipped", "delivered", "cancelled", "refunded"]
 
 export default function AdminOrders() {
   const user = useAppSelector((state) => state.auth.user)
-  const [orders, setOrders] = useState(mockOrders)
+  const token = useAppSelector((state) => state.auth.token)
+  const [orders, setOrders] = useState<Order[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [filterStatus, setFilterStatus] = useState("all")
-  const [viewing, setViewing] = useState<any | null>(null)
+  const [viewing, setViewing] = useState<Order | null>(null)
   const [status, setStatus] = useState("")
+  const [loading, setLoading] = useState(true)
+  const [updating, setUpdating] = useState(false)
+  const [orderStats, setOrderStats] = useState({
+    total: 0,
+    new: 0,
+    processing: 0,
+    shipped: 0,
+    delivered: 0,
+    cancelled: 0,
+    refunded: 0,
+  })
   const router = useRouter()
 
   useEffect(() => {
     if (!user || user.role !== "admin") {
       router.push("/")
+      return
     }
+    fetchOrders()
   }, [user, router])
+
+  const fetchOrders = async () => {
+    try {
+      setLoading(true)
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/admin/all`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch orders')
+      }
+
+      const data = await response.json()
+      setOrders(data.orders || [])
+      setOrderStats(data.stats || {
+        total: 0,
+        new: 0,
+        processing: 0,
+        shipped: 0,
+        delivered: 0,
+        cancelled: 0,
+        refunded: 0,
+      })
+    } catch (err) {
+      console.error('Error fetching orders:', err)
+      toast.error('Failed to load orders')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const filteredOrders = orders.filter((order) => {
     const matchesSearch =
-      order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.email.toLowerCase().includes(searchTerm.toLowerCase())
+      order.orderId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      order.customerInfo.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      order.customerInfo.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      order.customerInfo.phone.includes(searchTerm)
     const matchesStatus = filterStatus === "all" || order.status === filterStatus
     return matchesSearch && matchesStatus
   })
 
-  const orderStats = {
-    total: orders.length,
-    processing: orders.filter((o) => o.status === "processing").length,
-    shipped: orders.filter((o) => o.status === "shipped").length,
-    delivered: orders.filter((o) => o.status === "delivered").length,
-    cancelled: orders.filter((o) => o.status === "cancelled").length,
-    refunded: orders.filter((o) => o.status === "refunded").length,
-  }
-
-  const openView = (order: any) => {
+  const openView = (order: Order) => {
     setViewing(order)
     setStatus(order.status)
   }
-  const updateStatus = () => {
-    setOrders(orders.map(o => o.id === viewing.id ? { ...o, status } : o))
-    setViewing(null)
+
+  const updateStatus = async () => {
+    if (!viewing || !status) return
+
+    try {
+      setUpdating(true)
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/admin/status/${viewing.orderId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          status,
+          note: `Status updated to ${status} by admin`
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update order status')
+      }
+
+      const data = await response.json()
+      
+      // Update the orders list
+      setOrders(orders.map(o => 
+        o.orderId === viewing.orderId 
+          ? { ...o, status: status as Order['status'] } 
+          : o
+      ))
+      
+      // Update stats
+      await fetchOrders()
+      
+      setViewing(null)
+      toast.success('Order status updated successfully')
+    } catch (err) {
+      console.error('Error updating order status:', err)
+      toast.error('Failed to update order status')
+    } finally {
+      setUpdating(false)
+    }
   }
 
   if (!user || user.role !== "admin") {
@@ -137,6 +201,19 @@ export default function AdminOrders() {
           <p className="text-gray-600">Loading...</p>
         </div>
       </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <AdminLayout>
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <Loader2 className="h-12 w-12 animate-spin text-brand-primary mx-auto mb-4" />
+            <p className="text-gray-600">Loading orders...</p>
+          </div>
+        </div>
+      </AdminLayout>
     )
   }
 
@@ -152,29 +229,41 @@ export default function AdminOrders() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div className="bg-white rounded-lg p-6 shadow-md">
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+          <div className="bg-white rounded-lg p-4 shadow-md">
             <div className="text-center">
               <p className="text-sm font-medium text-gray-600">Total Orders</p>
               <p className="text-2xl font-bold text-codGray">{orderStats.total}</p>
             </div>
           </div>
-          <div className="bg-white rounded-lg p-6 shadow-md">
+          <div className="bg-white rounded-lg p-4 shadow-md">
+            <div className="text-center">
+              <p className="text-sm font-medium text-gray-600">New</p>
+              <p className="text-2xl font-bold text-blue-600">{orderStats.new}</p>
+            </div>
+          </div>
+          <div className="bg-white rounded-lg p-4 shadow-md">
             <div className="text-center">
               <p className="text-sm font-medium text-gray-600">Processing</p>
               <p className="text-2xl font-bold text-yellow-600">{orderStats.processing}</p>
             </div>
           </div>
-          <div className="bg-white rounded-lg p-6 shadow-md">
+          <div className="bg-white rounded-lg p-4 shadow-md">
             <div className="text-center">
               <p className="text-sm font-medium text-gray-600">Shipped</p>
-              <p className="text-2xl font-bold text-blue-600">{orderStats.shipped}</p>
+              <p className="text-2xl font-bold text-purple-600">{orderStats.shipped}</p>
             </div>
           </div>
-          <div className="bg-white rounded-lg p-6 shadow-md">
+          <div className="bg-white rounded-lg p-4 shadow-md">
             <div className="text-center">
               <p className="text-sm font-medium text-gray-600">Delivered</p>
               <p className="text-2xl font-bold text-green-600">{orderStats.delivered}</p>
+            </div>
+          </div>
+          <div className="bg-white rounded-lg p-4 shadow-md">
+            <div className="text-center">
+              <p className="text-sm font-medium text-gray-600">Cancelled</p>
+              <p className="text-2xl font-bold text-red-600">{orderStats.cancelled}</p>
             </div>
           </div>
         </div>
@@ -198,6 +287,7 @@ export default function AdminOrders() {
               className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
             >
               <option value="all">All Status</option>
+              <option value="new">New</option>
               <option value="processing">Processing</option>
               <option value="shipped">Shipped</option>
               <option value="delivered">Delivered</option>
@@ -224,47 +314,59 @@ export default function AdminOrders() {
                 </tr>
               </thead>
               <tbody>
-                {filteredOrders.map((order) => {
-                  const StatusIcon = statusConfig[order.status as keyof typeof statusConfig].icon
-                  const statusColor = statusConfig[order.status as keyof typeof statusConfig].color
-                  const statusBg = statusConfig[order.status as keyof typeof statusConfig].bg
+                {filteredOrders.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-8 text-center text-gray-500">
+                      No orders found
+                    </td>
+                  </tr>
+                ) : (
+                  filteredOrders.map((order) => {
+                    const StatusIcon = statusConfig[order.status as keyof typeof statusConfig].icon
+                    const statusColor = statusConfig[order.status as keyof typeof statusConfig].color
+                    const statusBg = statusConfig[order.status as keyof typeof statusConfig].bg
 
-                  return (
-                    <tr key={order.id} className="border-b border-gray-200 hover:bg-gray-50">
-                      <td className="py-4 px-6">
-                        <p className="font-medium text-codGray">{order.id}</p>
-                      </td>
-                      <td className="py-4 px-6">
-                        <div>
-                          <p className="font-medium text-codGray">{order.customer}</p>
-                          <p className="text-sm text-gray-500">{order.email}</p>
-                        </div>
-                      </td>
-                      <td className="py-4 px-6">
-                        <p className="font-semibold text-codGray">${order.amount}</p>
-                      </td>
-                      <td className="py-4 px-6">
-                        <div className={`flex items-center space-x-2 px-3 py-1 rounded-full ${statusBg} w-fit`}>
-                          <StatusIcon className={`h-4 w-4 ${statusColor}`} />
-                          <span className={`text-sm font-medium ${statusColor} capitalize`}>{order.status}</span>
-                        </div>
-                      </td>
-                      <td className="py-4 px-6 text-gray-600">{new Date(order.date).toLocaleDateString()}</td>
-                      <td className="py-4 px-6 text-gray-600">{order.items} items</td>
-                      <td className="py-4 px-6">
-                        <div className="flex items-center space-x-2">
-                          <button className="p-1 text-gray-400 hover:text-brand-primary transition-colors">
-                            <Eye className="h-4 w-4" />
-                          </button>
-                          <button className="p-1 text-gray-400 hover:text-brand-primary transition-colors">
-                            <Edit className="h-4 w-4" />
-                          </button>
-
-                      </div>
-                      </td>
-                    </tr>
-                  )
-                })}
+                    return (
+                      <tr key={order._id} className="border-b border-gray-200 hover:bg-gray-50">
+                        <td className="py-4 px-6">
+                          <p className="font-medium text-codGray">{order.orderId}</p>
+                        </td>
+                        <td className="py-4 px-6">
+                          <div>
+                            <p className="font-medium text-codGray">{order.customerInfo.name}</p>
+                            <p className="text-sm text-gray-500">{order.customerInfo.email}</p>
+                            <p className="text-sm text-gray-500">{order.customerInfo.phone}</p>
+                          </div>
+                        </td>
+                        <td className="py-4 px-6">
+                          <p className="font-semibold text-codGray">₹{order.pricing.total.toFixed(2)}</p>
+                          <p className="text-xs text-gray-500">
+                            {order.paymentInfo.method === 'cod' ? 'COD' : 'Online'}
+                          </p>
+                        </td>
+                        <td className="py-4 px-6">
+                          <div className={`flex items-center space-x-2 px-3 py-1 rounded-full ${statusBg} w-fit`}>
+                            <StatusIcon className={`h-4 w-4 ${statusColor}`} />
+                            <span className={`text-sm font-medium ${statusColor} capitalize`}>{order.status}</span>
+                          </div>
+                        </td>
+                        <td className="py-4 px-6 text-gray-600">{new Date(order.createdAt).toLocaleDateString()}</td>
+                        <td className="py-4 px-6 text-gray-600">{order.items.length} items</td>
+                        <td className="py-4 px-6">
+                          <div className="flex items-center space-x-2">
+                            <button 
+                              onClick={() => openView(order)}
+                              className="p-1 text-gray-400 hover:text-brand-primary transition-colors"
+                              title="View Details"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
               </tbody>
             </table>
           </div>
@@ -291,32 +393,143 @@ export default function AdminOrders() {
 
         {/* View Modal */}
         {viewing && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full mx-4 p-8 relative border-4 border-spectra">
-              <div className="text-2xl font-bold mb-4 text-spectra">Order Details</div>
-              <div className="mb-2"><span className="font-semibold">Order ID:</span> {viewing.id}</div>
-              <div className="mb-2"><span className="font-semibold">User:</span> {viewing.customer}</div>
-              <div className="mb-2"><span className="font-semibold">Date:</span> {viewing.date}</div>
-              <div className="mb-2"><span className="font-semibold">Status:</span> <span className={`px-3 py-1 rounded-full text-white ${viewing.status === "Delivered" ? "bg-green-500" : viewing.status === "Cancelled" ? "bg-red-500" : viewing.status === "Shipped" ? "bg-elm" : "bg-spectra"}`}>{viewing.status}</span></div>
-              <div className="mb-2"><span className="font-semibold">Total:</span> ${viewing.amount.toFixed(2)}</div>
-              <div className="mb-4"><span className="font-semibold">Shipping:</span> {viewing.shippingAddress}</div>
-              <div className="mb-4">
-                <span className="font-semibold">Products:</span>
-                <ul className="list-disc ml-6 mt-2">
-                  {viewing.products.map((p: any, i: number) => (
-                    <li key={i} className="mb-1">{p.name} <span className="text-gray-500">x{p.qty}</span> <span className="text-elm font-semibold">${p.price.toFixed(2)}</span></li>
-                  ))}
-                </ul>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-2xl font-bold text-gray-900">Order Details</h2>
+                  <button 
+                    onClick={() => setViewing(null)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="h-6 w-6" />
+                  </button>
+                </div>
               </div>
-              <div className="mb-4">
-                <label className="block font-medium mb-1">Update Status</label>
-                <select className="w-full border border-gray-300 rounded-lg p-3" value={status} onChange={e => setStatus(e.target.value)}>
-                  {statusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                </select>
+              
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  <div>
+                    <h3 className="text-lg font-semibold mb-3">Order Information</h3>
+                    <div className="space-y-2">
+                      <div><span className="font-medium">Order ID:</span> {viewing.orderId}</div>
+                      <div><span className="font-medium">Customer:</span> {viewing.customerInfo.name}</div>
+                      <div><span className="font-medium">Email:</span> {viewing.customerInfo.email}</div>
+                      <div><span className="font-medium">Phone:</span> {viewing.customerInfo.phone}</div>
+                      <div><span className="font-medium">Date:</span> {new Date(viewing.createdAt).toLocaleDateString()}</div>
+                      <div><span className="font-medium">Payment:</span> {viewing.paymentInfo.method === 'cod' ? 'Cash on Delivery' : 'Online Payment'}</div>
+                      <div><span className="font-medium">Warehouse:</span> {viewing.warehouseInfo.warehouseName}</div>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <h3 className="text-lg font-semibold mb-3">Delivery Address</h3>
+                    <div className="text-sm">
+                      <p>{viewing.deliveryInfo.address.building}</p>
+                      <p>{viewing.deliveryInfo.address.area}</p>
+                      <p>{viewing.deliveryInfo.address.city}, {viewing.deliveryInfo.address.state}</p>
+                      <p>{viewing.deliveryInfo.address.pincode}</p>
+                      {viewing.deliveryInfo.address.landmark && (
+                        <p className="text-gray-600">Near {viewing.deliveryInfo.address.landmark}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mb-6">
+                  <h3 className="text-lg font-semibold mb-3">Order Items</h3>
+                  <div className="space-y-2">
+                    {viewing.items.map((item: OrderItem, index: number) => (
+                      <div key={`${item.productId}-${index}`} className="flex justify-between items-center p-3 border border-gray-200 rounded-lg">
+                        <div>
+                          <p className="font-medium">{item.name}</p>
+                          {item.category && <p className="text-sm text-gray-500">{item.category}</p>}
+                          <p className="text-sm text-gray-600">Qty: {item.quantity}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold">₹{(item.price * item.quantity).toFixed(2)}</p>
+                          <p className="text-sm text-gray-500">₹{item.price.toFixed(2)} each</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mb-6">
+                  <h3 className="text-lg font-semibold mb-3">Order Summary</h3>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span>Subtotal:</span>
+                      <span>₹{viewing.pricing.subtotal.toFixed(2)}</span>
+                    </div>
+                    {viewing.pricing.taxAmount > 0 && (
+                      <div className="flex justify-between">
+                        <span>Tax:</span>
+                        <span>₹{viewing.pricing.taxAmount.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {viewing.pricing.deliveryCharge > 0 && (
+                      <div className="flex justify-between">
+                        <span>Delivery Charge:</span>
+                        <span>₹{viewing.pricing.deliveryCharge.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {viewing.pricing.codCharge > 0 && (
+                      <div className="flex justify-between">
+                        <span>COD Charge:</span>
+                        <span>₹{viewing.pricing.codCharge.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {viewing.pricing.discountAmount > 0 && (
+                      <div className="flex justify-between">
+                        <span>Discount:</span>
+                        <span className="text-green-600">-₹{viewing.pricing.discountAmount.toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-semibold text-lg border-t pt-2">
+                      <span>Total:</span>
+                      <span>₹{viewing.pricing.total.toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mb-6">
+                  <label className="block text-lg font-semibold mb-3">Update Status</label>
+                  <select 
+                    className="w-full border border-gray-300 rounded-lg p-3 mb-4" 
+                    value={status} 
+                    onChange={e => setStatus(e.target.value)}
+                  >
+                    {statusOptions.map(opt => (
+                      <option key={opt} value={opt}>
+                        {opt.charAt(0).toUpperCase() + opt.slice(1)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              <div className="flex gap-2 mt-4">
-                <button className="bg-gradient-to-r from-brand-primary to-elm text-white font-semibold py-2 px-6 rounded-lg shadow-lg hover:scale-105 transition-transform" onClick={updateStatus}>Save</button>
-                <button className="bg-gray-200 hover:bg-gray-300 text-codGray font-semibold py-2 px-6 rounded-lg transition-colors" onClick={() => setViewing(null)}>Cancel</button>
+              
+              <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+                <button 
+                  className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-2 px-6 rounded-lg transition-colors" 
+                  onClick={() => setViewing(null)}
+                >
+                  Cancel
+                </button>
+                <button 
+                  className="bg-brand-primary hover:bg-brand-primary/90 text-white font-semibold py-2 px-6 rounded-lg transition-colors disabled:opacity-50" 
+                  onClick={updateStatus}
+                  disabled={updating}
+                >
+                  {updating ? (
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Updating...
+                    </div>
+                  ) : (
+                    'Update Status'
+                  )}
+                </button>
               </div>
             </div>
           </div>

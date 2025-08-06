@@ -45,6 +45,7 @@ import { useCartContext, useWishlistContext } from "../../components/app-provide
 const WISHLIST_UPDATED_EVENT = "wishlistUpdated";
 import toast from "react-hot-toast";
 import Image from "next/image";
+import OrderDetailModal from "../../components/OrderDetailModal";
 
 export default function Profile() {
   const user = useAppSelector((state) => state.auth.user);
@@ -82,6 +83,19 @@ export default function Profile() {
     phone: "",
     dateOfBirth: "",
   });
+
+  // Orders state
+  const [orders, setOrders] = useState<any[]>([]);
+  const [displayedOrders, setDisplayedOrders] = useState<any[]>([]);
+  const [isLoadingOrders, setIsLoadingOrders] = useState(false);
+  const [isLoadingMoreOrders, setIsLoadingMoreOrders] = useState(false);
+  const [ordersToShow, setOrdersToShow] = useState(10);
+  const [orderStats, setOrderStats] = useState({
+    totalOrders: 0,
+    totalSpent: 0
+  });
+  const [selectedOrderForDetail, setSelectedOrderForDetail] = useState<any>(null);
+  const [showOrderDetailModal, setShowOrderDetailModal] = useState(false);
   
 
 
@@ -97,6 +111,17 @@ export default function Profile() {
       });
     }
   }, [user, router]);
+
+  // Handle URL tab parameter
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tabParam = urlParams.get('tab');
+      if (tabParam && ["profile", "cart", "wishlist", "orders", "addresses"].includes(tabParam)) {
+        setActiveTab(tabParam as "profile" | "cart" | "wishlist" | "orders" | "addresses");
+      }
+    }
+  }, []);
 
   // Wishlist items are now managed by app-provider context
 
@@ -150,12 +175,79 @@ export default function Profile() {
     }
   };
 
+  // Fetch orders when orders tab is active or when calculating stats
+  const fetchUserOrders = async () => {
+    try {
+      setIsLoadingOrders(true);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/user`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch orders');
+      }
+
+      const data = await response.json();
+      const fetchedOrders = data.orders || [];
+      setOrders(fetchedOrders);
+      
+      // Set initially displayed orders (last 10)
+      setDisplayedOrders(fetchedOrders.slice(0, ordersToShow));
+
+      // Calculate order statistics
+      const totalOrders = fetchedOrders.length;
+      const totalSpent = fetchedOrders.reduce((sum: number, order: any) => {
+        return sum + (order.pricing?.total || 0);
+      }, 0);
+
+      setOrderStats({
+        totalOrders,
+        totalSpent
+      });
+    } catch (error) {
+      console.error("Error fetching orders:", error);
+      setOrders([]);
+      setDisplayedOrders([]);
+      setOrderStats({ totalOrders: 0, totalSpent: 0 });
+    } finally {
+      setIsLoadingOrders(false);
+    }
+  };
+
+  // Load more orders function
+  const handleLoadMoreOrders = () => {
+    setIsLoadingMoreOrders(true);
+    setTimeout(() => {
+      const newOrdersToShow = ordersToShow + 10;
+      setOrdersToShow(newOrdersToShow);
+      setDisplayedOrders(orders.slice(0, newOrdersToShow));
+      setIsLoadingMoreOrders(false);
+    }, 500); // Small delay for better UX
+  };
+
   // Fetch addresses when addresses tab is active
   useEffect(() => {
     if (activeTab === "addresses" && token) {
       fetchUserAddresses();
     }
   }, [activeTab, token]);
+
+  // Fetch orders when orders tab is active or on component mount
+  useEffect(() => {
+    if (token && user) {
+      fetchUserOrders();
+    }
+  }, [token, user]);
+
+  // Fetch orders again when orders tab is active (to ensure fresh data)
+  useEffect(() => {
+    if (activeTab === "orders" && token && user) {
+      fetchUserOrders();
+    }
+  }, [activeTab, token, user]);
 
 
 
@@ -234,6 +326,17 @@ export default function Profile() {
 
 
 
+  // Handle order detail modal
+  const handleViewOrderDetails = (order: any) => {
+    setSelectedOrderForDetail(order);
+    setShowOrderDetailModal(true);
+  };
+
+  const handleCloseOrderDetailModal = () => {
+    setShowOrderDetailModal(false);
+    setSelectedOrderForDetail(null);
+  };
+
   // Address management moved to separate page
 
   if (!user) {
@@ -286,7 +389,7 @@ export default function Profile() {
                     <div className="text-white/80 text-sm">Wishlist</div>
                   </div>
                   <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-                    <div className="text-2xl text-white font-bold">0</div>
+                    <div className="text-2xl text-white font-bold">{orderStats.totalOrders}</div>
                     <div className="text-white/80 text-sm">Orders</div>
                   </div>
                 </div>
@@ -826,25 +929,135 @@ export default function Profile() {
                       <Package className="w-6 h-6 mr-3" />
                       Order History
                     </h2>
+                    <div className="text-sm text-gray-500">
+                      Showing {displayedOrders.length} of {orders.length} orders
+                    </div>
                   </div>
 
-                  <div className="text-center py-16">
-                    <Package className="w-24 h-24 text-gray-300 mx-auto mb-4" />
-                    <h3 className="text-xl font-semibold text-gray-600 mb-2">
-                      No orders yet
-                    </h3>
-                    <p className="text-gray-500 mb-6">
-                      Your order history will appear here once you make your
-                      first purchase.
-                    </p>
-                    <Link
-                      href="/"
-                      className="inline-flex items-center bg-gradient-to-r from-brand-primary to-brand-primary-dark text-white px-6 py-3 rounded-xl hover:shadow-lg transition-all duration-200"
-                    >
-                      <ArrowRight className="w-4 h-4 mr-2" />
-                      Start Shopping
-                    </Link>
-                  </div>
+                  {isLoadingOrders ? (
+                    <div className="text-center py-16">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-primary mx-auto mb-4"></div>
+                      <p className="text-gray-500">Loading orders...</p>
+                    </div>
+                  ) : orders.length === 0 ? (
+                    <div className="text-center py-16">
+                      <Package className="w-24 h-24 text-gray-300 mx-auto mb-4" />
+                      <h3 className="text-xl font-semibold text-gray-600 mb-2">
+                        No orders yet
+                      </h3>
+                      <p className="text-gray-500 mb-6">
+                        Your order history will appear here once you make your
+                        first purchase.
+                      </p>
+                      <Link
+                        href="/"
+                        className="inline-flex items-center bg-gradient-to-r from-brand-primary to-brand-primary-dark text-white px-6 py-3 rounded-xl hover:shadow-lg transition-all duration-200"
+                      >
+                        <ArrowRight className="w-4 h-4 mr-2" />
+                        Start Shopping
+                      </Link>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {displayedOrders.map((order: any) => (
+                        <div
+                          key={order._id}
+                          className="border border-gray-200 rounded-xl p-6 hover:shadow-md transition-shadow"
+                        >
+                          <div className="flex items-center justify-between mb-4">
+                            <div>
+                              <h3 className="font-semibold text-gray-900">
+                                Order #{order.orderId}
+                              </h3>
+                              <p className="text-sm text-gray-500">
+                                {new Date(order.createdAt).toLocaleDateString('en-IN', {
+                                  year: 'numeric',
+                                  month: 'long',
+                                  day: 'numeric'
+                                })}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-lg font-bold text-gray-900">
+                                ₹{order.pricing?.total?.toFixed(2) || '0.00'}
+                              </div>
+                              <span className={`inline-block px-3 py-1 text-xs font-medium rounded-full ${
+                                order.status === 'delivered' ? 'bg-green-100 text-green-800' :
+                                order.status === 'shipped' ? 'bg-blue-100 text-blue-800' :
+                                order.status === 'processing' ? 'bg-yellow-100 text-yellow-800' :
+                                order.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                                'bg-gray-100 text-gray-800'
+                              }`}>
+                                {order.status?.charAt(0).toUpperCase() + order.status?.slice(1)}
+                              </span>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center space-x-4">
+                            <div className="flex -space-x-2">
+                              {order.items?.slice(0, 3).map((item: any, index: number) => (
+                                <div
+                                  key={index}
+                                  className="w-10 h-10 rounded-lg bg-gray-100 border-2 border-white flex items-center justify-center overflow-hidden"
+                                >
+                                  {item.image ? (
+                                    <Image
+                                      src={item.image}
+                                      alt={item.name}
+                                      width={40}
+                                      height={40}
+                                      className="object-cover w-full h-full"
+                                    />
+                                  ) : (
+                                    <Package className="w-5 h-5 text-gray-400" />
+                                  )}
+                                </div>
+                              ))}
+                              {order.items?.length > 3 && (
+                                <div className="w-10 h-10 rounded-lg bg-gray-200 border-2 border-white flex items-center justify-center text-xs font-medium text-gray-600">
+                                  +{order.items.length - 3}
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-sm text-gray-600">
+                                {order.items?.length} item{order.items?.length !== 1 ? 's' : ''}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => handleViewOrderDetails(order)}
+                              className="text-brand-primary hover:text-brand-primary-dark font-medium text-sm flex items-center"
+                            >
+                              View Details
+                              <ArrowRight className="w-3 h-3 ml-1" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      
+                      {displayedOrders.length < orders.length && (
+                        <div className="text-center pt-6">
+                          <button
+                            onClick={handleLoadMoreOrders}
+                            disabled={isLoadingMoreOrders}
+                            className="inline-flex items-center bg-gradient-to-r from-brand-primary to-brand-primary-dark text-white px-6 py-3 rounded-xl hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isLoadingMoreOrders ? (
+                              <>
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                Loading...
+                              </>
+                            ) : (
+                              <>
+                                Load More Orders ({orders.length - displayedOrders.length} remaining)
+                                <ArrowRight className="w-4 h-4 ml-2" />
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -855,7 +1068,7 @@ export default function Profile() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-blue-100 text-sm">Total Orders</p>
-                    <p className="text-3xl font-bold">0</p>
+                    <p className="text-3xl font-bold">{orderStats.totalOrders}</p>
                   </div>
                   <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
                     <Package className="w-6 h-6" />
@@ -892,7 +1105,7 @@ export default function Profile() {
                   <div>
                     <p className="text-purple-100 text-sm">Total Spent</p>
                     <p className="text-3xl font-bold">
-                    ₹{cartTotal.toFixed(2)}
+                    ₹{orderStats.totalSpent.toFixed(2)}
                     </p>
                   </div>
                   <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
@@ -904,6 +1117,13 @@ export default function Profile() {
           </div>
         </div>
       </div>
+
+      {/* Order Detail Modal */}
+      <OrderDetailModal
+        isOpen={showOrderDetailModal}
+        onClose={handleCloseOrderDetailModal}
+        order={selectedOrderForDetail}
+      />
     </Layout>
   );
 }

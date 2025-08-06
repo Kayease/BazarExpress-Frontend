@@ -17,24 +17,29 @@
 "use client";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useCartContext } from "@/components/app-provider";
-import { useAppSelector } from "@/lib/store";
+import { useAppSelector, useAppDispatch } from "@/lib/store";
+import { clearCart } from "@/lib/slices/cartSlice";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { 
-  CreditCard, 
-  Wallet, 
-  Building2, 
-  Smartphone, 
-  Truck, 
-  MapPin, 
-  Edit, 
-  Check, 
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  CreditCard,
+  Wallet,
+  Building2,
+  Smartphone,
+  Truck,
+  MapPin,
+  Edit,
+  Check,
   ChevronRight,
   ArrowLeft,
   Shield,
   Clock,
   Plus,
-  Loader2
+  Loader2,
+  Store,
+  Globe,
+  X
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -44,9 +49,11 @@ import AvailablePromocodes from "@/components/AvailablePromocodes";
 import toast from "react-hot-toast";
 import { calculateDeliveryChargeAPI, formatDeliveryCharge, getDeliveryTimeEstimate, fetchDeliverySettings, DeliveryCalculationResult } from "@/lib/delivery";
 import DeliveryAvailabilityChecker from "@/components/DeliveryAvailabilityChecker";
+import { DeliveryUnavailableModal } from "@/components/delivery-unavailable-modal";
 import { validateCartDelivery, CartValidationResponse } from "@/lib/location";
 import CartValidationAlert from "@/components/CartValidationAlert";
 import { calculateCartTax, CartTaxCalculation, isInterStateTransaction, formatTaxAmount } from "@/lib/tax-calculation";
+import OrderSuccessModal from "@/components/OrderSuccessModal";
 
 interface PaymentMethod {
   id: string;
@@ -105,7 +112,7 @@ const walletOptions = [
 ];
 
 const bankOptions = [
-  'State Bank of India', 'HDFC Bank', 'ICICI Bank', 'Axis Bank', 
+  'State Bank of India', 'HDFC Bank', 'ICICI Bank', 'Axis Bank',
   'Kotak Mahindra Bank', 'Punjab National Bank', 'Bank of Baroda', 'Canara Bank'
 ];
 
@@ -251,11 +258,48 @@ function fetchAddress(lat: number, lng: number, setAddressForm: any) {
     });
 }
 
+// Extract state from warehouse address string
+function extractStateFromAddress(address: string): string {
+  if (!address) return '';
+
+  // Common Indian state patterns
+  const statePatterns = [
+    // Full state names
+    /\b(Andhra Pradesh|Arunachal Pradesh|Assam|Bihar|Chhattisgarh|Goa|Gujarat|Haryana|Himachal Pradesh|Jharkhand|Karnataka|Kerala|Madhya Pradesh|Maharashtra|Manipur|Meghalaya|Mizoram|Nagaland|Odisha|Punjab|Rajasthan|Sikkim|Tamil Nadu|Telangana|Tripura|Uttar Pradesh|Uttarakhand|West Bengal)\b/i,
+    // Union Territories
+    /\b(Andaman and Nicobar Islands|Chandigarh|Dadra and Nagar Haveli and Daman and Diu|Delhi|Jammu and Kashmir|Ladakh|Lakshadweep|Puducherry)\b/i,
+    // Common abbreviations
+    /\b(AP|AR|AS|BR|CG|GA|GJ|HR|HP|JH|KA|KL|MP|MH|MN|ML|MZ|NL|OD|PB|RJ|SK|TN|TS|TR|UP|UK|WB)\b/i
+  ];
+
+  for (const pattern of statePatterns) {
+    const match = address.match(pattern);
+    if (match) {
+      return match[1];
+    }
+  }
+
+  // Fallback: try to extract from common address patterns
+  const parts = address.split(',').map(part => part.trim());
+  if (parts.length >= 2) {
+    // Usually state is the second last part before pincode
+    const potentialState = parts[parts.length - 2];
+    if (potentialState && potentialState.length > 2 && !/^\d+$/.test(potentialState)) {
+      return potentialState;
+    }
+  }
+
+  return '';
+}
+
 export default function PaymentPage() {
-  const { cartItems, cartTotal } = useCartContext();
+  const { cartItems, cartTotal, isLoadingCart, clearCart: clearCartContext } = useCartContext();
   const router = useRouter();
+  const dispatch = useAppDispatch();
   const user = useAppSelector((state: any) => state?.auth?.user);
   const token = useAppSelector((state: any) => state?.auth?.token);
+
+  // Allow access to payment page even with empty cart (user might be completing an order)
 
   // Process cart items with COD availability info
   const cartItemsWithCODInfo = cartItems.map((item: any) => ({
@@ -263,34 +307,64 @@ export default function PaymentPage() {
     codAvailable: item.codAvailable !== undefined ? item.codAvailable : true
   }));
 
-  // Group cart items by warehouse
-  const groupItemsByWarehouse = useCallback((items: CartItem[]) => {
+  // Since we don't allow mixed warehouses, all items should be from the same warehouse
+  const singleWarehouse = useMemo(() => {
+    if (cartItemsWithCODInfo.length === 0) return null;
+
+    // Get warehouse from first item (all items should be from same warehouse)
+    const firstItem = cartItemsWithCODInfo[0];
+    if (!firstItem.warehouse || !firstItem.warehouse._id) return null;
+
+    return {
+      ...firstItem.warehouse,
+      deliverySettings: firstItem.warehouse.deliverySettings || { is24x7Delivery: false }
+    };
+  }, [cartItemsWithCODInfo]);
+
+  // Group cart items by warehouse (should only be one warehouse now)
+  const itemsByWarehouse = useMemo(() => {
     const grouped: { [warehouseId: string]: { items: CartItem[], warehouse: any } } = {};
     
-    items.forEach(item => {
-      const warehouseId = item.warehouse?._id || item.warehouse?.id || item.warehouseId || 'unknown';
-      const warehouseInfo = item.warehouse || { 
-        _id: warehouseId, 
-        id: warehouseId,
-        name: 'Unknown Warehouse', 
-        deliverySettings: { is24x7Delivery: false } 
-      };
+    console.log('Processing cart items for warehouse grouping:', cartItemsWithCODInfo.map(item => ({
+      id: item.id || item._id,
+      name: item.name,
+      warehouse: item.warehouse,
+      warehouseId: item.warehouseId
+    })));
+    
+    cartItemsWithCODInfo.forEach((item: CartItem) => {
+      // Try multiple ways to get warehouse ID
+      const warehouseId = item.warehouseId || 
+                         item.warehouse?._id || 
+                         item.warehouse?.id ||
+                         (typeof item.warehouse === 'string' ? item.warehouse : null);
+      
+      console.log('Item warehouse extraction:', {
+        itemId: item.id || item._id,
+        itemName: item.name,
+        warehouseId,
+        warehouse: item.warehouse,
+        warehouseIdField: item.warehouseId
+      });
+      
+      if (!warehouseId) {
+        console.warn('No warehouse ID found for item:', item.name);
+        return;
+      }
       
       if (!grouped[warehouseId]) {
         grouped[warehouseId] = {
           items: [],
-          warehouse: warehouseInfo
+          warehouse: item.warehouse || {}
         };
       }
-      
       grouped[warehouseId].items.push(item);
     });
     
+    console.log('Final grouped warehouses:', Object.keys(grouped));
     return grouped;
-  }, []);
+  }, [cartItemsWithCODInfo]);
 
-  const itemsByWarehouse = useMemo(() => groupItemsByWarehouse(cartItemsWithCODInfo), [cartItemsWithCODInfo, groupItemsByWarehouse]);
-  
   // Payment method states
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('upi');
   const [selectedWallet, setSelectedWallet] = useState<string>('');
@@ -301,7 +375,7 @@ export default function PaymentPage() {
   const [expiryDate, setExpiryDate] = useState<string>('');
   const [cvv, setCvv] = useState<string>('');
   const [cardHolderName, setCardHolderName] = useState<string>('');
-  
+
   // Address states
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [selectedAddress, setSelectedAddress] = useState<number | null>(null);
@@ -319,38 +393,85 @@ export default function PaymentPage() {
   // Promo code states
   const [appliedPromoCode, setAppliedPromoCode] = useState<any>(null);
   const [discountAmount, setDiscountAmount] = useState<number>(0);
-  
+
   // Delivery calculation states
   const [deliveryInfo, setDeliveryInfo] = useState<DeliveryInfo | null>(null);
   const [loadingDelivery, setLoadingDelivery] = useState(false);
-  
-  // Mixed warehouse delivery states
-  const [mixedWarehouseDelivery, setMixedWarehouseDelivery] = useState<MixedWarehouseDelivery | null>(null);
+
+  // Remove mixed warehouse delivery states since we don't support mixed warehouses
+  // These are kept for compatibility but will be removed
+  const [mixedWarehouseDelivery, setMixedWarehouseDelivery] = useState<any>(null);
   const [loadingMixedDelivery, setLoadingMixedDelivery] = useState(false);
-  
+
   // Validation states
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
   const [isValidatingPayment, setIsValidatingPayment] = useState(false);
   
+  // Success modal states
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successOrderData, setSuccessOrderData] = useState<any>(null);
+
   // Delivery settings state
   const [deliverySettings, setDeliverySettings] = useState<DeliverySettings | null>(null);
-  
+
   // Cart validation states
   const [cartValidation, setCartValidation] = useState<CartValidationResponse | null>(null);
   const [isValidatingCart, setIsValidatingCart] = useState(false);
-  
+
   // Tax calculation states
   const [taxCalculation, setTaxCalculation] = useState<CartTaxCalculation | null>(null);
-  
+
   // Error tracking to prevent duplicate toasts
   const [lastErrorMessage, setLastErrorMessage] = useState<string>('');
   const [lastErrorTime, setLastErrorTime] = useState<number>(0);
-  
+
   // Track failed delivery calculations to prevent repeated attempts
   const [failedDeliveryAddresses, setFailedDeliveryAddresses] = useState<Set<string>>(new Set());
 
+  // Track last successful delivery calculation to prevent continuous recalculations
+  const lastDeliveryCalculation = useRef<{
+    addressKey: string;
+    cartTotal: number;
+    discountAmount: number;
+    paymentMethod: string;
+    warehouseIds: string[];
+    timestamp: number;
+  } | null>(null);
+
   // State to trigger delivery calculation retry
   const [shouldRetryDelivery, setShouldRetryDelivery] = useState(false);
+
+  // Track if component is mounted to prevent state updates after unmount
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    console.log('PaymentPage component mounted');
+    return () => {
+      console.log('PaymentPage component UNMOUNTING - this might explain the issue!');
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  // Redirect to login if not authenticated (but not during order processing)
+  useEffect(() => {
+    if (!user || !token) {
+      // Prevent redirect during order processing to avoid component unmount
+      if (!isValidatingPayment) {
+        console.log('Redirecting to auth due to missing user/token');
+        router.push('/auth');
+        return;
+      } else {
+        console.log('Skipping auth redirect during order processing');
+      }
+    }
+  }, [user, token, router, isValidatingPayment]);
+
+  // State for delivery unavailable modal
+  const [showDeliveryUnavailableModal, setShowDeliveryUnavailableModal] = useState(false);
+  const [unavailablePincode, setUnavailablePincode] = useState<string>('');
+  
+  // State for undeliverable items modal
+  const [showUndeliverableItemsModal, setShowUndeliverableItemsModal] = useState(false);
+  const [undeliverableItems, setUndeliverableItems] = useState<any[]>([]);
 
   // Helper function to show error toast only if not shown recently
   const showErrorToast = useCallback((message: string, cooldownMs: number = 3000) => {
@@ -362,6 +483,12 @@ export default function PaymentPage() {
     }
   }, [lastErrorMessage, lastErrorTime]);
 
+  // Helper function to format delivery charges (rounded to avoid decimal payments)
+  const formatDeliveryChargeWithDecimals = (charge: number) => {
+    if (charge === 0) return "Free";
+    return `₹${Math.round(charge)}`;
+  };
+
   // Helper function to show success toast only if not shown recently
   const showSuccessToast = useCallback((message: string, cooldownMs: number = 2000) => {
     const now = Date.now();
@@ -371,6 +498,11 @@ export default function PaymentPage() {
       setLastErrorTime(now);
     }
   }, [lastErrorMessage, lastErrorTime]);
+
+  // Helper function to check if COD is available for all cart items
+  const isCODAvailableForCart = useMemo(() => {
+    return cartItemsWithCODInfo.every((item: CartItem) => item.codAvailable !== false);
+  }, [cartItemsWithCODInfo]);
 
   // Helper function to create address key for tracking failed deliveries
   const getAddressKey = useCallback((address: Address) => {
@@ -388,7 +520,7 @@ export default function PaymentPage() {
           newSet.delete(addressKey);
           return newSet;
         });
-        
+
         setDeliveryInfo(null);
         setMixedWarehouseDelivery(null);
         setShouldRetryDelivery(true);
@@ -412,6 +544,14 @@ export default function PaymentPage() {
     }
   }, [deliverySettings, selectedPaymentMethod]);
 
+  // Switch payment method if COD is selected but cart items are not eligible for COD
+  useEffect(() => {
+    if (selectedPaymentMethod === 'cod' && !isCODAvailableForCart) {
+      setSelectedPaymentMethod('upi');
+      toast('COD is not available for some items in your cart. Switched to UPI payment.');
+    }
+  }, [selectedPaymentMethod, isCODAvailableForCart]);
+
   // Utility function to set token as cookie
   const setTokenCookie = () => {
     if (token) {
@@ -422,7 +562,7 @@ export default function PaymentPage() {
   // Validation functions
   const validateCODAvailability = (): boolean => {
     if (selectedPaymentMethod !== 'cod') return true;
-    
+
     const nonCODItems = cartItemsWithCODInfo.filter((item: CartItem) => item.codAvailable === false);
     if (nonCODItems.length > 0) {
       setValidationErrors(prev => ({
@@ -431,7 +571,7 @@ export default function PaymentPage() {
       }));
       return false;
     }
-    
+
     setValidationErrors(prev => ({ ...prev, codNotAvailable: undefined }));
     return true;
   };
@@ -444,12 +584,12 @@ export default function PaymentPage() {
       }));
       return false;
     }
-    
+
     if (loadingDelivery) {
       setValidationErrors(prev => ({ ...prev, deliveryNotAvailable: undefined }));
       return false;
     }
-    
+
     if (!deliveryInfo) {
       setValidationErrors(prev => ({
         ...prev,
@@ -465,7 +605,7 @@ export default function PaymentPage() {
       }));
       return false;
     }
-    
+
     setValidationErrors(prev => ({ ...prev, deliveryNotAvailable: undefined }));
     return true;
   };
@@ -475,10 +615,10 @@ export default function PaymentPage() {
     const currentHour = now.getHours();
     const currentMinute = now.getMinutes();
     const currentTime = currentHour * 60 + currentMinute;
-    
+
     const openTime = 6 * 60;
     const closeTime = 23 * 60;
-    
+
     if (currentTime < openTime || currentTime > closeTime) {
       const openHour = Math.floor(openTime / 60);
       const closeHour = Math.floor(closeTime / 60);
@@ -488,7 +628,7 @@ export default function PaymentPage() {
       }));
       return false;
     }
-    
+
     setValidationErrors(prev => ({ ...prev, warehouseNotOperational: undefined }));
     return true;
   };
@@ -501,14 +641,17 @@ export default function PaymentPage() {
       }));
       return false;
     }
-    
+
     setValidationErrors(prev => ({ ...prev, addressRequired: undefined }));
     return true;
   };
 
   // Validate cart items against selected delivery address
   const validateCartForDelivery = async (): Promise<boolean> => {
+    console.log('validateCartForDelivery: Starting validation...');
+    
     if (!selectedAddress) {
+      console.log('validateCartForDelivery: No selected address');
       setValidationErrors(prev => ({
         ...prev,
         addressRequired: 'Please select a delivery address to validate cart items.'
@@ -523,6 +666,8 @@ export default function PaymentPage() {
       quantity: item.quantity
     }));
 
+    console.log('validateCartForDelivery: Cart items for validation:', cartItemsForValidation);
+
     const itemsWithoutWarehouse = cartItemsForValidation.filter(item => !item.warehouseId);
     if (itemsWithoutWarehouse.length > 0) {
       console.warn('Some cart items missing warehouse information:', itemsWithoutWarehouse);
@@ -530,6 +675,7 @@ export default function PaymentPage() {
 
     const validItems = cartItemsForValidation.filter(item => item.warehouseId);
     if (validItems.length === 0) {
+      console.log('validateCartForDelivery: No valid items with warehouse info');
       setValidationErrors(prev => ({
         ...prev,
         deliveryNotAvailable: 'Unable to validate delivery for cart items. Please contact support.'
@@ -537,11 +683,13 @@ export default function PaymentPage() {
       return false;
     }
 
+    console.log('validateCartForDelivery: Setting isValidatingCart to true');
     setIsValidatingCart(true);
-    
+
     try {
       const selectedAddrObj = addresses.find(a => a.id === selectedAddress);
       if (!selectedAddrObj) {
+        console.log('validateCartForDelivery: Selected address not found');
         setValidationErrors(prev => ({
           ...prev,
           addressRequired: 'Selected address not found.'
@@ -549,6 +697,7 @@ export default function PaymentPage() {
         return false;
       }
 
+      console.log('validateCartForDelivery: Calling validateCartDelivery API...');
       const validation = await validateCartDelivery(validItems, {
         lat: selectedAddrObj.lat!,
         lng: selectedAddrObj.lng!,
@@ -556,9 +705,12 @@ export default function PaymentPage() {
         pincode: selectedAddrObj.pincode
       });
 
+      console.log('validateCartForDelivery: API response received:', validation);
+
       setCartValidation(validation);
 
       if (!validation.success) {
+        console.log('validateCartForDelivery: Validation failed:', validation.error);
         setValidationErrors(prev => ({
           ...prev,
           deliveryNotAvailable: validation.error || 'Failed to validate cart delivery'
@@ -567,14 +719,14 @@ export default function PaymentPage() {
       }
 
       if (!validation.allItemsDeliverable) {
-        const undeliverableNames = validation.undeliverableItems.map(item => item.name).join(', ');
-        setValidationErrors(prev => ({
-          ...prev,
-          deliveryNotAvailable: `Some items cannot be delivered to your address: ${undeliverableNames}. Please select an address within the delivery zone or remove these items from your cart.`
-        }));
+        console.log('validateCartForDelivery: Some items not deliverable');
+        // Show modal for undeliverable items instead of error message
+        setUndeliverableItems(validation.undeliverableItems);
+        setShowUndeliverableItemsModal(true);
         return false;
       }
 
+      console.log('validateCartForDelivery: All validations passed');
       setValidationErrors(prev => ({ ...prev, deliveryNotAvailable: undefined }));
       return true;
 
@@ -586,28 +738,53 @@ export default function PaymentPage() {
       }));
       return false;
     } finally {
+      console.log('validateCartForDelivery: Setting isValidatingCart to false');
       setIsValidatingCart(false);
     }
   };
 
   const validatePayment = async (): Promise<boolean> => {
-    const isCODValid = validateCODAvailability();
-    const isDeliveryValid = validateDeliveryArea();
-    const isWarehouseOperational = validateWarehouseOperationalHours();
-    const isAddressValid = validateAddress();
+    console.log('=== STARTING PAYMENT VALIDATION ===');
     
-    const isCartValid = await validateCartForDelivery();
-    
-    return isCODValid && isDeliveryValid && isWarehouseOperational && isAddressValid && isCartValid;
+    try {
+      console.log('Validating COD availability...');
+      const isCODValid = validateCODAvailability();
+      console.log('COD valid:', isCODValid);
+      
+      console.log('Validating delivery area...');
+      const isDeliveryValid = validateDeliveryArea();
+      console.log('Delivery valid:', isDeliveryValid);
+      
+      console.log('Validating warehouse operational hours...');
+      const isWarehouseOperational = validateWarehouseOperationalHours();
+      console.log('Warehouse operational:', isWarehouseOperational);
+      
+      console.log('Validating address selection...');
+      const isAddressValid = validateAddress();
+      console.log('Address valid:', isAddressValid);
+
+      console.log('Validating cart for delivery...');
+      const isCartValid = await validateCartForDelivery();
+      console.log('Cart valid:', isCartValid);
+
+      const allValid = isCODValid && isDeliveryValid && isWarehouseOperational && isAddressValid && isCartValid;
+      console.log('=== VALIDATION COMPLETE ===', {
+        isCODValid,
+        isDeliveryValid,
+        isWarehouseOperational,
+        isAddressValid,
+        isCartValid,
+        allValid
+      });
+
+      return allValid;
+    } catch (error) {
+      console.error('Error during payment validation:', error);
+      return false;
+    }
   };
 
-  // Format delivery charges to 2 decimal places
-  const formatDeliveryChargeWithDecimals = (charge: number): string => {
-    if (charge === 0) {
-      return 'FREE';
-    }
-    return `₹${charge.toFixed(2)}`;
-  };
+
 
   // Fetch delivery settings
   const loadDeliverySettings = async () => {
@@ -626,7 +803,7 @@ export default function PaymentPage() {
     try {
       setIsLoadingAddresses(true);
       setTokenCookie();
-      
+
       const response = await fetch(`/api/user/addresses`, {
         method: 'GET',
         headers: {
@@ -643,16 +820,16 @@ export default function PaymentPage() {
 
       const data = await response.json();
       if (Array.isArray(data.addresses)) {
-        const validAddresses = data.addresses.filter((address: any) => 
-          address && 
+        const validAddresses = data.addresses.filter((address: any) =>
+          address &&
           address.id &&
           (address.building || address.area) &&
-          address.city && 
-          address.state && 
+          address.city &&
+          address.state &&
           address.pincode
         );
         setAddresses(validAddresses);
-        
+
         const defaultAddress = validAddresses.find((addr: Address) => addr.isDefault);
         if (defaultAddress) {
           setSelectedAddress(defaultAddress.id);
@@ -707,7 +884,7 @@ export default function PaymentPage() {
 
   // Prevent background scroll when modal is open
   useEffect(() => {
-    if (showAddressModal || showAddAddressModal) {
+    if (showAddressModal || showAddAddressModal || showDeliveryUnavailableModal || showUndeliverableItemsModal) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
@@ -715,7 +892,7 @@ export default function PaymentPage() {
     return () => {
       document.body.style.overflow = '';
     };
-  }, [showAddressModal, showAddAddressModal]);
+  }, [showAddressModal, showAddAddressModal, showDeliveryUnavailableModal, showUndeliverableItemsModal]);
 
   // Check authentication and fetch addresses
   useEffect(() => {
@@ -727,17 +904,59 @@ export default function PaymentPage() {
     loadDeliverySettings();
   }, [user, token, router]);
 
-  // Redirect if cart is empty
+  // Note: Removed cart empty redirect to allow order completion flow
+
+  // Check for valid warehouse items with improved logic
   useEffect(() => {
-    if (cartItems.length === 0) {
-      router.push('/');
-      return;
+    const validWarehouseItems = Object.keys(itemsByWarehouse).length;
+    const totalCartItems = cartItems.length;
+    
+    // Only show warnings if there are items in cart and we're not in a loading state
+    if (totalCartItems > 0 && !isLoadingCart) {
+      // Add a small delay to avoid showing toasts during rapid cart operations
+      const timeoutId = setTimeout(() => {
+        // Double-check that cart still has items and component is still mounted
+        if (!isMountedRef.current || cartItems.length === 0) {
+          console.log('Component unmounted or cart became empty during validation timeout, skipping validation');
+          return;
+        }
+        
+        const currentValidWarehouseItems = Object.keys(itemsByWarehouse).length;
+        const currentTotalCartItems = cartItems.length;
+        
+        if (currentValidWarehouseItems === 0 && currentTotalCartItems > 0) {
+          console.error('No items with valid warehouse information found in cart');
+          showErrorToast('Some items in your cart have invalid warehouse information. Please refresh the page or clear your cart.', 5000);
+        } else if (currentTotalCartItems > currentValidWarehouseItems) {
+          const invalidItemsCount = currentTotalCartItems - Object.values(itemsByWarehouse).reduce((total, { items }) => total + items.length, 0);
+          // Only show toast if there are actually invalid items (count > 0)
+          if (invalidItemsCount > 0) {
+            console.warn(`${invalidItemsCount} items in cart have invalid warehouse information`);
+            showErrorToast(`${invalidItemsCount} items in your cart have invalid warehouse information and will be excluded from delivery calculation.`, 5000);
+          }
+        }
+      }, 1500); // 1.5 second delay to avoid showing during rapid operations
+
+      return () => clearTimeout(timeoutId);
     }
-  }, [cartItems, router]);
+  }, [itemsByWarehouse, cartItems, isLoadingCart, showErrorToast]);
+
+  // Forward declaration for delivery calculation function
+  const calculateDeliveryRef = useRef<((address: Address) => Promise<void>) | null>(null);
+
+  // Wrapper function that can be used in useEffect dependencies
+  const triggerDeliveryCalculation = useCallback((address: Address) => {
+    if (calculateDeliveryRef.current) {
+      calculateDeliveryRef.current(address);
+    }
+  }, []);
 
   // Calculate delivery when address or payment method changes
   useEffect(() => {
-    if (selectedAddress && addresses.length > 0 && !loadingDelivery && !loadingMixedDelivery) {
+    // Don't calculate delivery if cart is empty
+    if (cartItems.length === 0) return;
+    
+    if (selectedAddress && addresses.length > 0 && !loadingDelivery) {
       const address = addresses.find(addr => addr.id === selectedAddress);
       if (address) {
         const addressKey = getAddressKey(address);
@@ -745,35 +964,28 @@ export default function PaymentPage() {
           console.log('Skipping delivery calculation for previously failed address:', addressKey);
           return;
         }
-        
-        const warehouseIds = Object.keys(itemsByWarehouse);
-        if (warehouseIds.length > 1) {
-          calculateMixedWarehouseDelivery(address);
-        } else {
-          calculateDelivery(address);
-        }
+
+        triggerDeliveryCalculation(address);
       }
     }
-  }, [selectedAddress, addresses, selectedPaymentMethod, itemsByWarehouse, shouldRetryDelivery, failedDeliveryAddresses, loadingDelivery, loadingMixedDelivery, getAddressKey]);
+  }, [selectedAddress, addresses, selectedPaymentMethod, itemsByWarehouse, shouldRetryDelivery, failedDeliveryAddresses, loadingDelivery, getAddressKey, triggerDeliveryCalculation, cartItems.length]);
 
   // Recalculate delivery when discount amount changes (with debounce)
   useEffect(() => {
+    // Don't calculate delivery if cart is empty
+    if (cartItems.length === 0) return;
+    
     if (selectedAddress && addresses.length > 0 && deliveryInfo && !loadingDelivery) {
       const timeoutId = setTimeout(() => {
         const address = addresses.find(addr => addr.id === selectedAddress);
         if (address) {
-          const warehouseIds = Object.keys(itemsByWarehouse);
-          if (warehouseIds.length > 1) {
-            calculateMixedWarehouseDelivery(address);
-          } else {
-            calculateDelivery(address);
-          }
+          triggerDeliveryCalculation(address);
         }
       }, 500);
 
       return () => clearTimeout(timeoutId);
     }
-  }, [discountAmount]);
+  }, [discountAmount, selectedAddress, addresses, deliveryInfo, loadingDelivery, itemsByWarehouse, triggerDeliveryCalculation]);
 
   // Clear failed delivery addresses when user changes address
   useEffect(() => {
@@ -858,123 +1070,45 @@ export default function PaymentPage() {
     }
   };
 
-  // Calculate mixed warehouse delivery charges
-  const calculateMixedWarehouseDelivery = useCallback(async (address: Address) => {
-    if (loadingMixedDelivery) {
-      console.log('Mixed warehouse delivery calculation already in progress, skipping...');
-      return;
-    }
 
-    const addressKey = getAddressKey(address);
-    if (failedDeliveryAddresses.has(addressKey)) {
-      console.log('Skipping mixed warehouse delivery calculation for previously failed address:', addressKey);
-      return;
-    }
-
-    if (!address.lat || !address.lng) {
-      console.log('Address missing coordinates:', address);
-      return;
-    }
-
-    if (!address.pincode) {
-      console.log('Address missing pincode:', address);
-      showErrorToast('Address pincode is required for delivery calculation. Please select a valid address.');
-      return;
-    }
-
-    const lat = Number(address.lat);
-    const lng = Number(address.lng);
-    if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-      console.error('Invalid coordinates:', { lat, lng });
-      return;
-    }
-
-    try {
-      setLoadingMixedDelivery(true);
-      
-      const cartItemsByWarehouse: { [warehouseId: string]: any[] } = {};
-      Object.entries(itemsByWarehouse).forEach(([warehouseId, { items }]) => {
-        cartItemsByWarehouse[warehouseId] = items.map(item => ({
-          id: item.id || item._id,
-          name: item.name,
-          price: item.price,
-          quantity: item.quantity,
-          warehouse: item.warehouse
-        }));
-      });
-
-      console.log('Calculating mixed warehouse delivery:', {
-        customerLat: lat,
-        customerLng: lng,
-        cartItemsByWarehouse,
-        paymentMethod: selectedPaymentMethod === 'cod' ? 'cod' : 'online',
-        customerPincode: address.pincode
-      });
-
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/delivery/calculate-mixed`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          customerLat: lat,
-          customerLng: lng,
-          cartItemsByWarehouse,
-          paymentMethod: selectedPaymentMethod === 'cod' ? 'cod' : 'online',
-          customerPincode: address.pincode
-        })
-      });
-
-      const data = await response.json();
-      
-      if (data.success) {
-        setMixedWarehouseDelivery(data);
-        console.log('Mixed warehouse delivery calculated:', data);
-        
-        const addressKey = getAddressKey(address);
-        setFailedDeliveryAddresses(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(addressKey);
-          return newSet;
-        });
-      } else {
-        console.error('Mixed warehouse delivery calculation failed:', data.error);
-        
-        const addressKey = getAddressKey(address);
-        setFailedDeliveryAddresses(prev => new Set(prev).add(addressKey));
-        
-        // Handle specific error cases for pincode-based delivery
-        let errorMessage = data.error || 'Unable to calculate delivery for mixed warehouse items. Please try a different address.';
-        if (errorMessage.includes('No warehouse available')) {
-          errorMessage = `Delivery not available to pincode ${address.pincode}. Please check if this pincode is covered by our delivery network or try a different address.`;
-        }
-        
-        showErrorToast(errorMessage);
-        setMixedWarehouseDelivery(null);
-      }
-    } catch (error) {
-      console.error('Error calculating mixed warehouse delivery:', error);
-      
-      const addressKey = getAddressKey(address);
-      setFailedDeliveryAddresses(prev => new Set(prev).add(addressKey));
-      
-      showErrorToast('Unable to calculate delivery for mixed warehouse items. Please try a different address.');
-      setMixedWarehouseDelivery(null);
-    } finally {
-      setLoadingMixedDelivery(false);
-    }
-  }, [loadingMixedDelivery, getAddressKey, failedDeliveryAddresses, itemsByWarehouse, selectedPaymentMethod, showErrorToast]);
 
   // Calculate delivery charges
   const calculateDelivery = useCallback(async (address: Address) => {
-    if (loadingDelivery) {
-      console.log('Delivery calculation already in progress, skipping...');
+    if (loadingDelivery || isLoadingCart) {
+      console.log('Delivery calculation skipped - loading in progress...');
+      return;
+    }
+
+    // Skip calculation if cart is empty
+    if (cartItems.length === 0) {
+      console.log('Delivery calculation skipped - cart is empty');
       return;
     }
 
     const addressKey = getAddressKey(address);
     if (failedDeliveryAddresses.has(addressKey)) {
       console.log('Skipping delivery calculation for previously failed address:', addressKey);
+      return;
+    }
+
+    // Check if this is the same calculation as the last one
+    const warehouseIds = Object.keys(itemsByWarehouse);
+    const currentCalculation = {
+      addressKey,
+      cartTotal: cartTotal - discountAmount,
+      discountAmount,
+      paymentMethod: selectedPaymentMethod === 'cod' ? 'cod' : 'online',
+      warehouseIds: warehouseIds.sort(),
+      timestamp: Date.now()
+    };
+
+    if (lastDeliveryCalculation.current &&
+      lastDeliveryCalculation.current.addressKey === currentCalculation.addressKey &&
+      lastDeliveryCalculation.current.cartTotal === currentCalculation.cartTotal &&
+      lastDeliveryCalculation.current.paymentMethod === currentCalculation.paymentMethod &&
+      JSON.stringify(lastDeliveryCalculation.current.warehouseIds) === JSON.stringify(currentCalculation.warehouseIds) &&
+      (Date.now() - lastDeliveryCalculation.current.timestamp) < 5000) { // 5 second cooldown
+      console.log('Skipping duplicate delivery calculation');
       return;
     }
 
@@ -999,60 +1133,114 @@ export default function PaymentPage() {
       discountAmount,
       paymentMethod: selectedPaymentMethod
     });
-    
+
     try {
       setLoadingDelivery(true);
-      
+
       if (!address.lat || !address.lng || isNaN(Number(address.lat)) || isNaN(Number(address.lng))) {
         throw new Error('Invalid address coordinates. Please select a valid address.');
       }
-      
+
       if (!address.pincode) {
         throw new Error('Address pincode is required for delivery calculation. Please select a valid address.');
       }
-      
-      console.log('Calculating delivery for:', { 
-        lat: Number(address.lat), 
-        lng: Number(address.lng), 
-        cartTotal: cartTotal - discountAmount, 
+
+      // Check if we have mixed warehouse items
+      const warehouseIds = Object.keys(itemsByWarehouse);
+      console.log('Cart has items from warehouses:', warehouseIds);
+
+      // Validate warehouse IDs
+      const invalidWarehouseIds = warehouseIds.filter(id => 
+        !id || 
+        id === 'unknown' || 
+        id === 'undefined' || 
+        id === 'null' ||
+        id.length < 12 // MongoDB ObjectId should be at least 12 characters
+      );
+
+      if (invalidWarehouseIds.length > 0) {
+        console.error('Invalid warehouse IDs found:', invalidWarehouseIds);
+        // Only show error if there are valid items but some have invalid warehouse info
+        if (warehouseIds.length > invalidWarehouseIds.length) {
+          showErrorToast('Some items in your cart have invalid warehouse information. Please refresh the page or clear your cart.', 10000);
+          return; // Don't proceed with calculation but don't throw error
+        } else {
+          // All warehouse IDs are invalid, likely during cart clearing
+          console.log('All warehouse IDs invalid, likely during cart operations');
+          return;
+        }
+      }
+
+      if (warehouseIds.length === 0) {
+        // Don't throw error if cart is empty or being cleared, just return silently
+        console.log('No warehouse items found, skipping delivery calculation');
+        return; // Exit silently - this is normal during cart operations
+      }
+
+      // Since we don't allow mixed warehouses, there should only be one warehouse
+      if (warehouseIds.length > 1) {
+        throw new Error('Mixed warehouse orders are not allowed. Please ensure all items are from the same warehouse.');
+      }
+
+      // Single warehouse delivery
+      const singleWarehouseId = warehouseIds.length === 1 ? warehouseIds[0] : undefined;
+
+      console.log('Calculating delivery for:', {
+        lat: Number(address.lat),
+        lng: Number(address.lng),
+        cartTotal: cartTotal - discountAmount,
         paymentMethod: selectedPaymentMethod === 'cod' ? 'cod' : 'online',
-        pincode: address.pincode
+        pincode: address.pincode,
+        warehouseId: singleWarehouseId
       });
-      
-      const timeoutPromise = new Promise((_, reject) => 
+
+      const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Delivery calculation timeout')), 15000)
       );
-      
+
       try {
+        // Prepare cart items for delivery calculation
+        const cartItemsForDelivery = cartItemsWithCODInfo.map((item: any) => ({
+          _id: item._id || item.id,
+          name: item.name,
+          warehouseId: item.warehouseId || item.warehouse?._id || item.warehouse?.id,
+          quantity: item.quantity,
+          warehouse: item.warehouse
+        }));
+
         const result = await Promise.race([
           calculateDeliveryChargeAPI(
             lat,
             lng,
             cartTotal - discountAmount,
             selectedPaymentMethod === 'cod' ? 'cod' : 'online',
-            undefined, // warehouseId
-            address.pincode // customerPincode
+            singleWarehouseId, // Pass the specific warehouse ID
+            address.pincode, // customerPincode
+            cartItemsForDelivery // Pass cart items
           ),
           timeoutPromise
         ]) as DeliveryCalculationResult | null;
-        
+
         console.log('Delivery API Response:', result);
-        
+
         if (!result) {
           throw new Error('No response from delivery calculation API');
         }
-        
+
         if (!result.success) {
           // Handle specific error cases for pincode-based delivery
           let errorMessage = result.error || 'Failed to calculate delivery charges';
           if (errorMessage.includes('No warehouse available')) {
-            errorMessage = `Delivery not available to pincode ${address.pincode}. Please check if this pincode is covered by our delivery network or try a different address.`;
+            // Show modal for pincode delivery unavailability
+            setUnavailablePincode(address.pincode);
+            setShowDeliveryUnavailableModal(true);
+            return;
           }
           throw new Error(errorMessage);
         }
-        
+
         console.log('OSRM Delivery calculation result:', result);
-        
+
         if (result && result.success && typeof result.distance === 'number') {
           const enhancedDeliveryInfo: DeliveryInfo = {
             distance: result.distance,
@@ -1064,26 +1252,33 @@ export default function PaymentPage() {
             freeDeliveryEligible: result.freeDeliveryEligible || false,
             amountNeededForFreeDelivery: result.amountNeededForFreeDelivery || 0,
             calculationMethod: result.calculationMethod || 'osrm',
-            estimatedDeliveryTime: result.duration ? 
-              getDeliveryTimeEstimate(result.distance, result.duration) : 
+            estimatedDeliveryTime: result.duration ?
+              getDeliveryTimeEstimate(result.distance, result.duration) :
               getDeliveryTimeEstimate(result.distance),
             route: result.route,
             warehouseSettings: result.warehouseSettings,
             warehouse: result.warehouse,
             settings: result.settings
           };
-          
+
           console.log('Enhanced delivery info with OSRM:', enhancedDeliveryInfo);
           setDeliveryInfo(enhancedDeliveryInfo);
-          
+
+          // Store this calculation to prevent duplicates
+          lastDeliveryCalculation.current = currentCalculation;
+
           const addressKey = getAddressKey(address);
           setFailedDeliveryAddresses(prev => {
             const newSet = new Set(prev);
             newSet.delete(addressKey);
             return newSet;
           });
-          
-          if (result.calculationMethod === 'osrm') {
+
+          // Only show toast if this is a new calculation (different distance or warehouse)
+          if (result.calculationMethod === 'osrm' &&
+            (!deliveryInfo ||
+              Math.abs(deliveryInfo.distance - result.distance) > 0.1 ||
+              deliveryInfo.warehouse?.name !== result.warehouse?.name)) {
             showSuccessToast(`Delivery calculated: ${result.distance.toFixed(2)}km, ${result.duration?.toFixed(0) || 'N/A'} min via ${result.warehouse?.name || 'warehouse'}`);
           }
         } else if (result && result.error) {
@@ -1095,50 +1290,82 @@ export default function PaymentPage() {
         }
       } catch (error) {
         console.error('Error calculating delivery with OSRM:', error);
-        
+
         const addressKey = getAddressKey(address);
         setFailedDeliveryAddresses(prev => new Set(prev).add(addressKey));
-        
-        showErrorToast(error instanceof Error ? error.message : 'Unable to calculate delivery for this address. Please try a different address or contact support.');
-        
+
+        // Check if this is a pincode delivery unavailability error
+        const errorMessage = error instanceof Error ? error.message : '';
+        if (errorMessage.includes('Delivery not available to pincode') || errorMessage.includes('No warehouse available')) {
+          setUnavailablePincode(address.pincode);
+          setShowDeliveryUnavailableModal(true);
+        } else {
+          showErrorToast(errorMessage || 'Unable to calculate delivery for this address. Please try a different address or contact support.');
+        }
+
         setDeliveryInfo(null);
       }
     } catch (error) {
       console.error('Error in delivery calculation:', error);
-      
+
       const addressKey = getAddressKey(address);
       setFailedDeliveryAddresses(prev => new Set(prev).add(addressKey));
+
+      // Check if this is a pincode delivery unavailability error
+      const errorMessage = error instanceof Error ? error.message : '';
+      if (errorMessage.includes('Delivery not available to pincode') || errorMessage.includes('No warehouse available')) {
+        setUnavailablePincode(address.pincode);
+        setShowDeliveryUnavailableModal(true);
+      } else {
+        showErrorToast(errorMessage || 'Unable to calculate delivery for this address. Please try a different address or contact support.');
+      }
       
-      showErrorToast(error instanceof Error ? error.message : 'Unable to calculate delivery for this address. Please try a different address or contact support.');
       setDeliveryInfo(null);
     } finally {
       setLoadingDelivery(false);
     }
-  }, [loadingDelivery, getAddressKey, failedDeliveryAddresses, showErrorToast, cartTotal, discountAmount, selectedPaymentMethod, showSuccessToast]);
+  }, [loadingDelivery, isLoadingCart, cartItems, getAddressKey, failedDeliveryAddresses, showErrorToast, cartTotal, discountAmount, selectedPaymentMethod, showSuccessToast, itemsByWarehouse, cartItemsWithCODInfo]);
 
-  // Calculate tax for cart items
+  // Assign function to ref after it is declared
+  useEffect(() => {
+    calculateDeliveryRef.current = calculateDelivery;
+  }, [calculateDelivery]);
+
+  // Calculate tax for cart items from single warehouse
   const calculateTaxForCart = () => {
     if (!selectedAddress || addresses.length === 0) return null;
-    
+
     const selectedAddr = addresses.find(addr => addr.id === selectedAddress);
     if (!selectedAddr) return null;
+
+    const customerState = selectedAddr.state || '';
+
+    // Since we only have one warehouse now, get the warehouse info
+    const warehouseEntries = Object.entries(itemsByWarehouse);
+    if (warehouseEntries.length === 0) return null;
+
+    const [warehouseId, { items, warehouse }] = warehouseEntries[0];
+    const warehouseState = extractStateFromAddress(warehouse.address || '');
     
-    const warehouseState = "Delhi";
-    const isInterState = isInterStateTransaction(selectedAddr.state, warehouseState);
-    
-    const cartItemsForTax = cartItemsWithCODInfo.map((item: any) => ({
+    // Determine if this is interstate delivery
+    const isInterState = !!(customerState && warehouseState &&
+      customerState.toLowerCase().trim() !== warehouseState.toLowerCase().trim());
+
+    const itemsForTax = items.map((item: any) => ({
       price: item.price,
       priceIncludesTax: item.priceIncludesTax || false,
       tax: item.tax ? {
-        id: item.tax._id,
+        id: item.tax._id || item.tax.id,
         name: item.tax.name,
         percentage: item.tax.percentage,
         description: item.tax.description
       } : null,
       quantity: item.quantity
     }));
-    
-    return calculateCartTax(cartItemsForTax, isInterState);
+
+    const taxCalc = calculateCartTax(itemsForTax, isInterState, warehouseState, customerState);
+
+    return taxCalc;
   };
 
   // Calculate tax when cart items or address changes
@@ -1148,50 +1375,233 @@ export default function PaymentPage() {
   }, [cartItems, selectedAddress, addresses]);
 
   // Calculate final total with discount, tax, and delivery
-  const subtotalAfterDiscount = cartTotal - discountAmount;
+  // For tax calculation, we need to use the proper subtotal and tax amounts
   const taxAmount = taxCalculation?.totalTax || 0;
+  const subtotalBeforeTax = taxCalculation?.subtotal || cartTotal;
   
-  const deliveryCharge = mixedWarehouseDelivery?.totalDeliveryCharge || deliveryInfo?.deliveryCharge || 0;
-  const finalTotalWithDelivery = subtotalAfterDiscount + taxAmount + deliveryCharge;
+  // Apply discount to subtotal before tax
+  const subtotalAfterDiscount = subtotalBeforeTax - discountAmount;
+  
+  // Final total = subtotal after discount + tax + delivery + COD charge
+  const totalDeliveryCharge = deliveryInfo?.totalDeliveryCharge || 0;
+  const codCharge = selectedPaymentMethod === 'cod' ? (deliveryInfo?.codCharge || 0) : 0;
+  const finalTotalWithDelivery = subtotalAfterDiscount + taxAmount + totalDeliveryCharge + codCharge;
 
   const handlePayment = async () => {
-    setIsValidatingPayment(true);
+    console.log('=== PAYMENT PROCESS STARTED ===');
+    console.log('Cart items:', cartItemsWithCODInfo.length);
+    console.log('Selected address:', selectedAddress);
+    console.log('Payment method:', selectedPaymentMethod);
     
-    const isValid = await validatePayment();
-    
-    if (!isValid) {
-      setIsValidatingPayment(false);
-      
-      if (validationErrors.deliveryNotAvailable) {
-        toast.error('Delivery not available to your location. Please select a different address.', {
-          duration: 5000,
-          icon: '🚫'
-        });
-      } else if (validationErrors.codNotAvailable) {
-        toast.error('Cash on Delivery is not available for some items in your cart.', {
-          duration: 4000,
-          icon: '💳'
-        });
-      } else if (validationErrors.warehouseNotOperational) {
-        toast.error('Our warehouse is currently closed. Please place your order during operational hours.', {
-          duration: 4000,
-          icon: '🕒'
-        });
-      } else if (validationErrors.addressRequired) {
-        toast.error('Please select a delivery address to continue.', {
-          duration: 3000,
-          icon: '📍'
-        });
-      } else {
-        toast.error('Please resolve the validation errors before proceeding.');
-      }
+    // Prevent multiple clicks
+    if (isValidatingPayment) {
+      console.log('Payment already in progress, ignoring click');
       return;
     }
+    
+    setIsValidatingPayment(true);
+    console.log('Validation state set to true');
+
+    // Add a safety timeout to prevent indefinite loading
+    let timeoutId: NodeJS.Timeout | undefined = undefined;
+    let emergencyTimeoutId: NodeJS.Timeout | undefined = undefined;
 
     try {
+      console.log('Starting validation...');
+      
+      // TEMPORARY: Skip validation for debugging - uncomment the line below to bypass validation
+      // const isValid = true;
+      const isValid = await validatePayment();
+      console.log('Payment validation result:', isValid);
+
+      if (!isValid) {
+        console.log('Validation failed, stopping payment process');
+        setIsValidatingPayment(false);
+
+        if (validationErrors.deliveryNotAvailable) {
+          toast.error('Delivery not available to your location. Please select a different address.', {
+            duration: 5000,
+            icon: '🚫'
+          });
+        } else if (validationErrors.codNotAvailable) {
+          toast.error('Cash on Delivery is not available for some items in your cart.', {
+            duration: 4000,
+            icon: '💳'
+          });
+        } else if (validationErrors.warehouseNotOperational) {
+          toast.error('Our warehouse is currently closed. Please place your order during operational hours.', {
+            duration: 4000,
+            icon: '🕒'
+          });
+        } else if (validationErrors.addressRequired) {
+          toast.error('Please select a delivery address to continue.', {
+            duration: 3000,
+            icon: '📍'
+          });
+        } else {
+          toast.error('Please resolve the validation errors before proceeding.');
+        }
+        return;
+      }
+
+      console.log('Validation passed, proceeding with order creation...');
+
+      // Set up timeout for order creation
+      timeoutId = setTimeout(() => {
+        if (isMountedRef.current && isValidatingPayment) {
+          console.error('Order creation timeout after 15 seconds');
+          setIsValidatingPayment(false);
+          toast.error('Order creation is taking too long. Please try again.');
+        }
+      }, 15000); // 15 second timeout
+
+      // Emergency fallback timeout - force clear loading state
+      emergencyTimeoutId = setTimeout(() => {
+        if (isMountedRef.current && isValidatingPayment) {
+          console.error('EMERGENCY: Forcing clear of loading state after 20 seconds');
+          setIsValidatingPayment(false);
+          toast.error('Something went wrong during order processing. Please check your order history.');
+        }
+      }, 20000); // 20 second emergency timeout
+
+      // Get selected address
+      const selectedAddressData = addresses.find(addr => addr.id === selectedAddress);
+      if (!selectedAddressData) {
+        if (timeoutId) clearTimeout(timeoutId);
+        if (emergencyTimeoutId) clearTimeout(emergencyTimeoutId);
+        toast.error('Please select a delivery address.');
+        setIsValidatingPayment(false);
+        return;
+      }
+
+      // Prepare order data
+      const orderData = {
+        items: cartItemsWithCODInfo.map(item => ({
+          productId: item.id || item._id,
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+          image: item.image,
+          category: item.category,
+          categoryId: item.categoryId,
+          brand: item.brand,
+          brandId: item.brandId,
+          codAvailable: item.codAvailable,
+          priceIncludesTax: item.priceIncludesTax,
+          tax: item.tax,
+          warehouse: item.warehouse,
+          warehouseId: item.warehouseId || item.warehouse?._id || item.warehouse?.id
+        })),
+        
+        customerInfo: {
+          name: user?.name || selectedAddressData.name || '',
+          email: user?.email || '',
+          phone: user?.phone || selectedAddressData.phone || ''
+        },
+        
+        pricing: {
+          subtotal: taxCalculation?.subtotal || cartTotal,
+          taxAmount: taxCalculation?.totalTax || 0,
+          discountAmount: discountAmount,
+          deliveryCharge: deliveryInfo?.totalDeliveryCharge || 0,
+          codCharge: selectedPaymentMethod === 'cod' ? (deliveryInfo?.codCharge || 0) : 0,
+          total: Math.ceil(finalTotalWithDelivery) // Round up to avoid decimal payments
+        },
+        
+        promoCode: appliedPromoCode ? {
+          code: appliedPromoCode.code,
+          discountAmount: discountAmount,
+          discountType: appliedPromoCode.discountType
+        } : undefined,
+        
+        taxCalculation: taxCalculation ? {
+          isInterState: taxCalculation.isInterState,
+          totalTax: taxCalculation.totalTax,
+          subtotal: taxCalculation.subtotal,
+          totalCGST: taxCalculation.totalCGST,
+          totalSGST: taxCalculation.totalSGST,
+          totalIGST: taxCalculation.totalIGST,
+          customerState: selectedAddressData.state,
+          warehouseState: singleWarehouse ? extractStateFromAddress(singleWarehouse.address || '') : '',
+          taxBreakdown: taxCalculation.taxBreakdown
+        } : undefined,
+        
+        deliveryInfo: {
+          address: selectedAddressData,
+          distance: deliveryInfo?.distance || 0,
+          estimatedDeliveryTime: deliveryInfo?.estimatedDeliveryTime || '',
+          deliveryCharge: deliveryInfo?.totalDeliveryCharge || 0,
+          codCharge: selectedPaymentMethod === 'cod' ? (deliveryInfo?.codCharge || 0) : 0,
+          isFreeDelivery: deliveryInfo?.isFreeDelivery || false
+        },
+        
+        paymentInfo: {
+          method: selectedPaymentMethod === 'cod' ? 'cod' : 'online',
+          paymentMethod: selectedPaymentMethod,
+          status: selectedPaymentMethod === 'cod' ? 'pending' : 'pending'
+        },
+        
+        warehouseInfo: singleWarehouse ? {
+          warehouseId: singleWarehouse._id || singleWarehouse.id,
+          warehouseName: singleWarehouse.name,
+          warehouseAddress: singleWarehouse.address || '',
+          is24x7Delivery: singleWarehouse.deliverySettings?.is24x7Delivery || false
+        } : undefined,
+        
+        notes: {
+          customerNotes: '',
+          deliveryInstructions: selectedAddressData.additionalInstructions || ''
+        }
+      };
+
+      // Validate API URL and token before making the call
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+      if (!apiUrl) {
+        throw new Error('API URL is not configured');
+      }
+      
+      if (!token) {
+        throw new Error('Authentication token is missing');
+      }
+
+      // Create the order with proper error handling
+      console.log('Creating order with data:', orderData);
+      console.log('API URL:', `${apiUrl}/orders/create`);
+      console.log('Token present:', !!token);
+      
+      const response = await fetch(`${apiUrl}/orders/create`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(orderData)
+      }).catch(networkError => {
+        console.error('Network error during order creation:', networkError);
+        throw new Error(`Network error: ${networkError.message}`);
+      });
+
+      console.log('Order creation response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Order creation failed:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorText
+        });
+        throw new Error(`Failed to create order: ${response.status} ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('Order creation result:', result);
+      console.log('Order creation SUCCESS! Processing success flow...');
+
+      // Apply promo code if exists
       if (appliedPromoCode && user?._id) {
         try {
-          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/promocodes/apply`, {
+          await fetch(`${process.env.NEXT_PUBLIC_API_URL}/promocodes/apply`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -1199,28 +1609,81 @@ export default function PaymentPage() {
             body: JSON.stringify({
               code: appliedPromoCode.code,
               userId: user._id,
-              orderId: `ORDER_${Date.now()}`
+              orderId: result.order.orderId
             }),
           });
-
-          if (!response.ok) {
-            console.error('Failed to apply promo code');
-          }
         } catch (error) {
           console.error('Error applying promo code:', error);
         }
       }
 
-      console.log('Processing payment with method:', selectedPaymentMethod);
-      console.log('Final amount:', finalTotalWithDelivery);
-      console.log('Delivery info:', deliveryInfo);
+      // Prepare success modal data BEFORE clearing cart to avoid state issues
+      console.log('Preparing success modal data...');
+      const successData = {
+        orderId: result?.order?.orderId || 'Unknown',
+        total: Math.ceil(finalTotalWithDelivery || 0), // Use Math.ceil to match backend calculation
+        paymentMethod: selectedPaymentMethod,
+        estimatedDelivery: deliveryInfo?.estimatedDeliveryTime,
+        itemCount: cartItemsWithCODInfo.length
+      };
+      console.log('Success data prepared:', successData);
+
+      // Clear both timeouts since we succeeded
+      if (timeoutId) {
+        console.log('Clearing timeout...');
+        clearTimeout(timeoutId);
+      }
+      if (emergencyTimeoutId) clearTimeout(emergencyTimeoutId);
+
+      // Handle success regardless of component mount state
+      console.log('Checking if component is mounted:', isMountedRef.current);
       
-      toast.success('Payment validation successful! Processing payment...');
+      if (isMountedRef.current) {
+        console.log('Component mounted - Setting success modal state...');
+        setIsValidatingPayment(false); // Stop loading first
+        console.log('Loading state set to false');
+        
+        setSuccessOrderData(successData);
+        console.log('Success order data set');
+        
+        setShowSuccessModal(true);
+        console.log('Success modal visibility set to true');
+
+        // Clear the cart after setting success modal (prevents state access issues)
+        setTimeout(() => {
+          if (isMountedRef.current) {
+            console.log('Clearing cart context and Redux...');
+            dispatch(clearCart());
+            clearCartContext();
+          }
+        }, 100);
+      } else {
+        console.log('Component not mounted - Still showing success modal...');
+        // Component unmounted during order creation, but order was successful
+        // Clear cart but still show the modal by persisting data
+        dispatch(clearCart());
+        clearCartContext();
+        
+        // Store success data in localStorage to persist across navigation
+        localStorage.setItem('orderSuccessData', JSON.stringify(successData));
+        
+        // Redirect to home page and trigger modal there
+        setTimeout(() => {
+          router.push('/?showOrderSuccess=true');
+        }, 1000);
+      }
+
     } catch (error) {
-      console.error('Payment processing error:', error);
-      toast.error('Payment processing failed. Please try again.');
-    } finally {
-      setIsValidatingPayment(false);
+      // Clear both timeouts since we're handling the error
+      if (timeoutId) clearTimeout(timeoutId);
+      if (emergencyTimeoutId) clearTimeout(emergencyTimeoutId);
+      
+      console.error('Order creation error:', error);
+      if (isMountedRef.current) {
+        const errorMessage = error instanceof Error ? error.message : 'Failed to create order. Please try again.';
+        toast.error(errorMessage);
+        setIsValidatingPayment(false);
+      }
     }
   };
 
@@ -1235,11 +1698,10 @@ export default function PaymentPage() {
                 <div
                   key={wallet.name}
                   onClick={() => setSelectedWallet(wallet.name)}
-                  className={`p-4 border-2 rounded-xl cursor-pointer transition-all ${
-                    selectedWallet === wallet.name
+                  className={`p-4 border-2 rounded-xl cursor-pointer transition-all ${selectedWallet === wallet.name
                       ? 'border-green-500 bg-green-50'
                       : 'border-gray-200 hover:border-gray-300'
-                  }`}
+                    }`}
                 >
                   <div className="text-center">
                     <div className="w-12 h-12 bg-gray-100 rounded-lg mx-auto mb-2 flex items-center justify-center">
@@ -1317,11 +1779,10 @@ export default function PaymentPage() {
                 <div
                   key={bank}
                   onClick={() => setSelectedBank(bank)}
-                  className={`p-3 border rounded-lg cursor-pointer transition-all flex items-center justify-between ${
-                    selectedBank === bank
+                  className={`p-3 border rounded-lg cursor-pointer transition-all flex items-center justify-between ${selectedBank === bank
                       ? 'border-green-500 bg-green-50'
                       : 'border-gray-200 hover:border-gray-300'
-                  }`}
+                    }`}
                 >
                   <span className="font-medium">{bank}</span>
                   {selectedBank === bank && <Check className="h-5 w-5 text-green-500" />}
@@ -1335,7 +1796,7 @@ export default function PaymentPage() {
         return (
           <div className="space-y-4">
             <h3 className="font-semibold text-gray-900 mb-4">UPI Payment</h3>
-            
+
             <div className="border-2 border-green-500 bg-green-50 rounded-lg p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -1357,7 +1818,7 @@ export default function PaymentPage() {
                   onChange={(e) => setNewUpiId(e.target.value)}
                   className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                 />
-                <Button 
+                <Button
                   onClick={() => {
                     if (newUpiId) {
                       setUpiId(newUpiId);
@@ -1528,7 +1989,7 @@ export default function PaymentPage() {
             fetchAddress(lat, lng, setAddressForm);
           }
         },
-        () => {}
+        () => { }
       );
     }
   }, [showAddAddressModal]);
@@ -1574,7 +2035,19 @@ export default function PaymentPage() {
           fetchAddress(lat, lng, setAddressForm);
         }
       },
-      () => {}
+      () => { }
+    );
+  }
+
+  // Show loading if user is not authenticated
+  if (!user || !token) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-12 w-12 animate-spin text-green-600 mx-auto mb-4" />
+          <p className="text-gray-600">Redirecting to login...</p>
+        </div>
+      </div>
     );
   }
 
@@ -1600,29 +2073,27 @@ export default function PaymentPage() {
             {/* Payment Method Selection */}
             <div className="bg-white rounded-2xl p-6 shadow-xl border border-gray-100">
               <h2 className="text-xl font-bold text-gray-900 mb-6">Select Payment Method</h2>
-              
+
               <div className="space-y-3 mb-6">
                 {paymentMethods.map((method) => {
                   const IconComponent = method.icon;
-                  const isCODDisabled = method.id === 'cod' && validationErrors.codNotAvailable;
-                  
+                  const isCODDisabled = method.id === 'cod' && (!isCODAvailableForCart || validationErrors.codNotAvailable);
+
                   return (
                     <div
                       key={method.id}
                       onClick={() => !isCODDisabled && setSelectedPaymentMethod(method.id)}
-                      className={`p-4 border-2 rounded-xl transition-all ${
-                        isCODDisabled 
+                      className={`p-4 border-2 rounded-xl transition-all ${isCODDisabled
                           ? 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60'
                           : selectedPaymentMethod === method.id
                             ? 'border-green-500 bg-green-50 cursor-pointer'
                             : 'border-gray-200 hover:border-gray-300 cursor-pointer'
-                      }`}
+                        }`}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
-                          <div className={`p-2 rounded-lg ${
-                            selectedPaymentMethod === method.id ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-600'
-                          }`}>
+                          <div className={`p-2 rounded-lg ${selectedPaymentMethod === method.id ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-600'
+                            }`}>
                             <IconComponent className="h-5 w-5" />
                           </div>
                           <div>
@@ -1637,9 +2108,8 @@ export default function PaymentPage() {
                             <p className="text-sm text-gray-600">{method.description}</p>
                           </div>
                         </div>
-                        <ChevronRight className={`h-5 w-5 transition-transform ${
-                          selectedPaymentMethod === method.id ? 'rotate-90 text-green-500' : 'text-gray-400'
-                        }`} />
+                        <ChevronRight className={`h-5 w-5 transition-transform ${selectedPaymentMethod === method.id ? 'rotate-90 text-green-500' : 'text-gray-400'
+                          }`} />
                       </div>
                     </div>
                   );
@@ -1665,41 +2135,16 @@ export default function PaymentPage() {
               </div>
             )}
 
-            {/* Validation Errors Display */}
-            {Object.values(validationErrors).some(error => error) && (
-              <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-                <h3 className="font-semibold text-red-800 mb-2 flex items-center gap-2">
-                  <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                  </svg>
-                  Please resolve the following issues:
-                </h3>
-                <ul className="space-y-1 text-sm text-red-700">
-                  {validationErrors.addressRequired && (
-                    <li>• {validationErrors.addressRequired}</li>
-                  )}
-                  {validationErrors.codNotAvailable && (
-                    <li>• {validationErrors.codNotAvailable}</li>
-                  )}
-                  {validationErrors.deliveryNotAvailable && (
-                    <li>• {validationErrors.deliveryNotAvailable}</li>
-                  )}
-                  {validationErrors.warehouseNotOperational && (
-                    <li>• {validationErrors.warehouseNotOperational}</li>
-                  )}
-                </ul>
-              </div>
-            )}
+
 
             {/* Pay Now Button */}
-            <Button 
+            <Button
               onClick={handlePayment}
               disabled={isValidatingPayment || loadingDelivery || Object.values(validationErrors).some(error => error)}
-              className={`w-full py-4 text-lg rounded-xl shadow-lg transition-all duration-300 ${
-                isValidatingPayment || loadingDelivery || Object.values(validationErrors).some(error => error)
+              className={`w-full py-4 text-lg rounded-xl shadow-lg transition-all duration-300 ${isValidatingPayment || loadingDelivery || Object.values(validationErrors).some(error => error)
                   ? 'bg-gray-400 cursor-not-allowed opacity-60'
                   : 'bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white hover:shadow-xl hover:scale-105'
-              }`}
+                }`}
             >
               {isValidatingPayment ? (
                 <div className="flex items-center gap-2 text-white">
@@ -1711,10 +2156,13 @@ export default function PaymentPage() {
                   <Loader2 className="h-5 w-5 animate-spin" />
                   Calculating Delivery...
                 </div>
-              ) : Object.values(validationErrors).some(error => error) ? (
-                <span className="text-gray-600">Resolve Issues to Continue</span>
               ) : (
-                <span className="text-white">Pay ₹{finalTotalWithDelivery.toFixed(2)}</span>
+                <span className={Object.values(validationErrors).some(error => error) ? "text-gray-600" : "text-white"}>
+                  {selectedPaymentMethod === 'cod' 
+                    ? `Place Your Order - ₹${Math.ceil(finalTotalWithDelivery)}`
+                    : `Pay ₹${Math.ceil(finalTotalWithDelivery)}`
+                  }
+                </span>
               )}
             </Button>
           </div>
@@ -1736,7 +2184,7 @@ export default function PaymentPage() {
                   Change
                 </Button>
               </div>
-              
+
               {isLoadingAddresses ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
@@ -1775,7 +2223,7 @@ export default function PaymentPage() {
                       <div className="text-sm text-gray-700 leading-relaxed">
                         <p>
                           {addresses.find(addr => addr.id === selectedAddress)?.building}
-                          {addresses.find(addr => addr.id === selectedAddress)?.floor && `, Floor ${addresses.find(addr => addr.id === selectedAddress)?.floor}`}, 
+                          {addresses.find(addr => addr.id === selectedAddress)?.floor && `, Floor ${addresses.find(addr => addr.id === selectedAddress)?.floor}`},
                           {addresses.find(addr => addr.id === selectedAddress)?.area}
                           {addresses.find(addr => addr.id === selectedAddress)?.landmark && `, Near ${addresses.find(addr => addr.id === selectedAddress)?.landmark}`}
                         </p>
@@ -1801,141 +2249,137 @@ export default function PaymentPage() {
             {/* Order Summary */}
             <div className="bg-white rounded-2xl p-6 shadow-xl border border-gray-100">
               <h2 className="text-lg font-bold text-gray-900 mb-4">Order Summary</h2>
-              
-              {/* Items grouped by warehouse */}
-              <div className="space-y-4 mb-5">
-                {Object.entries(itemsByWarehouse).map(([warehouseId, { items, warehouse }]) => {
-                  const warehouseSubtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-                  const warehouseType = warehouse.deliverySettings?.is24x7Delivery ? 'Global/24x7' : 'Custom Hour';
-                  
-                  return (
-                    <div key={warehouseId} className="border border-gray-200 rounded-lg p-4">
-                      {/* Warehouse Header */}
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-semibold text-gray-800">{warehouse.name}</h3>
-                          <Badge variant={warehouse.deliverySettings?.is24x7Delivery ? "default" : "secondary"} className="text-xs">
-                            {warehouseType}
-                          </Badge>
-                        </div>
-                        <span className="text-sm font-medium text-gray-600">
-                          ₹{warehouseSubtotal.toFixed(2)}
-                        </span>
+
+              {/* Single Warehouse Order Items */}
+              {Object.entries(itemsByWarehouse).map(([warehouseId, { items, warehouse }]) => {
+                const isGlobal = warehouse.deliverySettings?.is24x7Delivery === true;
+                
+                return (
+                  <div key={warehouseId} className="mb-6">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="flex items-center gap-2">
+                        {isGlobal ? (
+                          <Globe className="h-4 w-4 text-blue-600" />
+                        ) : (
+                          <Store className="h-4 w-4 text-green-600" />
+                        )}
+                        <h3 className="font-semibold text-gray-900">{warehouse.name}</h3>
                       </div>
-                      
-                      {/* Items from this warehouse */}
-                      <div className="space-y-2">
-                        {items.map((item) => (
-                          <div key={item.id} className="flex items-center gap-3">
-                            {/* Product Image */}
-                            <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden">
-                              {item.image ? (
-                                <Image
-                                  src={item.image}
-                                  alt={item.name}
-                                  width={40}
-                                  height={40}
-                                  className="object-cover w-10 h-10"
-                                />
-                              ) : (
-                                <Image
-                                  src="/placeholder.svg"
-                                  alt="No image"
-                                  width={40}
-                                  height={40}
-                                  className="object-cover w-10 h-10"
-                                />
-                              )}
-                            </div>
-                            <div className="flex-1">
-                              <h4 className="font-medium text-gray-900 text-sm leading-tight">{item.name}</h4>
-                              <span className="text-xs text-gray-500">Qty: {item.quantity}</span>
-                            </div>
-                            <div className="text-right">
-                              <p className="font-semibold text-gray-900 text-sm">₹{(item.price * item.quantity).toFixed(2)}</p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                      
-                      {/* Warehouse delivery info */}
-                      {mixedWarehouseDelivery?.warehouseResults?.[warehouseId] && (
-                        <div className="mt-3 pt-3 border-t border-gray-100">
-                          <div className="flex justify-between text-sm text-gray-600">
-                            <span>Delivery ({mixedWarehouseDelivery.warehouseResults[warehouseId].distance?.toFixed(1)} km)</span>
-                            <span>₹{mixedWarehouseDelivery.warehouseResults[warehouseId].deliveryInfo?.deliveryCharge?.toFixed(2) || '0.00'}</span>
-                          </div>
-                        </div>
+                      {isGlobal && (
+                        <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-800">
+                          24x7 Delivery
+                        </Badge>
                       )}
                     </div>
-                  );
-                })}
-              </div>
+
+                    <div className="space-y-3">
+                      {items.map((item: CartItem, index: number) => (
+                        <div key={`${item.id || item._id}-${index}`} className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg">
+                          {item.image && (
+                            <div className="w-12 h-12 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
+                              <Image
+                                src={item.image}
+                                alt={item.name}
+                                width={48}
+                                height={48}
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-medium text-gray-900 text-sm truncate">{item.name}</h4>
+                            <p className="text-xs text-gray-500 mb-1">
+                              {warehouse.name || 'Unknown Warehouse'}
+                            </p>
+                            <div className="flex items-center gap-2 text-xs text-gray-600">
+                              <span>Qty: {item.quantity}</span>
+                              {item.tax && item.tax.percentage && (
+                                <>
+                                  <span>•</span>
+                                  <span>{item.tax.percentage}%-{item.priceIncludesTax ? 'Incl.' : 'Excl.'}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-semibold text-gray-900">
+                              ₹{(item.price * item.quantity).toFixed(2)}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
 
               <div className="border-t pt-4 space-y-3">
-                <div className="flex justify-between text-gray-600">
-                  <span>Subtotal ({cartItems.length} items)</span>
-                  <span>₹{cartTotal.toFixed(2)}</span>
+                {/* Subtotal */}
+                <div className="flex justify-between text-lg">
+                  <span className="text-gray-700">Subtotal (Before Tax)</span>
+                  <span className="font-semibold text-gray-900">₹{subtotalBeforeTax.toFixed(2)}</span>
                 </div>
-                
-                {/* Promo Discount */}
+
+                {/* Discount */}
                 {discountAmount > 0 && (
                   <div className="flex justify-between text-green-600">
-                    <span>Promo Discount ({appliedPromoCode?.code})</span>
+                    <span>Discount Applied</span>
                     <span>-₹{discountAmount.toFixed(2)}</span>
                   </div>
                 )}
-                
+
                 {/* Tax Breakdown */}
-                {taxCalculation && taxCalculation.totalTax > 0 && (
+                {taxCalculation && (
                   <div className="space-y-2">
-                    <div className="flex justify-between text-gray-600">
-                      <span>Subtotal (after discount)</span>
-                      <span>₹{subtotalAfterDiscount.toFixed(2)}</span>
-                    </div>
-                    
                     {taxCalculation.isInterState ? (
-                      <div className="flex justify-between text-gray-600">
-                        <span>IGST @ {taxCalculation.taxBreakdown.igst.percentage.toFixed(1)}%</span>
-                        <span>{formatTaxAmount(taxCalculation.totalIGST)}</span>
-                      </div>
+                      // Interstate - Show IGST
+                      taxCalculation.totalIGST > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">
+                            IGST
+                          </span>
+                          <span className="text-gray-900">₹{taxCalculation.totalIGST.toFixed(2)}</span>
+                        </div>
+                      )
                     ) : (
+                      // Intrastate - Show CGST + SGST
                       <>
-                                                <div className="flex justify-between text-gray-600">
-                          <span>CGST @ {taxCalculation.taxBreakdown.cgst.percentage.toFixed(1)}%</span>
-                          <span>{formatTaxAmount(taxCalculation.totalCGST)}</span>
-                        </div>
-                        <div className="flex justify-between text-gray-600">
-                          <span>SGST @ {taxCalculation.taxBreakdown.sgst.percentage.toFixed(1)}%</span>
-                          <span>{formatTaxAmount(taxCalculation.totalSGST)}</span>
-                        </div>
+                        {taxCalculation.totalCGST > 0 && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">
+                              CGST
+                            </span>
+                            <span className="text-gray-900">₹{taxCalculation.totalCGST.toFixed(2)}</span>
+                          </div>
+                        )}
+                        {taxCalculation.totalSGST > 0 && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">
+                              SGST
+                            </span>
+                            <span className="text-gray-900">₹{taxCalculation.totalSGST.toFixed(2)}</span>
+                          </div>
+                        )}
                       </>
                     )}
                     
-                    <div className="flex justify-between text-gray-800 font-medium">
-                      <span>Total Tax</span>
-                      <span>{formatTaxAmount(taxCalculation.totalTax)}</span>
-                    </div>
-                  </div>
-                )}
-                
-                {/* Dynamic Delivery Fee */}
-                <div className="flex justify-between text-gray-600">
-                  <div className="flex items-center gap-2">
-                    <span>Total Delivery Fee</span>
-                    {Object.keys(itemsByWarehouse).length > 1 && (
-                      <span className="text-xs text-gray-400">
-                        ({Object.keys(itemsByWarehouse).length} warehouses)
-                      </span>
+                    {taxCalculation.totalTax > 0 && (
+                      <div className="flex justify-between text-sm font-medium border-t pt-2">
+                        <span className="text-gray-700">Total Tax</span>
+                        <span className="text-gray-900">₹{taxCalculation.totalTax.toFixed(2)}</span>
+                      </div>
                     )}
                   </div>
+                )}
+
+                {/* Delivery Charges */}
+                <div className="flex justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-700">Delivery Charges</span>
+                  </div>
                   <div className="text-right">
-                    {(loadingDelivery || loadingMixedDelivery) ? (
+                    {loadingDelivery ? (
                       <span className="text-gray-400">Calculating...</span>
-                    ) : mixedWarehouseDelivery ? (
-                      <span className="text-gray-900">
-                        ₹{mixedWarehouseDelivery.totalDeliveryCharge?.toFixed(2) || '0.00'}
-                      </span>
                     ) : deliveryInfo ? (
                       <span className={deliveryInfo.isFreeDelivery ? "text-green-600 font-medium" : "text-gray-900"}>
                         {formatDeliveryChargeWithDecimals(deliveryInfo.deliveryCharge)}
@@ -1950,28 +2394,27 @@ export default function PaymentPage() {
                   <div className="flex justify-between text-xl font-bold text-gray-900">
                     <span>Total</span>
                     <span className="text-green-600">
-                      ₹{finalTotalWithDelivery.toFixed(2)}
+                      ₹{Math.ceil(finalTotalWithDelivery)}
                     </span>
                   </div>
                 </div>
               </div>
 
+
               {/* Delivery Eligibility Message */}
               {deliveryInfo && (
-                <div className={`mt-4 p-4 rounded-xl border ${
-                  deliveryInfo.isFreeDelivery 
-                    ? 'bg-green-50 border-green-200' 
-                    : deliveryInfo.freeDeliveryEligible 
+                <div className={`mt-4 p-4 rounded-xl border ${deliveryInfo.isFreeDelivery
+                    ? 'bg-green-50 border-green-200'
+                    : deliveryInfo.freeDeliveryEligible
                       ? 'bg-blue-50 border-blue-200'
                       : 'bg-gray-50 border-gray-200'
-                }`}>
-                  <div className={`text-sm ${
-                    deliveryInfo.isFreeDelivery 
-                      ? 'text-green-800' 
-                      : deliveryInfo.freeDeliveryEligible 
+                  }`}>
+                  <div className={`text-sm ${deliveryInfo.isFreeDelivery
+                      ? 'text-green-800'
+                      : deliveryInfo.freeDeliveryEligible
                         ? 'text-blue-800'
                         : 'text-gray-800'
-                  }`}>
+                    }`}>
                     {deliveryInfo.isFreeDelivery ? (
                       <>
                         <div className="font-semibold mb-1 flex items-center gap-2">
@@ -2024,24 +2467,7 @@ export default function PaymentPage() {
                 </div>
               )}
 
-              {/* Show retry option for failed delivery calculations */}
-              {!loadingDelivery && !deliveryInfo && selectedAddress && addresses.length > 0 && 
-               failedDeliveryAddresses.has(getAddressKey(addresses.find(addr => addr.id === selectedAddress)!)) && (
-                <div className="mt-4 p-4 bg-red-50 rounded-xl border border-red-200">
-                  <div className="text-sm text-red-800 mb-3">
-                    <div className="font-semibold mb-1">Delivery calculation failed</div>
-                    <div>Unable to calculate delivery charges for this address.</div>
-                  </div>
-                  <Button 
-                    onClick={retryDeliveryCalculation}
-                    variant="outline" 
-                    size="sm"
-                    className="text-red-700 border-red-300 hover:bg-red-100"
-                  >
-                    Retry Calculation
-                  </Button>
-                </div>
-              )}
+
 
               {/* Promo Code Section - Compact */}
               <div className="border-t pt-4 mt-4 space-y-3">
@@ -2055,7 +2481,7 @@ export default function PaymentPage() {
                     appliedPromoCode={appliedPromoCode}
                   />
                 </div>
-                
+
                 {/* Available Promocodes - Collapsible */}
                 <details className="group">
                   <summary className="cursor-pointer text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1">
@@ -2075,322 +2501,500 @@ export default function PaymentPage() {
               </div>
             </div>
 
-            {/* Tax Information - Compact */}
-            {taxCalculation && taxCalculation.totalTax > 0 && (
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                <div className="flex items-center gap-2 text-blue-800 mb-2">
-                  <Shield className="h-4 w-4" />
-                  <span className="text-sm font-medium">Tax Information</span>
-                </div>
-                <div className="text-xs text-blue-700 space-y-1">
-                  <div className="flex justify-between">
-                    <span>Tax Type:</span>
-                    <span className="font-medium">
-                      {taxCalculation.isInterState ? 'IGST (Inter-State)' : 'CGST + SGST (Intra-State)'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Total Tax:</span>
-                    <span className="font-medium">{formatTaxAmount(taxCalculation.totalTax)}</span>
-                  </div>
-                  {taxCalculation.isInterState ? (
-                    <div className="flex justify-between">
-                      <span>IGST Rate:</span>
-                      <span className="font-medium">{taxCalculation.taxBreakdown.igst.percentage.toFixed(1)}%</span>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex justify-between">
-                        <span>CGST Rate:</span>
-                        <span className="font-medium">{taxCalculation.taxBreakdown.cgst.percentage.toFixed(1)}%</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>SGST Rate:</span>
-                        <span className="font-medium">{taxCalculation.taxBreakdown.sgst.percentage.toFixed(1)}%</span>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
 
-            {/* Security Info - Compact */}
-            <div className="bg-green-50 border border-green-200 rounded-xl p-3">
-              <div className="flex items-center gap-2 text-green-800">
-                <Shield className="h-4 w-4" />
-                <span className="text-sm font-medium">Secure Payment - Your information is encrypted</span>
-              </div>
-            </div>
+
           </div>
         </div>
       </div>
 
       {/* Address Selection Modal */}
       {showAddressModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
-          <div ref={modalRef} className="bg-white rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-gray-900">Select Address</h3>
-              <Button
-                size="sm"
-                onClick={() => setShowAddressModal(false)}
-              >
-                ✕
-              </Button>
-            </div>
-            <div className="space-y-3">
-              {addresses.map((address) => (
-                <div
-                  key={address.id}
-                  onClick={() => {
-                    setSelectedAddress(address.id);
-                    setShowAddressModal(false);
-                  }}
-                  className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                    selectedAddress === address.id
-                      ? 'border-green-500 bg-green-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[999] p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full max-h-[80vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-gray-900">Select Delivery Address</h2>
+                <button
+                  onClick={() => setShowAddressModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-medium text-gray-900">{address.type}</span>
-                        {address.isDefault && (
-                          <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
-                            Default
-                          </span>
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              {isLoadingAddresses ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+                  <span className="ml-2 text-gray-600">Loading addresses...</span>
+                </div>
+              ) : addresses.length === 0 ? (
+                <div className="text-center py-8">
+                  <MapPin className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-600 mb-4">No addresses found</p>
+                  <Button
+                    onClick={() => {
+                      setAddressForm({});
+                      setShowAddAddressModal(true);
+                      setShowAddressModal(false);
+                    }}
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add New Address
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {addresses.map((address) => (
+                    <div
+                      key={address.id}
+                      className={`p-4 border-2 rounded-xl cursor-pointer transition-all ${
+                        selectedAddress === address.id
+                          ? 'border-green-500 bg-green-50'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                      onClick={() => {
+                        setSelectedAddress(address.id);
+                        setShowAddressModal(false);
+                      }}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <MapPin className="h-4 w-4 text-gray-500" />
+                            <span className="font-semibold text-gray-900">{address.type}</span>
+                            {address.isDefault && (
+                              <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
+                                Default
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-sm text-gray-700 leading-relaxed">
+                            <p>
+                              {address.building}
+                              {address.floor && `, Floor ${address.floor}`},
+                              {address.area}
+                              {address.landmark && `, Near ${address.landmark}`}
+                            </p>
+                            <p className="text-gray-600">
+                              {address.city}, {address.state} - {address.pincode}
+                            </p>
+                          </div>
+                          {address.phone && (
+                            <p className="text-sm text-gray-600 mt-1 flex items-center gap-1">
+                              <Smartphone className="h-3 w-3" />
+                              {address.phone}
+                            </p>
+                          )}
+                        </div>
+                        {selectedAddress === address.id && (
+                          <Check className="h-5 w-5 text-green-600 flex-shrink-0" />
                         )}
                       </div>
-                      <p className="text-sm text-gray-700 leading-relaxed">{address.building}{address.floor && `, Floor ${address.floor}`}, {address.area}{address.landmark && `, Near ${address.landmark}`}</p>
-                      <p className="text-xs text-gray-600 mt-1">{address.phone}</p>
                     </div>
-                    {selectedAddress === address.id && (
-                      <Check className="h-5 w-5 text-green-500 ml-2" />
-                    )}
-                  </div>
+                  ))}
+                  
+                  <Button
+                    onClick={() => {
+                      setAddressForm({});
+                      setShowAddAddressModal(true);
+                      setShowAddressModal(false);
+                    }}
+                    variant="outline"
+                    className="w-full mt-4 border-dashed border-2 border-gray-300 hover:border-green-500 hover:bg-green-50"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add New Address
+                  </Button>
                 </div>
-              ))}
+              )}
             </div>
-            <div className="sticky bottom-0 left-0 right-0 bg-white pt-4 pb-2 -mx-6 px-6 z-10 border-t border-gray-100">
-              <Button variant="outline" className="w-full hover:bg-green-50 transition-colors" onClick={() => setShowAddAddressModal(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add New Address
-              </Button>
-            </div>
-            {/* Inline Add Address Modal */}
-            {showAddAddressModal && (
-              <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-[10000] p-4">
-                <div className="bg-white rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto relative">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-bold text-gray-900">Add New Address</h3>
-                    <Button variant="outline" size="sm" onClick={() => { setShowAddAddressModal(false); setAddressForm({}); }}>✕</Button>
-                  </div>
-                 {/* Map and search area */}
-                 <div className="mb-4">
-                   <div className="flex gap-2 mb-2">
-                     <input
-                       ref={inputRef}
-                       type="text"
-                       className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-green-500 text-xs"
-                       placeholder="Search location..."
-                     />
-                     <Button
-                       type="button"
-                       onClick={handleUseMyLocation}
-                       className="px-2 py-2 bg-gray-50 border border-gray-300 rounded-lg hover:bg-gray-100"
-                     >
-                       <MapPin className="w-4 h-4 text-green-600" />
-                     </Button>
-                   </div>
-                   <div className="w-full h-60 rounded-lg overflow-hidden border border-gray-200 bg-white mb-2">
-                     <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
-                   </div>
-                   
-                   {/* Coordinates indicator */}
-                   <div className={`text-xs p-2 rounded-lg mb-2 ${
-                     addressForm.lat && addressForm.lng 
-                       ? 'bg-green-50 text-green-700 border border-green-200' 
-                       : 'bg-orange-50 text-orange-700 border border-orange-200'
-                   }`}>
-                     {addressForm.lat && addressForm.lng ? (
-                       <div className="flex items-center gap-2">
-                         <Check className="h-4 w-4" />
-                         <span>Location coordinates captured: {addressForm.lat.toFixed(6)}, {addressForm.lng.toFixed(6)}</span>
-                       </div>
-                     ) : (
-                       <div className="flex items-center gap-2">
-                         <MapPin className="h-4 w-4" />
-                         <span>Please select your location on the map for accurate delivery calculation</span>
-                       </div>
-                     )}
-                   </div>
-                   <div className="w-full bg-gray-50 rounded-lg p-2 flex items-center gap-2 mb-2 border border-gray-200">
-                     <div className="flex-shrink-0 bg-green-100 rounded-full p-1.5">
-                       <MapPin className="w-4 h-4 text-green-600" />
-                     </div>
-                     <div>
-                       <div className="text-xs text-gray-500">Delivering your order to</div>
-                       <div className="font-semibold text-gray-700 text-xs truncate max-w-[200px]">{addressForm.area || "-"}</div>
-                     </div>
-                   </div>
-                 </div>
-                  {/* Inline Add Address Form */}
-                  <form className="flex flex-col gap-2" onSubmit={async (e) => {
-                    e.preventDefault();
-                    if ((!addressForm.building && !addressForm.area) || !addressForm.city || !addressForm.state || !addressForm.pincode) {
-                      alert('Please fill in all required fields (at least building or area, city, state, and pincode)');
-                      return;
-                    }
-                    
-                    if (!addressForm.lat || !addressForm.lng) {
-                      const confirmSave = confirm(
-                        'Location coordinates are missing. This may affect delivery calculation. ' +
-                        'Please use the map to select your exact location, or continue anyway?'
-                      );
-                      if (!confirmSave) {
-                        return;
-                      }
-                    }
-                    const now = Date.now();
-                    const addressData = {
-                      type: addressForm.type || "Home",
-                      building: addressForm.building?.trim() || "",
-                      floor: addressForm.floor?.trim() || "",
-                      area: addressForm.area?.trim() || "",
-                      landmark: addressForm.landmark?.trim() || "",
-                      city: addressForm.city?.trim() || "",
-                      state: addressForm.state?.trim() || "",
-                      country: addressForm.country?.trim() || "India",
-                      pincode: addressForm.pincode?.trim() || "",
-                      phone: addressForm.phone?.trim() || "",
-                      name: addressForm.name?.trim() || "",
-                      isDefault: addressForm.isDefault || false,
-                      addressLabel: addressForm.addressLabel?.trim() || "",
-                      additionalInstructions: addressForm.additionalInstructions?.trim() || "",
-                      isActive: true,
-                      createdAt: now,
-                      updatedAt: now,
-                      lat: addressForm.lat || undefined,
-                      lng: addressForm.lng || undefined,
-                    };
-                    await handleAddAddress(addressData);
-                    await fetchUserAddresses();
-                    setShowAddAddressModal(false);
-                  }}>
-                    <div className="flex flex-wrap gap-2">
-                      <div className="w-full mb-1">
-                        <label className="block text-xs font-medium text-gray-700">Save address as *</label>
-                      </div>
-                      <div className="flex flex-wrap gap-2 w-full">
-                        {["Home", "Office", "Hotel", "Other"].map((type) => (
-                          <button
-                            key={type}
-                            type="button"
-                            className={`px-2 py-1 rounded-lg border text-xs flex-1 ${addressForm.type === type ? "border-green-500 bg-green-50 text-green-700" : "border-gray-200 text-gray-600"}`}
-                            onClick={() => setAddressForm((prev) => ({ ...prev, type: type as Address['type'] }))}
-                          >
-                            {type}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="mb-1.5">
-                      <label className="block text-xs font-medium text-gray-700 mb-0.5">Flat / House no / Building name *</label>
-                      <input
-                        type="text"
-                        name="building"
-                        value={addressForm.building || ""}
-                        onChange={e => setAddressForm(prev => ({ ...prev, building: e.target.value }))}
-                        className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-500 text-xs"
-                        required
-                      />
-                    </div>
-                    <div className="mb-1.5">
-                      <label className="block text-xs font-medium text-gray-700 mb-0.5">Floor (optional)</label>
-                      <input
-                        type="text"
-                        name="floor"
-                        value={addressForm.floor || ""}
-                        onChange={e => setAddressForm(prev => ({ ...prev, floor: e.target.value }))}
-                        className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-500 text-xs"
-                      />
-                    </div>
-                    <div className="mb-1.5">
-                      <label className="block text-xs font-medium text-gray-700 mb-0.5">Area / Sector / Locality *</label>
-                      <input
-                        type="text"
-                        name="area"
-                        value={addressForm.area || ""}
-                        className="w-full px-3 py-1.5 border border-gray-300 rounded-lg bg-gray-100 focus:outline-none focus:ring-1 focus:ring-green-500 text-xs"
-                        required
-                        readOnly
-                      />
-                    </div>
-                    <div className="mb-1.5">
-                      <label className="block text-xs font-medium text-gray-700 mb-0.5">Nearby landmark (optional)</label>
-                      <input
-                        type="text"
-                        name="landmark"
-                        value={addressForm.landmark || ""}
-                        onChange={e => setAddressForm(prev => ({ ...prev, landmark: e.target.value }))}
-                        className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-500 text-xs"
-                      />
-                    </div>
-                    <div className="mb-1.5">
-                      <label className="block text-xs font-medium text-gray-700 mb-0.5">Your name *</label>
-                      <input
-                        type="text"
-                        name="name"
-                        value={addressForm.name || ""}
-                        onChange={e => setAddressForm(prev => ({ ...prev, name: e.target.value }))}
-                        className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-500 text-xs"
-                        required
-                      />
-                    </div>
-                    <div className="mb-1.5">
-                      <label className="block text-xs font-medium text-gray-700 mb-0.5">Your phone number (optional)</label>
-                      <input
-                        type="tel"
-                        name="phone"
-                        value={addressForm.phone || ""}
-                        onChange={e => setAddressForm(prev => ({ ...prev, phone: e.target.value }))}
-                        pattern="[0-9]{10}"
-                        className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-500 text-xs"
-                      />
-                    </div>
-                    <div className="mb-1.5">
-                      <label className="block text-xs font-medium text-gray-700 mb-0.5">Address label (optional)</label>
-                      <input
-                        type="text"
-                        name="addressLabel"
-                        value={addressForm.addressLabel || ""}
-                        onChange={e => setAddressForm(prev => ({ ...prev, addressLabel: e.target.value }))}
-                        className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-500 text-xs"
-                        placeholder="e.g., Near main gate, Opposite pharmacy, etc."
-                      />
-                    </div>
-                    <div className="mb-1.5">
-                      <label className="block text-xs font-medium text-gray-700 mb-0.5">Additional delivery instructions (optional)</label>
-                      <textarea
-                        name="additionalInstructions"
-                        value={addressForm.additionalInstructions || ""}
-                        onChange={e => setAddressForm(prev => ({ ...prev, additionalInstructions: e.target.value }))}
-                        className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-500 text-xs"
-                        placeholder="E.g., Ring bell twice, call before delivery, etc."
-                        rows={2}
-                      />
-                    </div>
-                    <div className="flex gap-2 mt-2">
-                      <Button variant="outline" onClick={() => { setShowAddAddressModal(false); setAddressForm({}); }} className="flex-1">Cancel</Button>
-                      <Button type="submit" className="flex-1 bg-green-600 hover:bg-green-700 text-white" disabled={isAddingAddress}>{isAddingAddress ? 'Saving...' : 'Save Address'}</Button>
-                    </div>
-                  </form>
-                </div>
-              </div>
-            )}
           </div>
         </div>
+      )}
+
+      {/* Add Address Modal */}
+      {showAddAddressModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[999] p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-gray-900">Add New Address</h2>
+                <button
+                  onClick={() => setShowAddAddressModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                // Basic validation
+                if (!addressForm.name || !addressForm.building || !addressForm.area || 
+                    !addressForm.city || !addressForm.state || !addressForm.pincode) {
+                  toast.error('Please fill in all required fields');
+                  return;
+                }
+                handleAddAddress(addressForm as Omit<Address, 'id'>);
+              }} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Address Type *
+                    </label>
+                    <select
+                      value={addressForm.type || 'Home'}
+                      onChange={(e) => setAddressForm(prev => ({ ...prev, type: e.target.value as any }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      required
+                    >
+                      <option value="Home">Home</option>
+                      <option value="Office">Office</option>
+                      <option value="Hotel">Hotel</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Full Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={addressForm.name || ''}
+                      onChange={(e) => setAddressForm(prev => ({ ...prev, name: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Building/House No. *
+                  </label>
+                  <input
+                    type="text"
+                    value={addressForm.building || ''}
+                    onChange={(e) => setAddressForm(prev => ({ ...prev, building: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Floor (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={addressForm.floor || ''}
+                      onChange={(e) => setAddressForm(prev => ({ ...prev, floor: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Area/Locality *
+                    </label>
+                    <input
+                      type="text"
+                      value={addressForm.area || ''}
+                      onChange={(e) => setAddressForm(prev => ({ ...prev, area: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Landmark (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={addressForm.landmark || ''}
+                    onChange={(e) => setAddressForm(prev => ({ ...prev, landmark: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      City *
+                    </label>
+                    <input
+                      type="text"
+                      value={addressForm.city || ''}
+                      onChange={(e) => setAddressForm(prev => ({ ...prev, city: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      State *
+                    </label>
+                    <input
+                      type="text"
+                      value={addressForm.state || ''}
+                      onChange={(e) => setAddressForm(prev => ({ ...prev, state: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Pincode *
+                    </label>
+                    <input
+                      type="text"
+                      value={addressForm.pincode || ''}
+                      onChange={(e) => setAddressForm(prev => ({ ...prev, pincode: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Phone Number (Optional)
+                  </label>
+                  <input
+                    type="tel"
+                    value={addressForm.phone || ''}
+                    onChange={(e) => setAddressForm(prev => ({ ...prev, phone: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Delivery Instructions (Optional)
+                  </label>
+                  <textarea
+                    value={addressForm.additionalInstructions || ''}
+                    onChange={(e) => setAddressForm(prev => ({ ...prev, additionalInstructions: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    rows={3}
+                  />
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="setDefault"
+                    checked={addressForm.isDefault || false}
+                    onChange={(e) => setAddressForm(prev => ({ ...prev, isDefault: e.target.checked }))}
+                    className="rounded border-gray-300 text-green-600 focus:ring-green-500"
+                  />
+                  <label htmlFor="setDefault" className="text-sm text-gray-700">
+                    Set as default address
+                  </label>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowAddAddressModal(false)}
+                    className="flex-1"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={isAddingAddress}
+                    className="flex-1 bg-green-600 hover:bg-green-700"
+                  >
+                    {isAddingAddress ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Adding...
+                      </>
+                    ) : (
+                      'Add Address'
+                    )}
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delivery Unavailable Modal */}
+      <DeliveryUnavailableModal
+        isOpen={showDeliveryUnavailableModal}
+        onClose={() => setShowDeliveryUnavailableModal(false)}
+        unavailablePincode={unavailablePincode}
+        onShowAddressModal={() => setShowAddressModal(true)}
+      />
+
+      {/* Undeliverable Items Modal */}
+      {showUndeliverableItemsModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                  <Store className="h-6 w-6 text-orange-500" />
+                  Delivery Options Available
+                </h2>
+                <button
+                  onClick={() => setShowUndeliverableItemsModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              <div className="mb-6">
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
+                  <p className="text-orange-800 text-sm font-semibold mb-2">
+                    Some items in your cart cannot be delivered to your current address:
+                  </p>
+                  <ul className="text-orange-700 text-sm space-y-1">
+                    {undeliverableItems.map((item, index) => (
+                      <li key={index} className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-orange-500 rounded-full flex-shrink-0"></div>
+                        {item.name}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-gray-900 mb-3">Choose how you'd like to proceed:</h3>
+                  
+                  <button
+                    onClick={() => {
+                      setShowUndeliverableItemsModal(false);
+                      // Switch to online payment method
+                      setSelectedPaymentMethod('upi');
+                      toast.success('Switched to online payment. Complete your order and we\'ll arrange delivery for all items.');
+                    }}
+                    className="w-full p-4 border-2 border-green-200 rounded-xl hover:border-green-400 hover:bg-green-50 transition-all text-left"
+                  >
+                    <div className="flex items-start gap-3">
+                      <CreditCard className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <div className="font-semibold text-gray-900 mb-1">
+                          Pay Online & Get All Items Delivered
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          Complete your order with online payment. We'll arrange delivery for all items including those not available for COD.
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setShowUndeliverableItemsModal(false);
+                      // Here you would implement logic to remove undeliverable items
+                      // For now, we'll show a toast with guidance
+                      toast('Please remove the highlighted items from your cart to proceed with COD delivery.', {
+                        duration: 5000,
+                        icon: '📦'
+                      });
+                    }}
+                    className="w-full p-4 border-2 border-blue-200 rounded-xl hover:border-blue-400 hover:bg-blue-50 transition-all text-left"
+                  >
+                    <div className="flex items-start gap-3">
+                      <Truck className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <div className="font-semibold text-gray-900 mb-1">
+                          Remove Items & Continue with COD
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          Remove the items that can't be delivered and proceed with Cash on Delivery for the remaining items.
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setShowUndeliverableItemsModal(false);
+                      setShowAddressModal(true);
+                    }}
+                    className="w-full p-4 border-2 border-purple-200 rounded-xl hover:border-purple-400 hover:bg-purple-50 transition-all text-left"
+                  >
+                    <div className="flex items-start gap-3">
+                      <MapPin className="h-5 w-5 text-purple-600 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <div className="font-semibold text-gray-900 mb-1">
+                          Try Different Address
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          Select a different delivery address that might be within the delivery zone for all items.
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <Button
+                  onClick={() => setShowUndeliverableItemsModal(false)}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Loading Overlay */}
+      {isValidatingPayment && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-8 max-w-sm w-full mx-4 text-center">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Loader2 className="h-8 w-8 text-green-600 animate-spin" />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">
+              Processing Your Order
+            </h3>
+            <p className="text-gray-600 mb-4">
+              Please wait while we create your order...
+            </p>
+            <div className="flex items-center justify-center">
+              <div className="animate-pulse flex space-x-1">
+                <div className="w-2 h-2 bg-green-600 rounded-full"></div>
+                <div className="w-2 h-2 bg-green-600 rounded-full animation-delay-200"></div>
+                <div className="w-2 h-2 bg-green-600 rounded-full animation-delay-400"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success Modal */}
+      {showSuccessModal && successOrderData && (
+        <OrderSuccessModal
+          isOpen={showSuccessModal}
+          onClose={() => {
+            setShowSuccessModal(false);
+            router.push('/');
+          }}
+          orderData={successOrderData}
+          onViewOrder={() => {
+            setShowSuccessModal(false);
+            router.push('/account?tab=orders');
+          }}
+        />
       )}
     </div>
   );

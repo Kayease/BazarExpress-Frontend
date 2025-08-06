@@ -91,6 +91,16 @@ export default function WishlistPage() {
             // Warehouse validation
             const canAddProduct = canAddToCart(item, cartItems);
             const conflictInfo = getWarehouseConflictInfo(item, cartItems);
+            
+            // Debug logging
+            console.log('Wishlist item validation:', {
+              itemName: item.name,
+              itemWarehouse: item.warehouse,
+              canAddProduct,
+              conflictInfo,
+              cartItemsCount: cartItems.length,
+              cartWarehouses: cartItems.map(ci => ci.warehouse?.name).filter(Boolean)
+            });
             return (
               <div key={item.id || item._id} className="min-w-[180px] max-w-[180px] bg-white border border-gray-200 rounded-xl flex flex-col relative group font-sans" style={{ fontFamily: 'Sinkin Sans, sans-serif', boxShadow: 'none' }}>
                 {/* Discount Badge */}

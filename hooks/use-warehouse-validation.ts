@@ -9,7 +9,7 @@ import { useMemo } from 'react';
 import { useCartContext } from '@/components/app-provider';
 import { 
   validateWarehouseCompatibility, 
-  findCustomWarehouseInCart,
+  findAnyWarehouseInCart,
   isGlobalWarehouse,
   type ProductWithWarehouse,
   type CartItemWithWarehouse 
@@ -25,7 +25,7 @@ export interface WarehouseValidationHook {
   };
   currentCartWarehouse: string | null;
   isCartEmpty: boolean;
-  hasCustomWarehouseInCart: boolean;
+  hasWarehouseInCart: boolean;
 }
 
 export function useWarehouseValidation(): WarehouseValidationHook {
@@ -43,9 +43,9 @@ export function useWarehouseValidation(): WarehouseValidationHook {
     }));
   }, [cartItems]);
 
-  // Find current custom warehouse in cart
-  const currentCustomWarehouse = useMemo(() => {
-    return findCustomWarehouseInCart(cartItemsForValidation);
+  // Find current warehouse in cart (custom or global)
+  const currentWarehouse = useMemo(() => {
+    return findAnyWarehouseInCart(cartItemsForValidation);
   }, [cartItemsForValidation]);
 
   // Check if product can be added to cart
@@ -90,9 +90,9 @@ export function useWarehouseValidation(): WarehouseValidationHook {
   return {
     canAddToCart,
     getWarehouseConflictInfo,
-    currentCartWarehouse: currentCustomWarehouse?.name || null,
+    currentCartWarehouse: currentWarehouse?.name || null,
     isCartEmpty: cartItems.length === 0,
-    hasCustomWarehouseInCart: !!currentCustomWarehouse
+    hasWarehouseInCart: !!currentWarehouse
   };
 }
 

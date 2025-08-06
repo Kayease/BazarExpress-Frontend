@@ -21,8 +21,8 @@ export interface CartItem {
     name: string;
     price: number;
     image: string;
-    category: string;
-    brand?: string;
+    category: string | { _id: string; name: string };
+    brand?: string | { _id: string; name: string };
     weight?: string;
     [key: string]: any;
   };

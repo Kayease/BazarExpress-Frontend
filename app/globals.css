@@ -10,6 +10,15 @@ body {
         text-wrap: balance;
     }
     
+    /* Animation delays for loading dots */
+    .animation-delay-200 {
+        animation-delay: 0.2s;
+    }
+    
+    .animation-delay-400 {
+        animation-delay: 0.4s;
+    }
+    
     /* Custom animations for product page */
     .animate-fade-in {
         animation: fadeIn 0.6s ease-out forwards;

@@ -146,9 +146,13 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
                         <div>
                           <h4 className="font-semibold text-gray-900 text-sm leading-tight">{item.name}</h4>
                           <p className="text-xs text-gray-500">
-                            {typeof item.brand === "object" && item.brand !== null ? item.brand.name : item.brand}
+                            {item.brand && typeof item.brand === "object" && item.brand !== null 
+                              ? item.brand.name || item.brandId || 'Unknown Brand'
+                              : item.brand || item.brandId || 'Unknown Brand'}
                             {" • "}
-                            {typeof item.category === "object" && item.category !== null ? item.category.name : item.category}
+                            {item.category && typeof item.category === "object" && item.category !== null 
+                              ? item.category.name || item.categoryId || 'Unknown Category'
+                              : item.category || item.categoryId || 'Unknown Category'}
                           </p>
                         </div>
                         <div className="flex items-center">
@@ -236,7 +240,7 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
                   <div className="text-xs text-gray-500">{cartItems.length} items</div>
                 </div>
                 <div className="text-xl font-bold text-green-600">
-                  ₹{cartTotal.toFixed(2)}
+                  ₹{cartTotal}
                 </div>
               </div>
             </div>

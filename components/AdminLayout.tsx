@@ -34,6 +34,9 @@ import {
   LogOut,
   Send,
   Warehouse,
+  FileText,
+  Settings,
+  Receipt,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useAppSelector, useAppDispatch } from '../lib/store'
@@ -108,6 +111,7 @@ const menuItems = [
       { name: "Newsletter", href: "/admin/newsletter", icon: Send },
       { name: "Enquiry", href: "/admin/enquiry", icon: Mail },
       { name: "Rating & Reviews", href: "/admin/reviews", icon: Star },
+      { name: "Invoice Settings", href: "/admin/invoice-settings", icon: Receipt },
     ],
   },
 ]
