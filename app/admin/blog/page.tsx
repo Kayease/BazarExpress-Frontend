@@ -10,6 +10,7 @@ import toast from "react-hot-toast"
 import { uploadToCloudinary } from "../../../lib/uploadToCloudinary"
 import dynamic from 'next/dynamic'
 import { Editor } from '@tinymce/tinymce-react';
+import { apiPost, apiPut, apiDelete, apiGet } from "../../../lib/api-client";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL
 
@@ -71,6 +72,23 @@ export default function AdminBlog() {
       router.push("/")
       return
     }
+    fetchBlogs();
+  }, [user]);
+
+  const fetchBlogs = async () => {
+    setLoading(true);
+    try {
+      const data = await apiGet(`${process.env.NEXT_PUBLIC_API_URL}/blogs`);
+      // The API returns { blogs: [...], totalPages: X, currentPage: Y, total: Z }
+      // We need to extract just the blogs array
+      setBlogs(data.blogs || []);
+    } catch (error) {
+      console.error('Error fetching blogs:', error);
+      toast.error('Failed to load blogs');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const openAdd = () => {
     setEditing(null)
@@ -126,32 +144,24 @@ export default function AdminBlog() {
 
   const createBlog = async (imageUrl: string) => {
     const toastId = toast.loading("Creating blog...")
-    const res = await fetch(`${API_URL}/blogs`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, image: imageUrl }),
-    })
-    if (!res.ok) {
-      const err = await res.json()
-      toast.error(err.error || "Failed to create blog", { id: toastId })
-      throw new Error(err.error || "Failed to create blog")
+    try {
+      await apiPost(`${API_URL}/blogs`, { ...form, image: imageUrl });
+      toast.success("Blog created successfully!", { id: toastId })
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create blog", { id: toastId })
+      throw err;
     }
-    toast.success("Blog created successfully!", { id: toastId })
   }
 
   const editBlog = async (imageUrl: string) => {
     const toastId = toast.loading("Updating blog...")
-    const res = await fetch(`${API_URL}/blogs/${editing?._id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, image: imageUrl }),
-    })
-    if (!res.ok) {
-      const err = await res.json()
-      toast.error(err.error || "Failed to update blog", { id: toastId })
-      throw new Error(err.error || "Failed to update blog")
+    try {
+      await apiPut(`${API_URL}/blogs/${editing?._id}`, { ...form, image: imageUrl });
+      toast.success("Blog updated successfully!", { id: toastId })
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update blog", { id: toastId })
+      throw err;
     }
-    toast.success("Blog updated successfully!", { id: toastId })
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -206,14 +216,7 @@ export default function AdminBlog() {
     const toastId = toast.loading("Deleting blog...")
 
     try {
-      const response = await fetch(`${API_URL}/blogs/${deletingBlog._id}`, {
-        method: "DELETE"
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Failed to delete blog")
-      }
+      await apiDelete(`${API_URL}/blogs/${deletingBlog._id}`);
 
       toast.success("Blog deleted successfully!", { id: toastId })
       setShowDeleteModal(false)

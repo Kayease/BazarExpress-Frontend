@@ -7,8 +7,22 @@ import { useAppSelector } from '../../../lib/store'
 import { isAdminUser, hasAccessToSection } from '../../../lib/adminAuth'
 import { Search, Filter, Star, CheckCircle, X, Eye, MoreHorizontal } from "lucide-react"
 
+// Review type definition
+type Review = {
+  id: string
+  productName: string
+  customerName: string
+  rating: number
+  title: string
+  comment: string
+  date: string
+  status: "approved" | "pending" | "flagged"
+  verified: boolean
+  helpful: number
+}
+
 // Mock reviews data
-const mockReviews = [
+const mockReviews: Review[] = [
   {
     id: "1",
     productName: "Wireless Bluetooth Headphones",
@@ -18,7 +32,7 @@ const mockReviews = [
     comment:
       "These headphones exceeded my expectations. The noise cancellation is fantastic and the battery life is exactly as advertised.",
     date: "2024-03-10",
-    status: "approved",
+    status: "approved" as const,
     verified: true,
     helpful: 12,
   },
@@ -31,7 +45,7 @@ const mockReviews = [
     comment:
       "Really impressed with the build quality and sound. Only minor complaint is they can get a bit warm during long listening sessions.",
     date: "2024-03-08",
-    status: "pending",
+    status: "pending" as const,
     verified: true,
     helpful: 8,
   },
@@ -43,7 +57,7 @@ const mockReviews = [
     title: "Poor quality",
     comment: "This product broke after just one week of use. Very disappointed with the quality.",
     date: "2024-03-05",
-    status: "flagged",
+    status: "flagged" as const,
     verified: false,
     helpful: 2,
   },
@@ -51,7 +65,7 @@ const mockReviews = [
 
 export default function AdminReviews() {
   const user = useAppSelector((state) => state.auth.user)
-  const [reviews, setReviews] = useState(mockReviews)
+  const [reviews, setReviews] = useState<Review[]>(mockReviews)
   const [searchTerm, setSearchTerm] = useState("")
   const [filterStatus, setFilterStatus] = useState("all")
   const [filterRating, setFilterRating] = useState("all")
@@ -61,7 +75,8 @@ export default function AdminReviews() {
     if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'reviews')) {
       router.push("/")
       return
-    })
+    }
+  }, [user])
 
   const reviewStats = {
     total: reviews.length,
@@ -80,6 +95,20 @@ export default function AdminReviews() {
       </div>
     )
   }
+
+  // Filter reviews based on search term, status, and rating
+  const filteredReviews = reviews.filter((review) => {
+    const matchesSearch = searchTerm === "" || 
+      review.productName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      review.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      review.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      review.comment.toLowerCase().includes(searchTerm.toLowerCase())
+    
+    const matchesStatus = filterStatus === "all" || review.status === filterStatus
+    const matchesRating = filterRating === "all" || review.rating.toString() === filterRating
+    
+    return matchesSearch && matchesStatus && matchesRating
+  })
 
   if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'reviews')) {
       router.push("/")

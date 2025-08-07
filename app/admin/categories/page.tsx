@@ -8,6 +8,7 @@ import { isAdminUser, hasAccessToSection } from '../../../lib/adminAuth'
 import { Search, Plus, Edit, Trash2, MoreHorizontal, Grid3X3 } from "lucide-react"
 import * as LucideIcons from "lucide-react"
 import toast from "react-hot-toast"
+import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api-client'
 
 type Category = {
   _id?: string
@@ -56,10 +57,13 @@ export default function AdminCategories() {
 
   const BackedUrl = process.env.NEXT_PUBLIC_API_URL
 
-  const fetchCategories = () => {
-    fetch(`${BackedUrl}/categories`)
-      .then(res => res.json())
-      .then(data => setCategories(data));
+  const fetchCategories = async () => {
+    try {
+      const data = await apiGet(`${BackedUrl}/categories`);
+      setCategories(data);
+    } catch (error) {
+      toast.error("Failed to load categories");
+    }
   };
 
   // Fetch categories from backend
@@ -166,24 +170,15 @@ export default function AdminCategories() {
       thumbnail: newCategory.thumbnail,
     }
     try {
-      const res = await fetch(`${BackedUrl}/categories/${editingCategory._id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      })
-      if (res.ok) {
-        // Refetch all categories to get updated productCount
-        fetchCategories();
-        setShowModal(false)
-        setEditingCategory(null)
-        setNewCategory({ name: "", parentId: "", icon: "Box", hide: false, popular: false })
-        toast.success("Category updated successfully.")
-      } else {
-        const error = await res.json()
-        toast.error("Failed to update category.")
-      }
+      await apiPut(`${BackedUrl}/categories/${editingCategory._id}`, payload);
+      // Refetch all categories to get updated productCount
+      fetchCategories();
+      setShowModal(false)
+      setEditingCategory(null)
+      setNewCategory({ name: "", parentId: "", icon: "Box", hide: false, popular: false })
+      toast.success("Category updated successfully.")
     } catch (err) {
-      toast.error("Network error. Could not update category.")
+      toast.error(err.message || "Failed to update category.");
     }
   }
 
@@ -192,18 +187,12 @@ export default function AdminCategories() {
     if (!id) return
     setDeleting(true)
     try {
-      const res = await fetch(`${BackedUrl}/categories/${id}`, { method: "DELETE" })
-      if (res.ok) {
-        setCategories(categories.filter(cat => cat._id !== id))
-        toast.success("Category was deleted successfully.")
-        setConfirmDeleteCategory(null) // Close modal after successful deletion
-      } else {
-        const error = await res.json()
-        toast.error(error.error || error.message || "Failed to delete category.")
-        setConfirmDeleteCategory(null) // Also close modal on error
-      }
+      await apiDelete(`${BackedUrl}/categories/${id}`);
+      setCategories(categories.filter(cat => cat._id !== id))
+      toast.success("Category was deleted successfully.")
+      setConfirmDeleteCategory(null) // Close modal after successful deletion
     } catch (err) {
-      toast.error("Network error. Could not delete category.")
+      toast.error(err.message || "Failed to delete category.");
       setConfirmDeleteCategory(null) // Also close modal on error
     } finally {
       setDeleting(false)

@@ -34,12 +34,6 @@ export default function AdminEnquiry() {
   const user = useAppSelector((state) => state.auth.user);
   const router = useRouter();
 
-  useEffect(() => {
-    if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'enquiry')) {
-      router.push("/")
-      return
-    }
-
   const [contacts, setContacts] = useState<Contact[]>([])
   const [filteredContacts, setFilteredContacts] = useState<Contact[]>([])
   const [loading, setLoading] = useState(false)
@@ -52,6 +46,14 @@ export default function AdminEnquiry() {
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+
+  useEffect(() => {
+    if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'enquiry')) {
+      router.push("/")
+      return
+    }
+    fetchContacts();
+  }, [user]);
   const [searchTerm, setSearchTerm] = useState<string>("");
 
   const [currentPage, setCurrentPage] = useState(1);

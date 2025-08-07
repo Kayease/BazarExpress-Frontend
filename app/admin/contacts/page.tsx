@@ -24,12 +24,6 @@ export default function AdminContacts() {
   const user = useAppSelector((state) => state.auth.user);
   const router = useRouter();
 
-  useEffect(() => {
-    if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'contacts')) {
-      router.push("/")
-      return
-    }
-
   const [contacts, setContacts] = useState<Contact[]>([])
   const [loading, setLoading] = useState(false)
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null)
@@ -38,6 +32,14 @@ export default function AdminContacts() {
   const [contactToDelete, setContactToDelete] = useState<Contact | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+  useEffect(() => {
+    if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'contacts')) {
+      router.push("/")
+      return
+    }
+    fetchContacts();
+  }, [user]);
 
   const fetchContacts = async () => {
     setLoading(true);

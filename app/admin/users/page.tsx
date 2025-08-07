@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation"
 import AdminLayout from "../../../components/AdminLayout"
 import { useAppSelector } from '../../../lib/store'
 import { isAdminUser, hasAccessToSection } from '../../../lib/adminAuth'
-import { Search, Edit, Trash2, Eye, Loader2, Check, X, User, Shield, Users, UserCheck, UserX, Mail, Phone, Calendar, MapPin } from "lucide-react"
+import { Search, Edit, Trash2, Eye, Loader2, Check, X, User, Shield, Users, UserCheck, UserX, Mail, Phone, Calendar, MapPin, Lock } from "lucide-react"
 import toast from 'react-hot-toast'
+import { apiGet, apiDelete, apiPut, apiPost, apiPatch } from "../../../lib/api-client"
 
 type User = {
   id: string;
@@ -36,14 +37,6 @@ type EditFormType = {
   phone: string;
   dateOfBirth: string;
   assignedWarehouses: string[];
-  address: {
-    street: string;
-    landmark: string;
-    city: string;
-    state: string;
-    country: string;
-    pincode: string;
-  };
 };
 
 type ReduxUser = User & { token?: string };
@@ -79,7 +72,7 @@ const statusConfig = {
 }
 
 export default function AdminUsers() {
-  const user = useAppSelector((state) => state.auth.user)
+  const currentUser = useAppSelector((state) => state.auth.user)
   const token = useAppSelector((state) => state.auth.token)
   const [users, setUsers] = useState<User[]>([])
   const [warehouses, setWarehouses] = useState<Warehouse[]>([])
@@ -102,14 +95,6 @@ export default function AdminUsers() {
     phone: '',
     dateOfBirth: '',
     assignedWarehouses: [],
-    address: {
-      street: '',
-      landmark: '',
-      city: '',
-      state: '',
-      country: '',
-      pincode: '',
-    },
   });
   const [editLoading, setEditLoading] = useState(false)
   const router = useRouter()
@@ -142,45 +127,26 @@ export default function AdminUsers() {
   const paginatedUsers = filteredUsers.slice(startIndex, startIndex + USERS_PER_PAGE);
 
   const fetchUsers = async () => {
-    if (!token) {
-      setError("No authentication token found. Please log in again.");
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     setError("");
     try {
-      console.log('Token being sent:', token);
-      const res = await fetch(`${API_URL}/auth/users`, { 
-        headers: { 
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        } 
-      });
-      console.log('Response:', res);
-      if (!res.ok) throw new Error("Failed to fetch users");
-      const data = await res.json();
+      const data = await apiGet(`${API_URL}/auth/users`);
       setUsers(data);
-    } catch (err) {
-      setError("Could not load users.");
-      toast.error("Could not load users.");
+    } catch (err: any) {
+      setError(err.message || "Could not load users.");
+      toast.error(err.message || "Could not load users.");
     } finally {
       setLoading(false);
     }
   };
 
   const fetchWarehouses = async () => {
-    if (!token) return;
+    // Only fetch warehouses if user has admin access
+    if (currentUser?.role !== 'admin') return;
+    
     setWarehousesLoading(true);
     try {
-      const res = await fetch(`${API_URL}/auth/warehouses`, { 
-        headers: { 
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        } 
-      });
-      if (!res.ok) throw new Error("Failed to fetch warehouses");
-      const data = await res.json();
+      const data = await apiGet(`${API_URL}/auth/warehouses`);
       setWarehouses(data);
     } catch (err) {
       console.error("Could not load warehouses:", err);
@@ -190,21 +156,19 @@ export default function AdminUsers() {
   };
 
   const handleDelete = async (id: string) => {
+    // Only admin can delete users
+    if (currentUser?.role !== 'admin') {
+      toast.error("You don't have permission to delete users");
+      return;
+    }
+    
     setDeletingId(id);
     try {
-      if (!token) throw new Error("No authentication token found.");
-      const res = await fetch(`${API_URL}/auth/users/${id}`, { 
-        method: 'DELETE', 
-        headers: { 
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        } 
-      });
-      if (!res.ok) throw new Error("Delete failed");
+      await apiDelete(`${API_URL}/auth/users/${id}`);
       setUsers(users.filter(u => u.id !== id));
       toast.success("User deleted successfully");
-    } catch (err) {
-      toast.error("Failed to delete user");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete user");
     } finally {
       setDeletingId(null);
       setConfirmDelete(null);
@@ -212,24 +176,31 @@ export default function AdminUsers() {
   };
 
   const handleRoleChange = async (id: string, newRole: 'admin' | 'user') => {
+    // Only admin can change user roles
+    if (currentUser?.role !== 'admin') {
+      toast.error("You don't have permission to change user roles");
+      return;
+    }
+    
     setChangingRoleId(id);
     try {
-      if (!token) throw new Error("No authentication token found.");
-      const res = await fetch(`${API_URL}/auth/users/${id}/role`, {
-        method: 'PATCH',
-        headers: { 
-          'Content-Type': 'application/json', 
-          Authorization: `Bearer ${token}` 
-        },
-        body: JSON.stringify({ role: newRole })
-      });
-      if (!res.ok) throw new Error("Role update failed");
+      await apiPatch(`${API_URL}/auth/users/${id}/role`, { role: newRole });
       setUsers(users.map(u => u.id === id ? { ...u, role: newRole } : u));
       toast.success("User role updated successfully");
-    } catch (err) {
-      toast.error("Failed to update user role");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update user role");
     } finally {
       setChangingRoleId(null);
+    }
+  };
+
+  const handleStatusChange = async (id: string, newStatus: 'active' | 'disabled') => {
+    try {
+      await apiPatch(`${API_URL}/auth/users/${id}/status`, { status: newStatus });
+      setUsers(users.map(u => u.id === id ? { ...u, status: newStatus } : u));
+      toast.success(`User ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update user status");
     }
   };
 
@@ -243,16 +214,13 @@ export default function AdminUsers() {
       phone: u.phone || '',
       dateOfBirth: u.dateOfBirth || '',
       assignedWarehouses: u.assignedWarehouses || [],
-      address: u.address || {
-        street: '',
-        landmark: '',
-        city: '',
-        state: '',
-        country: '',
-        pincode: '',
-      },
     });
     setEditModalOpen(true);
+    
+    // Load warehouses when opening the modal for roles that need it
+    if (u.role === 'product_inventory_management' || u.role === 'order_warehouse_management') {
+      fetchWarehouses();
+    }
   };
 
   const closeEditModal = () => {
@@ -264,9 +232,14 @@ export default function AdminUsers() {
     e.preventDefault();
     if (!editUser) return;
 
+    // Only admin can edit user details
+    if (currentUser?.role !== 'admin') {
+      toast.error("You don't have permission to edit user details");
+      return;
+    }
+
     setEditLoading(true);
     try {
-      if (!token) throw new Error("No authentication token found.");
       // Merge updated fields with the existing user object to preserve all other fields
       const updatedUser = {
         ...editUser,
@@ -277,58 +250,27 @@ export default function AdminUsers() {
         role: editForm.role,
         status: editForm.status,
         assignedWarehouses: editForm.assignedWarehouses,
-        address: editForm.address,
       };
-      const res = await fetch(`${API_URL}/auth/users/${editUser.id}`, {
-        method: 'PUT',
-        headers: { 
-          'Content-Type': 'application/json', 
-          Authorization: `Bearer ${token}` 
-        },
-        body: JSON.stringify(updatedUser)
-      });
-      if (!res.ok) {
-        let errorMsg = "Failed to update user";
-        try {
-          const errorData = await res.json();
-          console.log('Error response:', errorData); // Debug log
-          
-          // Check for email duplicate error
-          if (
-            errorData?.error === "EMAIL_EXISTS" ||
-            errorData?.error === "DUPLICATE_KEY" ||
-            (errorData?.message?.toLowerCase().includes("email") && 
-             (errorData?.message?.toLowerCase().includes("exist") || 
-              errorData?.message?.toLowerCase().includes("already") ||
-              errorData?.message?.toLowerCase().includes("registered")))
-          ) {
-            errorMsg = "Email already exists. Please use a different email.";
-          }
-          // Check for phone duplicate error
-          else if (
-            errorData?.error === "PHONE_EXISTS" ||
-            (errorData?.message?.toLowerCase().includes("phone") && 
-             (errorData?.message?.toLowerCase().includes("exist") || 
-              errorData?.message?.toLowerCase().includes("already")))
-          ) {
-            errorMsg = "Phone number already exists. Please use a different phone number.";
-          }
-          // Check for general duplicate error
-          else if (errorData?.message) {
-            errorMsg = errorData.message;
-          }
-        } catch (e) {
-          console.error('Error parsing error response:', e);
-          // ignore JSON parse error, fallback to generic
-        }
-        toast.error(errorMsg);
-        return;
-      }
-      setUsers(users.map(u => u.id === editUser.id ? updatedUser : u));
+      
+      await apiPut(`${API_URL}/auth/users/${editUser.id}`, updatedUser);
+      
+      // Update users in state
+      setUsers(users.map(u => u.id === editUser.id ? { ...u, ...updatedUser } : u));
       toast.success("User updated successfully");
       closeEditModal();
-    } catch (err) {
-      toast.error("Failed to update user");
+    } catch (err: any) {
+      let errorMsg = "Failed to update user";
+      
+      // Check for specific error types
+      if (err.message?.toLowerCase().includes("email") && err.message?.toLowerCase().includes("exist")) {
+        errorMsg = "Email already exists. Please use a different email.";
+      } else if (err.message?.toLowerCase().includes("phone") && err.message?.toLowerCase().includes("exist")) {
+        errorMsg = "Phone number already exists. Please use a different phone number.";
+      } else if (err.message) {
+        errorMsg = err.message;
+      }
+      
+      toast.error(errorMsg);
     } finally {
       setEditLoading(false);
     }
@@ -355,7 +297,7 @@ export default function AdminUsers() {
   };
 
   useEffect(() => {
-    if (user && isAdminUser(user.role) && hasAccessToSection(user.role, 'users')) {
+    if (currentUser && isAdminUser(currentUser.role) && hasAccessToSection(currentUser.role, 'users')) {
       if (token) {
         fetchUsers();
         fetchWarehouses();
@@ -365,9 +307,9 @@ export default function AdminUsers() {
     } else {
       router.push("/");
     }
-  }, [user, router]);
+  }, [currentUser, router]);
 
-  if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'users')) {
+  if (!currentUser || !isAdminUser(currentUser.role) || !hasAccessToSection(currentUser.role, 'users')) {
       router.push("/")
       return
     }
@@ -540,32 +482,62 @@ export default function AdminUsers() {
                         </td>
                         <td className="py-3 px-4 align-middle">
                           <div className="flex items-center justify-center gap-2">
-                            <button 
-                              onClick={() => openEditModal(user)}
-                              className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-brand-primary hover:bg-brand-primary/90 rounded-lg transition-colors shadow-sm"
-                              title="Edit User"
-                            >
-                              <Edit className="h-3 w-3 mr-1" />
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleStatusToggle(user)}
-                              className={`inline-flex items-center px-2 py-1.5 text-xs font-medium rounded-lg transition-colors shadow-sm ${
-                                user.status === 'active' 
-                                  ? 'text-red-600 bg-red-100 hover:bg-red-200' 
-                                  : 'text-green-600 bg-green-100 hover:bg-green-200'
-                              }`}
-                              title={user.status === 'active' ? 'Disable User' : 'Activate User'}
-                            >
-                              {user.status === 'active' ? <X className="h-3 w-3" /> : <Check className="h-3 w-3" />}
-                            </button>
-                            <button
-                              onClick={() => setConfirmDelete(user.id)}
-                              className="inline-flex items-center px-2 py-1.5 text-xs font-medium text-red-600 bg-red-100 hover:bg-red-200 rounded-lg transition-colors shadow-sm"
-                              title="Delete User"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </button>
+                            {/* Only Admin can edit user details */}
+                            {currentUser?.role === 'admin' && (
+                              <button 
+                                onClick={() => openEditModal(user)}
+                                className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-brand-primary hover:bg-brand-primary/90 rounded-lg transition-colors shadow-sm"
+                                title="Edit User"
+                              >
+                                <Edit className="h-3 w-3 mr-1" />
+                                Edit
+                              </button>
+                            )}
+                            
+                            {/* Status change button with role-based restrictions */}
+                            {(currentUser?.role === 'admin' || 
+                              (currentUser?.role === 'customer_support_executive' && user.role === 'user')) && (
+                              <button
+                                onClick={() => handleStatusChange(user.id, user.status === 'active' ? 'disabled' : 'active')}
+                                className={`inline-flex items-center px-2 py-1.5 text-xs font-medium rounded-lg transition-colors shadow-sm ${
+                                  user.status === 'active' 
+                                    ? 'text-red-600 bg-red-100 hover:bg-red-200' 
+                                    : 'text-green-600 bg-green-100 hover:bg-green-200'
+                                }`}
+                                title={user.status === 'active' ? 'Disable User' : 'Activate User'}
+                              >
+                                {user.status === 'active' ? <X className="h-3 w-3" /> : <Check className="h-3 w-3" />}
+                              </button>
+                            )}
+                            
+                            {/* Show "Cannot modify" indicator for Customer Support Executive viewing admin users */}
+                            {currentUser?.role === 'customer_support_executive' && user.role !== 'user' && (
+                              <span 
+                                className="inline-flex items-center px-2 py-1.5 text-xs font-medium text-gray-500 bg-gray-100 rounded-lg"
+                                title="Customer Support Executive can only change status of regular customers"
+                              >
+                                <Lock className="h-3 w-3" />
+                              </span>
+                            )}
+                            
+                            {/* Only Admin can delete users */}
+                            {currentUser?.role === 'admin' && (
+                              <button
+                                onClick={() => setConfirmDelete(user.id)}
+                                className="inline-flex items-center px-2 py-1.5 text-xs font-medium text-red-600 bg-red-100 hover:bg-red-200 rounded-lg transition-colors shadow-sm"
+                                title="Delete User"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            )}
+                            
+                            {/* Customer Support Executive gets view-only indicator for other actions */}
+                            {currentUser?.role === 'customer_support_executive' && (
+                              <span className="inline-flex items-center px-2 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg" title="Customer Support - Can only change account status">
+                                <Eye className="h-3 w-3 mr-1" />
+                                Status Only
+                              </span>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -693,7 +665,20 @@ export default function AdminUsers() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
                   <select
                     value={editForm.role}
-                    onChange={(e) => setEditForm({ ...editForm, role: e.target.value as any })}
+                    onChange={(e) => {
+                      const newRole = e.target.value as any;
+                      setEditForm({ 
+                        ...editForm, 
+                        role: newRole,
+                        // Clear warehouse assignments when changing roles
+                        assignedWarehouses: []
+                      });
+                      
+                      // Fetch warehouses if switching to a warehouse-dependent role
+                      if (newRole === 'product_inventory_management' || newRole === 'order_warehouse_management') {
+                        fetchWarehouses();
+                      }
+                    }}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
                   >
                     <option value="user">Customer</option>
@@ -727,80 +712,57 @@ export default function AdminUsers() {
                 </div>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Warehouse Assignment for specific roles */}
+              {(editForm.role === 'product_inventory_management' || editForm.role === 'order_warehouse_management') && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Street</label>
-                  <input
-                    type="text"
-                    value={editForm.address.street}
-                    onChange={(e) => setEditForm({ 
-                      ...editForm, 
-                      address: { ...editForm.address, street: e.target.value }
-                    })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                  />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Assigned Warehouses
+                    <span className="text-red-500 ml-1">*</span>
+                  </label>
+                  {warehousesLoading ? (
+                    <div className="flex items-center justify-center py-4">
+                      <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                      Loading warehouses...
+                    </div>
+                  ) : (
+                    <div className="border border-gray-300 rounded-lg p-3 max-h-40 overflow-y-auto">
+                      {warehouses.length === 0 ? (
+                        <p className="text-gray-500 text-sm">No warehouses available</p>
+                      ) : (
+                        warehouses.map((warehouse) => (
+                          <label key={warehouse.id} className="flex items-center space-x-3 py-2 hover:bg-gray-50 px-2 rounded cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={editForm.assignedWarehouses.includes(warehouse.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setEditForm({
+                                    ...editForm,
+                                    assignedWarehouses: [...editForm.assignedWarehouses, warehouse.id]
+                                  });
+                                } else {
+                                  setEditForm({
+                                    ...editForm,
+                                    assignedWarehouses: editForm.assignedWarehouses.filter(id => id !== warehouse.id)
+                                  });
+                                }
+                              }}
+                              className="h-4 w-4 text-brand-primary focus:ring-brand-primary border-gray-300 rounded"
+                            />
+                            <span className="text-sm text-gray-700 font-medium">{warehouse.name}</span>
+                          </label>
+                        ))
+                      )}
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-500 mt-1">
+                    {editForm.role === 'product_inventory_management' 
+                      ? 'User will only see products from selected warehouses'
+                      : 'User will only see orders from selected warehouses'
+                    }
+                  </p>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Landmark</label>
-                  <input
-                    type="text"
-                    value={editForm.address.landmark}
-                    onChange={(e) => setEditForm({ 
-                      ...editForm, 
-                      address: { ...editForm.address, landmark: e.target.value }
-                    })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
-                  <input
-                    type="text"
-                    value={editForm.address.city}
-                    onChange={(e) => setEditForm({ 
-                      ...editForm, 
-                      address: { ...editForm.address, city: e.target.value }
-                    })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
-                  <input
-                    type="text"
-                    value={editForm.address.state}
-                    onChange={(e) => setEditForm({ 
-                      ...editForm, 
-                      address: { ...editForm.address, state: e.target.value }
-                    })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
-                  <input
-                    type="text"
-                    value={editForm.address.country}
-                    onChange={(e) => setEditForm({ 
-                      ...editForm, 
-                      address: { ...editForm.address, country: e.target.value }
-                    })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Pincode</label>
-                  <input
-                    type="text"
-                    value={editForm.address.pincode}
-                    onChange={(e) => setEditForm({ 
-                      ...editForm, 
-                      address: { ...editForm.address, pincode: e.target.value }
-                    })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                  />
-                </div>
-              </div>
+              )}
 
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
                 <button

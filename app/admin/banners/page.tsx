@@ -8,6 +8,7 @@ import { isAdminUser, hasAccessToSection } from '../../../lib/adminAuth';
 import { useRouter } from 'next/navigation';
 import toast from "react-hot-toast";
 import { uploadToCloudinary } from "../../../lib/uploadToCloudinary";
+import { apiPost, apiPut, apiDelete, apiGet } from "../../../lib/api-client";
 
 // Banner type
 interface Banner {
@@ -28,12 +29,6 @@ interface Category {
 export default function AdminBanner() {
   const user = useAppSelector((state) => state.auth.user);
   const router = useRouter();
-
-  useEffect(() => {
-    if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'banners')) {
-      router.push("/")
-      return
-    }
 
   const [banners, setBanners] = useState<Banner[]>([])
   const [categories, setCategories] = useState<Category[]>([])
@@ -56,6 +51,7 @@ export default function AdminBanner() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   // Add state for image to delete
   const [imageToDelete, setImageToDelete] = useState<string | null>(null);
+
   // Add state for special banners
   const [specialBanners, setSpecialBanners] = useState({
     banner1: null as Banner | null,
@@ -67,6 +63,15 @@ export default function AdminBanner() {
   const BANNERS_PER_PAGE = 10;
   const totalPages = Math.ceil(banners.length / BANNERS_PER_PAGE);
   const paginatedBanners = banners.slice((currentPage - 1) * BANNERS_PER_PAGE, currentPage * BANNERS_PER_PAGE);
+
+  useEffect(() => {
+    if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'banners')) {
+      router.push("/")
+      return
+    }
+    fetchBanners();
+    fetchCategories();
+  }, [user]);
 
   const fetchBanners = async (showToast = true) => {
     setLoading(true);
@@ -129,11 +134,7 @@ export default function AdminBanner() {
     // Ensure we have the most up-to-date banner data with populated categoryId
     const fetchBannerDetails = async () => {
       try {
-        const res = await fetch(`${API_URL}/banners/${b._id || b.id}`);
-        if (!res.ok) {
-          throw new Error('Failed to fetch banner details');
-        }
-        const bannerData = await res.json();
+        const bannerData = await apiGet(`${API_URL}/banners/${b._id || b.id}`);
         console.log('Fetched banner details:', bannerData);
         
         setEditing(bannerData);
@@ -180,21 +181,14 @@ export default function AdminBanner() {
       image: imageUrl
     };
     
-    const res = await fetch(`${API_URL}/banners`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    
-    if (!res.ok) {
-      const err = await res.json();
-      toast.error(err.error || "Failed to create banner", { id: toastId });
-      throw new Error(err.error || "Failed to create banner");
+    try {
+      const data = await apiPost(`${API_URL}/banners`, payload);
+      toast.success("Banner created", { id: toastId });
+      return data;
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create banner", { id: toastId });
+      throw err;
     }
-    
-    const data = await res.json();
-    toast.success("Banner created", { id: toastId });
-    return data;
   };
 
   const editBanner = async (imageUrl: string) => {
@@ -204,21 +198,14 @@ export default function AdminBanner() {
       image: imageUrl
     };
     
-    const res = await fetch(`${API_URL}/banners/${editing?._id || editing?.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    
-    if (!res.ok) {
-      const err = await res.json();
-      toast.error(err.error || "Failed to update banner", { id: toastId });
-      throw new Error(err.error || "Failed to update banner");
+    try {
+      const data = await apiPut(`${API_URL}/banners/${editing?._id || editing?.id}`, payload);
+      toast.success("Banner updated", { id: toastId });
+      return data;
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update banner", { id: toastId });
+      throw err;
     }
-    
-    const data = await res.json();
-    toast.success("Banner updated", { id: toastId });
-    return data;
   };
 
   const handleSubmit = async (e: any) => {
@@ -296,14 +283,7 @@ export default function AdminBanner() {
     try {
       // Delete banner from backend (this will also delete the image from Cloudinary)
       const deleteUrl = `${API_URL}/banners/${bannerToDelete._id || bannerToDelete.id}`;
-      const res = await fetch(deleteUrl, { method: "DELETE" });
-      if (!res.ok) {
-        const err = await res.json();
-        toast.error(err.error || "Failed to delete banner", { id: toastId });
-        setDeleteLoading(false);
-        return;
-      }
-      const result = await res.json();
+      await apiDelete(deleteUrl);
       toast.success("Banner deleted successfully", { id: toastId });
       setDeleteModalOpen(false);
       setBannerToDelete(null);

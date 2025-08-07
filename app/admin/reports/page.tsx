@@ -16,6 +16,24 @@ export default function AdminReports() {
       router.push("/")
       return
     }
+  }, [user]);
+
+  // Mock data for demonstration
+  const salesData = {
+    thisMonth: 45000,
+    lastMonth: 38000,
+    growth: 18.4,
+    ordersThisMonth: 150,
+    ordersLastMonth: 120,
+    orderGrowth: 25.0
+  };
+
+  const topCategories = [
+    { name: "Electronics", sales: 25000, percentage: 55.6 },
+    { name: "Fashion", sales: 12000, percentage: 26.7 },
+    { name: "Home & Garden", sales: 5000, percentage: 11.1 },
+    { name: "Sports", sales: 3000, percentage: 6.7 }
+  ];
 
   return (
     <AdminLayout>

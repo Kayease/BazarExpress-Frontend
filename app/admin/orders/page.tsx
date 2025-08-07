@@ -748,9 +748,15 @@ export default function AdminOrders() {
                   </h4>
                   <div className="space-y-4">
                     <select 
-                      className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-brand-primary focus:border-transparent" 
+                      className={`w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-brand-primary focus:border-transparent ${
+                        user?.role === 'customer_support_executive' 
+                          ? 'bg-gray-100 cursor-not-allowed opacity-60' 
+                          : ''
+                      }`}
                       value={status} 
                       onChange={e => setStatus(e.target.value)}
+                      disabled={user?.role === 'customer_support_executive'}
+                      title={user?.role === 'customer_support_executive' ? 'Customer Support Executive cannot change order status' : ''}
                     >
                       {statusOptions.map(opt => (
                         <option key={opt} value={opt}>
@@ -758,11 +764,18 @@ export default function AdminOrders() {
                         </option>
                       ))}
                     </select>
-                    <button 
-                      className="w-full bg-brand-primary hover:bg-brand-primary/90 text-white font-semibold py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center" 
-                      onClick={updateStatus}
-                      disabled={updating || status === viewing.status}
-                    >
+                    
+                    {user?.role === 'customer_support_executive' ? (
+                      <div className="w-full bg-gray-100 text-gray-600 font-medium py-3 px-4 rounded-lg border-2 border-dashed border-gray-300 text-center">
+                        <Eye className="h-4 w-4 inline mr-2" />
+                        View Only - Cannot change order status
+                      </div>
+                    ) : (
+                      <button 
+                        className="w-full bg-brand-primary hover:bg-brand-primary/90 text-white font-semibold py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center" 
+                        onClick={updateStatus}
+                        disabled={updating || status === viewing.status}
+                      >
                       {updating ? (
                         <>
                           <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -774,7 +787,8 @@ export default function AdminOrders() {
                           Update Status
                         </>
                       )}
-                    </button>
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

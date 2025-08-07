@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import imageCompression from 'browser-image-compression';
 import { uploadToCloudinary } from '../../../../lib/uploadToCloudinary';
+import { apiGet, apiPost } from '../../../../lib/api-client';
 
 const AddCategoryPage = () => {
   const [categories, setCategories] = useState<any[]>([]);
@@ -44,9 +45,7 @@ const AddCategoryPage = () => {
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const res = await fetch(`${BackedUrl}/categories`);
-        if (!res.ok) throw new Error("Failed to fetch categories");
-        const data = await res.json();
+        const data = await apiGet(`${BackedUrl}/categories`);
         
         // Filter to only include parent categories (those with no parentId)
         const parentCategories = data.filter((cat: any) => !cat.parentId);
@@ -110,9 +109,7 @@ const AddCategoryPage = () => {
 
   const checkSortOrderUnique = async (sortOrder: number) => {
     try {
-      const res = await fetch(`${BackedUrl}/categories?sortOrder=${sortOrder}`);
-      if (!res.ok) return false;
-      const categories = await res.json();
+      const categories = await apiGet(`${BackedUrl}/categories?sortOrder=${sortOrder}`);
       return !categories.some((cat: any) => cat.sortOrder === sortOrder);
     } catch {
       return false;
@@ -154,23 +151,13 @@ const AddCategoryPage = () => {
       showOnHome: form.showOnHome,
     };
     try {
-      const res = await fetch(`${BackedUrl}/categories`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      await apiPost(`${BackedUrl}/categories`, payload);
       toast.dismiss(toastId);
-      if (!res.ok) {
-        const error = await res.json();
-        toast.error(error.error || error.message || 'Failed to add category', { id: toastId });
-        setLoading(false);
-        return;
-      }
       toast.success("Category added successfully", { id: toastId });
       router.push("/admin/categories");
     } catch (error) {
       toast.dismiss(toastId);
-      toast.error("Failed to add category", { id: toastId });
+      toast.error(error.message || "Failed to add category", { id: toastId });
     } finally {
       setLoading(false);
       setThumbnailFile(null);

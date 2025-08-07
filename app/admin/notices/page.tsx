@@ -51,7 +51,14 @@ export default function AdminNotices() {
     if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'notices')) {
       router.push("/")
       return
-    }/notices`, {
+    }
+    if (token) fetchNotices();
+  }, [user, token]);
+
+  const fetchNotices = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/notices`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Failed to fetch notices");
@@ -64,7 +71,7 @@ export default function AdminNotices() {
     }
   };
 
-  useEffect(() => { if (token) fetchNotices(); }, [token]);
+
 
   const handleEdit = (notice: Notice) => {
     setEditing(notice);

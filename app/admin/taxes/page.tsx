@@ -46,12 +46,62 @@ export default function AdminTaxes() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  // State
+  const [taxes, setTaxes] = useState<Tax[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [editingTax, setEditingTax] = useState<Tax | null>(null);
+  const [search, setSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const TAXES_PER_PAGE = 10;
+
+  // Helper functions
+  const modalOpen = showModal;
+  const setModalOpen = setShowModal;
+  const editTax = editingTax;
+  const setEditTax = setEditingTax;
+
   // Auth Guard
   useEffect(() => {
     if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'taxes')) {
       router.push("/")
       return
     }
+    fetchTaxes();
+  }, [user]);
+
+  const fetchTaxes = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/taxes`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      if (!response.ok) throw new Error('Failed to fetch taxes');
+      const data = await response.json();
+      setTaxes(data);
+    } catch (error) {
+      toast.error('Failed to load taxes');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    setDeletingId(id);
+    try {
+      const response = await fetch(`${API_URL}/taxes/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      if (!response.ok) throw new Error('Failed to delete tax');
       toast.success("Tax deleted successfully");
       setConfirmDelete(null);
       fetchTaxes();
@@ -77,6 +127,13 @@ export default function AdminTaxes() {
     }
     return filtered;
   }, [taxes, search]);
+
+  // Pagination
+  const totalPages = Math.ceil(filteredTaxes.length / TAXES_PER_PAGE);
+  const paginatedTaxes = filteredTaxes.slice(
+    (currentPage - 1) * TAXES_PER_PAGE,
+    currentPage * TAXES_PER_PAGE
+  );
 
   // Toast for add/edit success
   useEffect(() => {

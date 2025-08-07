@@ -72,6 +72,16 @@ export const apiPut = (url: string, data: any): Promise<any> => {
 };
 
 /**
+ * PATCH request with authentication
+ */
+export const apiPatch = (url: string, data: any): Promise<any> => {
+  return authenticatedFetchJSON(url, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+};
+
+/**
  * DELETE request with authentication
  */
 export const apiDelete = (url: string): Promise<any> => {

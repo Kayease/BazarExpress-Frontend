@@ -5,6 +5,7 @@ import toast from "react-hot-toast";
 import AdminLayout from "@/components/AdminLayout";
 import { uploadToCloudinary } from "@/lib/uploadToCloudinary";
 import ConfirmDeleteModal from '../../../components/ui/ConfirmDeleteModal';
+import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api-client';
 
 interface Brand {
   _id?: string;
@@ -69,8 +70,7 @@ export default function BrandManagementPage() {
   async function fetchBrands(showToast = true) {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/brands`);
-      const data = await res.json();
+      const data = await apiGet(`${API_URL}/brands`);
       setBrands(data);
     } catch (e) {
       toast.error("Failed to load brands");
@@ -248,27 +248,12 @@ export default function BrandManagementPage() {
       status: newBrand.status, // already 'active' or 'inactive'
     };
     try {
-      let res;
       if (editingBrand && editingBrand._id) {
-        res = await fetch(`${API_URL}/brands/${editingBrand._id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
+        await apiPut(`${API_URL}/brands/${editingBrand._id}`, payload);
       } else {
-        res = await fetch(`${API_URL}/brands`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
+        await apiPost(`${API_URL}/brands`, payload);
       }
-      if (!res.ok) {
-        const error = await res.json();
-        toast.dismiss(toastId);
-        toast.error(error.error || error.message || "Failed to save brand", { id: toastId });
-        setLoading(false);
-        return;
-      }
+      
       toast.success(editingBrand ? "Brand updated" : "Brand added", { id: toastId });
       closeModal();
       fetchBrands();
@@ -285,7 +270,7 @@ export default function BrandManagementPage() {
       setBannerToDelete(null);
     } catch (err) {
       toast.dismiss(toastId);
-      toast.error("Failed to save brand", { id: toastId });
+      toast.error(err.message || "Failed to save brand", { id: toastId });
       setLoading(false);
     }
   }
@@ -311,12 +296,12 @@ export default function BrandManagementPage() {
 
   async function deleteImageFromCloudinary(imageUrl: string) {
     if (!imageUrl) return true;
-    const res = await fetch(`${API_URL}/brands/delete-image`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ imageUrl }),
-    });
-    return res.ok;
+    try {
+      await apiPost(`${API_URL}/brands/delete-image`, { imageUrl });
+      return true;
+    } catch (error) {
+      return false;
+    }
   }
 
   async function confirmDeleteBrandAction() {
@@ -337,14 +322,7 @@ export default function BrandManagementPage() {
       }
 
       // 2. Delete the brand from the database
-      const res = await fetch(`${API_URL}/brands/${confirmDeleteBrand._id}`, { method: "DELETE" });
-      if (!res.ok) {
-        const error = await res.json();
-        toast.error(error.error || error.message || "Failed to delete brand", { id: toastId });
-        setDeleting(false);
-        setConfirmDeleteBrand(null);
-        return;
-      }
+      await apiDelete(`${API_URL}/brands/${confirmDeleteBrand._id}`);
       toast.success("Brand deleted", { id: toastId });
       fetchBrands();
       setConfirmDeleteBrand(null);

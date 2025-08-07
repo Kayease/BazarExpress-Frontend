@@ -50,12 +50,6 @@ export default function AdminNewsletter() {
   const token = useAppSelector((state) => state.auth.token);
   const router = useRouter();
 
-  useEffect(() => {
-    if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'newsletter')) {
-      router.push("/")
-      return
-    }
-
   // State for subscribers
   const [subscribers, setSubscribers] = useState<Subscriber[]>([])
   const [filteredSubscribers, setFilteredSubscribers] = useState<Subscriber[]>([])
@@ -72,8 +66,15 @@ export default function AdminNewsletter() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [subscriberToDelete, setSubscriberToDelete] = useState<Subscriber | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
-  
-  // Use API_URL from config
+
+  useEffect(() => {
+    if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'newsletter')) {
+      router.push("/")
+      return
+    }
+    fetchSubscribers();
+    fetchStats();
+  }, [user, token]);
 
   const fetchSubscribers = async () => {
     setLoading(true);

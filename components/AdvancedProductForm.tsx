@@ -3,6 +3,7 @@ import { useRouter } from "next/navigation";
 import AdminLayout from "@/components/AdminLayout";
 import { uploadToCloudinary } from "@/lib/uploadToCloudinary";
 import toast from "react-hot-toast";
+import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api-client';
 import { Plus, Layers, IndianRupee, Ruler, Package, Image as ImageIcon, Camera, Globe, Shield, Star, ChevronDown } from "lucide-react";
 import { Editor } from '@tinymce/tinymce-react';
 import CategoryFormModal from "./CategoryFormModal";
@@ -212,22 +213,19 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [categoriesRes, brandsRes, warehousesRes, taxesRes] = await Promise.all([
-          fetch(`${API_URL}/categories`),
-          fetch(`${API_URL}/brands`),
-          fetch(`${API_URL}/warehouses`),
-          fetch(`${API_URL}/taxes`),
+        const [categoriesData, brandsData, warehousesData, taxesData] = await Promise.all([
+          apiGet(`${API_URL}/categories`),
+          apiGet(`${API_URL}/brands`),
+          apiGet(`${API_URL}/warehouses`),
+          apiGet(`${API_URL}/taxes`),
         ]);
-        const categoriesData = await categoriesRes.json();
-        const brandsData = await brandsRes.json();
-        const warehousesData = await warehousesRes.json();
-        const taxesData = await taxesRes.json();
         setCategories(categoriesData);
         setBrands(brandsData);
         setWarehouses(warehousesData);
         setTaxes(taxesData);
       } catch (error) {
         console.error("Error fetching data:", error);
+        toast.error("Failed to load form data");
       }
     };
     fetchData();
@@ -290,13 +288,8 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
       }
       
       try {
-        const res = await fetch(`${API_URL}/categories/subcategories/${product.category}`);
-        if (res.ok) {
-          const data = await res.json();
-          setSubcategories(data);
-        } else {
-          setSubcategories([]);
-        }
+        const data = await apiGet(`${API_URL}/categories/subcategories/${product.category}`);
+        setSubcategories(data);
       } catch (error) {
         console.error("Error fetching subcategories:", error);
         setSubcategories([]);
@@ -453,15 +446,10 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
         attributes: attributes !== undefined ? attributes : [],
       };
       // Submitting product data
-      const url = mode === "edit" ? `${API_URL}/products/${productId}` : `${API_URL}/products`;
-      const method = mode === "edit" ? "PUT" : "POST";
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        throw new Error(`Failed to ${mode === "edit" ? "update" : "create"} product`);
+      if (mode === "edit") {
+        await apiPut(`${API_URL}/products/${productId}`, payload);
+      } else {
+        await apiPost(`${API_URL}/products`, payload);
       }
       toast.success(`Product ${mode === "edit" ? "updated" : "created"} successfully!`);
       setTimeout(() => router.push("/admin/products"), 1200);
@@ -816,8 +804,7 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                 onSuccess={async function (newTax: any) {
                   setShowTaxModal(false);
                   // Refetch taxes and update state
-                  const res = await fetch(`${API_URL}/taxes`);
-                  const data = await res.json();
+                  const data = await apiGet(`${API_URL}/taxes`);
                   setTaxes(data);
                   if (newTax && newTax._id) {
                     setProduct((prev: any) => ({ ...prev, tax: newTax._id }));
@@ -859,8 +846,7 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                 onSuccess={async (newWarehouse: any) => {
                   setShowWarehouseModal(false);
                   // Refetch warehouses and update state
-                  const res = await fetch(`${API_URL}/warehouses`);
-                  const data = await res.json();
+                  const data = await apiGet(`${API_URL}/warehouses`);
                   setWarehouses(data);
                   if (newWarehouse && newWarehouse._id) {
                     setProduct((prev: any) => ({ ...prev, warehouse: newWarehouse._id }));
@@ -1440,8 +1426,7 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
             onSuccess={async (newTax: any) => {
               setShowTaxModal(false);
               // Refetch taxes and update state
-              const res = await fetch(`${API_URL}/taxes`);
-              const data = await res.json();
+              const data = await apiGet(`${API_URL}/taxes`);
               setTaxes(data);
               if (newTax && newTax._id) {
                 setProduct((prev: any) => ({ ...prev, tax: newTax._id }));
@@ -1473,8 +1458,7 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
             onSuccess={async (newWarehouse: any) => {
               setShowWarehouseModal(false);
               // Refetch warehouses and update state
-              const res = await fetch(`${API_URL}/warehouses`);
-              const data = await res.json();
+              const data = await apiGet(`${API_URL}/warehouses`);
               setWarehouses(data);
               if (newWarehouse && newWarehouse._id) {
                 setProduct((prev: any) => ({ ...prev, warehouse: newWarehouse._id }));

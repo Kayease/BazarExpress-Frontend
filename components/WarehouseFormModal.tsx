@@ -4,6 +4,7 @@ import { X, MapPin, Truck, Clock, Settings } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAppSelector } from '@/lib/store';
 import { Warehouse, defaultWarehouse } from '@/types/warehouse';
+import { authenticatedFetch } from '@/lib/api-client';
 
 interface WarehouseFormModalProps {
   open: boolean;
@@ -241,9 +242,8 @@ export default function WarehouseFormModal({ open, onClose, warehouse, onSuccess
       if ('status' in payload) {
         delete (payload as any).status;
       }
-      const res = await fetch(url, {
+      const res = await authenticatedFetch(url, {
         method,
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error("Failed to save warehouse");
