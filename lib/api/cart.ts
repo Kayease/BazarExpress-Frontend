@@ -1,17 +1,29 @@
 import axios from 'axios';
+import { getToken, handleAuthError } from '../auth-utils';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
 // Create axios instance with auth header
 const createAuthAxios = () => {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-  return axios.create({
+  const token = getToken();
+  const instance = axios.create({
     baseURL: API_BASE_URL,
     headers: {
       'Authorization': token ? `Bearer ${token}` : '',
       'Content-Type': 'application/json'
     }
   });
+
+  // Add response interceptor to handle 401 errors
+  instance.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      handleAuthError(error);
+      return Promise.reject(error);
+    }
+  );
+
+  return instance;
 };
 
 export interface CartItem {
@@ -44,6 +56,10 @@ export interface CartResponse {
 
 // Get user's cart from database
 export const getCartFromDB = async (): Promise<CartResponse> => {
+  const token = getToken();
+  if (!token) {
+    throw new Error('No authentication token found');
+  }
   const api = createAuthAxios();
   const response = await api.get('/cart');
   return response.data;

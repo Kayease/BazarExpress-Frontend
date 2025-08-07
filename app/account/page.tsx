@@ -373,6 +373,16 @@ export default function Profile() {
                       <Award className="w-4 h-4 mr-2" />
                       {user.role === "admin"
                         ? "Administrator"
+                        : user.role === "product_inventory_management"
+                        ? "Product & Inventory Manager"
+                        : user.role === "order_warehouse_management"
+                        ? "Order & Warehouse Manager"
+                        : user.role === "marketing_content_manager"
+                        ? "Marketing & Content Manager"
+                        : user.role === "customer_support_executive"
+                        ? "Customer Support Executive"
+                        : user.role === "report_finance_analyst"
+                        ? "Report & Finance Analyst"
                         : "Premium Customer"}
                     </span>
                   </div>

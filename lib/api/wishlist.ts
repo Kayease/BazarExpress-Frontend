@@ -1,17 +1,29 @@
 import axios from 'axios';
+import { getToken, handleAuthError } from '../auth-utils';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
 // Create axios instance with auth header
 const createAuthAxios = () => {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-  return axios.create({
+  const token = getToken();
+  const instance = axios.create({
     baseURL: API_BASE_URL,
     headers: {
       'Authorization': token ? `Bearer ${token}` : '',
       'Content-Type': 'application/json'
     }
   });
+
+  // Add response interceptor to handle 401 errors
+  instance.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      handleAuthError(error);
+      return Promise.reject(error);
+    }
+  );
+
+  return instance;
 };
 
 export interface WishlistItem {
@@ -36,6 +48,10 @@ export interface WishlistResponse {
 
 // Get user's wishlist from database
 export const getWishlistFromDB = async (): Promise<WishlistResponse> => {
+  const token = getToken();
+  if (!token) {
+    throw new Error('No authentication token found');
+  }
   const api = createAuthAxios();
   const response = await api.get('/wishlist');
   return response.data;

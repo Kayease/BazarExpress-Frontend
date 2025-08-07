@@ -21,6 +21,10 @@ export interface ProductWithWarehouse {
   _id: string;
   name: string;
   warehouse?: WarehouseInfo;
+  price?: number;
+  createdAt?: string;
+  // Allow for additional product properties
+  [key: string]: any;
 }
 
 export interface CartItemWithWarehouse {

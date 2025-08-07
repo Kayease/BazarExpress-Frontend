@@ -6,6 +6,7 @@ import AdminLayout from "../../../components/AdminLayout"
 import { Search, Filter, MoreHorizontal, Edit, Trash2, Plus, Eye, Package, IndianRupee } from "lucide-react"
 import Image from "next/image"
 import { useAppSelector } from '../../../lib/store'
+import { isAdminUser, hasAccessToSection } from '../../../lib/adminAuth'
 import ConfirmDeleteModal from '../../../components/ui/ConfirmDeleteModal';
 
 // Define Product type to match backend
@@ -47,36 +48,9 @@ export default function AdminProducts() {
   const API = process.env.NEXT_PUBLIC_API_URL
 
   useEffect(() => {
-    if (!user || user.role !== "admin") {
+    if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'products')) {
       router.push("/")
-    }
-  }, [user, router])
-
-  useEffect(() => {
-    setLoading(true)
-    fetch(`${API}/products`)
-      .then(res => res.json())
-      .then(data => {
-        setProductList(data.map((p: any) => ({
-          ...p,
-          inStock: p.stock > 0,
-          stockCount: p.stock,
-        })));
-        setLoading(false)
-      })
-      .catch(() => setLoading(false))
-  }, [])
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
-        setShowSuggestions(false)
-      }
-    }
-
-    document.addEventListener("mousedown", handleClickOutside)
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside)
+      return
     }
   }, [])
 
@@ -215,16 +189,10 @@ export default function AdminProducts() {
   const totalPages = Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE);
   const paginatedProducts = filteredProducts.slice((currentPage - 1) * PRODUCTS_PER_PAGE, currentPage * PRODUCTS_PER_PAGE);
 
-  if (!user || user.role !== "admin") {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-primary mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    )
-  }
+  if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'products')) {
+      router.push("/")
+      return
+    }
 
   return (
     <AdminLayout>
@@ -399,7 +367,7 @@ export default function AdminProducts() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="text-left py-2 px-3 font-medium text-sm">Product<span className="text-red-500">*</span></th>
-                    <th className="text-left py-2 px-3 font-medium text-sm">Category<span className="text-red-500">*</span></th>
+                    <th className="text-center py-2 px-3 font-medium text-sm">Category<span className="text-red-500">*</span></th>
                     <th className="text-left py-2 px-3 font-medium text-sm">Price<span className="text-red-500">*</span></th>
                     <th className="text-left py-2 px-3 font-medium text-sm">Stock</th>
                     <th className="text-left py-2 px-3 font-medium text-sm">Status</th>
@@ -431,7 +399,7 @@ export default function AdminProducts() {
                           </div>
                         </div>
                       </td>
-                      <td className="py-2 px-3 align-middle max-w-xs text-xs text-gray-700 truncate">
+                      <td className="py-2 px-3 align-middle text-center max-w-xs text-xs text-gray-700 truncate">
                         <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded-full text-xs font-medium">
                           {typeof product.category === 'object' && '_id' in product.category ? product.category.name : product.category}
                         </span>
@@ -471,31 +439,75 @@ export default function AdminProducts() {
               </table>
             </div>
             {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="flex justify-end items-center space-x-2 mt-6 mb-2 pr-2">
-                <button
-                  className="px-2 py-1 rounded border text-xs font-medium bg-gray-50 hover:bg-gray-100 disabled:opacity-50"
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                >
-                  Previous
-                </button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+            {filteredProducts.length > 0 && (
+              <div className="flex justify-between items-center px-6 py-4 border-t border-gray-200">
+                <p className="text-sm text-gray-600">
+                  Showing {((currentPage - 1) * PRODUCTS_PER_PAGE) + 1} to {Math.min(currentPage * PRODUCTS_PER_PAGE, filteredProducts.length)} of {filteredProducts.length} products
+                </p>
+                {totalPages > 1 && (
+                  <div className="flex items-center space-x-2">
                   <button
-                    key={page}
-                    className={`px-2 py-1 rounded text-xs font-medium border mx-0.5 ${currentPage === page ? 'bg-brand-primary text-white border-brand-primary' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
-                    onClick={() => setCurrentPage(page)}
+                    className="px-3 py-1 rounded border text-sm font-medium bg-gray-50 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
                   >
-                    {page}
+                    Previous
                   </button>
-                ))}
-                <button
-                  className="px-2 py-1 rounded border text-xs font-medium bg-gray-50 hover:bg-gray-100 disabled:opacity-50"
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                >
-                  Next
-                </button>
+                  {(() => {
+                    const maxVisiblePages = 5;
+                    const pages = [];
+                    
+                    if (totalPages <= maxVisiblePages) {
+                      // Show all pages if total is small
+                      for (let i = 1; i <= totalPages; i++) {
+                        pages.push(i);
+                      }
+                    } else {
+                      // Smart pagination logic
+                      const startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+                      const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+                      
+                      // Adjust start if we're near the end
+                      const adjustedStart = Math.max(1, endPage - maxVisiblePages + 1);
+                      
+                      for (let i = adjustedStart; i <= endPage; i++) {
+                        pages.push(i);
+                      }
+                      
+                      // Add ellipsis and first/last page if needed
+                      if (adjustedStart > 1) {
+                        pages.unshift('...');
+                        pages.unshift(1);
+                      }
+                      if (endPage < totalPages) {
+                        pages.push('...');
+                        pages.push(totalPages);
+                      }
+                    }
+                    
+                    return pages.map((page, index) => (
+                      page === '...' ? (
+                        <span key={`ellipsis-${index}`} className="px-3 py-1 text-sm text-gray-500">...</span>
+                      ) : (
+                        <button
+                          key={page}
+                          className={`px-3 py-1 rounded text-sm font-medium border ${currentPage === page ? 'bg-brand-primary text-white border-brand-primary' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
+                          onClick={() => setCurrentPage(page as number)}
+                        >
+                          {page}
+                        </button>
+                      )
+                    ));
+                  })()}
+                  <button
+                    className="px-3 py-1 rounded border text-sm font-medium bg-gray-50 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    Next
+                  </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

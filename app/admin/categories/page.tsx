@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import AdminLayout from "../../../components/AdminLayout"
 import { useAppSelector } from '../../../lib/store'
+import { isAdminUser, hasAccessToSection } from '../../../lib/adminAuth'
 import { Search, Plus, Edit, Trash2, MoreHorizontal, Grid3X3 } from "lucide-react"
 import * as LucideIcons from "lucide-react"
 import toast from "react-hot-toast"
@@ -63,9 +64,9 @@ export default function AdminCategories() {
 
   // Fetch categories from backend
   useEffect(() => {
-    if (!user || user.role !== "admin") {
-      router.push("/");
-      return;
+    if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'categories')) {
+      router.push("/")
+      return
     }
     fetchCategories();
   }, [user, router]);
@@ -209,16 +210,10 @@ export default function AdminCategories() {
     }
   }
 
-  if (!user || user.role !== "admin") {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-primary mx-auto mb-4"></div>
-          <p className="text-text-secondary">Loading...</p>
-        </div>
-      </div>
-    )
-  }
+  if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'categories')) {
+      router.push("/")
+      return
+    }
 
   return (
     <AdminLayout>
@@ -226,11 +221,11 @@ export default function AdminCategories() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-text-primary">Categories Management</h2>
-            <p className="text-text-secondary">Organize your products into categories</p>
+            <h2 className="text-xl font-bold text-text-primary">Categories Management</h2>
+            <p className="text-sm text-text-secondary">Organize your products into categories</p>
           </div>
           <button
-            className="bg-brand-primary hover:bg-brand-primary-dark text-text-inverse px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
+            className="bg-brand-primary hover:bg-brand-primary-dark text-text-inverse px-3 py-2 rounded-lg flex items-center space-x-2 transition-colors text-sm"
             onClick={() => router.push('/admin/categories/add')}
           >
             <Plus className="h-4 w-4" />
@@ -267,15 +262,15 @@ export default function AdminCategories() {
             },
           ];
           return (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {stats.map((stat, idx) => (
-                <div key={stat.label} className="bg-surface-primary rounded-lg p-6 shadow-md">
+                <div key={stat.label} className="bg-surface-primary rounded-lg p-4 shadow-sm">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-text-secondary">{stat.label}</p>
-                      <p className={`text-2xl font-bold ${stat.valueClass}`}>{stat.value}</p>
+                      <p className="text-xs font-medium text-text-secondary">{stat.label}</p>
+                      <p className={`text-lg font-bold ${stat.valueClass}`}>{stat.value}</p>
                     </div>
-                    <Grid3X3 className={`h-8 w-8 ${stat.iconClass}`} />
+                    <Grid3X3 className={`h-5 w-5 ${stat.iconClass}`} />
                   </div>
                 </div>
               ))}
@@ -284,102 +279,216 @@ export default function AdminCategories() {
         })()}
 
         {/* Search and Filter */}
-        <div className="bg-surface-primary rounded-lg p-6 shadow-md">
-          <div className="flex flex-col md:flex-row gap-4 items-center">
-            <div className="relative max-w-md flex-grow">
-              <Search className="absolute left-3 top-2.5 h-5 w-5 text-text-tertiary" />
+        <div className="bg-surface-primary rounded-lg p-4 shadow-sm">
+          <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center">
+            {/* Search Section */}
+            <div className="relative flex-grow max-w-md">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-text-tertiary" />
               <input
                 type="text"
-                placeholder="Search categories..."
+                placeholder="Search categories by name or description..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary h-10"
+                className="w-full pl-9 pr-4 py-2 border border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-brand-primary transition-all text-sm"
               />
             </div>
-            {/* Subcategory Filter */}
-            <div className="flex flex-row items-center gap-2 mb-0">
-              <label className="text-sm font-medium text-gray-700 flex items-center h-10">Filter by Parent Category:</label>
-              <select
-                className="border border-gray-300 rounded-lg p-2 h-10 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                value={categoryFilter}
-                onChange={e => setCategoryFilter(e.target.value as any)}
-              >
-                <option value="all">All</option>
-                <option value="parent">Parent Categories</option>
-                <option value="sub">Subcategories</option>
-              </select>
+            
+            {/* Filter Section */}
+            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-text-primary">Filter Categories:</label>
+                <div className="flex flex-wrap gap-1">
+                  <button
+                    onClick={() => setCategoryFilter('all')}
+                    className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                      categoryFilter === 'all'
+                        ? 'bg-brand-primary text-white shadow-sm'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    All
+                  </button>
+                  <button
+                    onClick={() => setCategoryFilter('parent')}
+                    className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                      categoryFilter === 'parent'
+                        ? 'bg-brand-primary text-white shadow-sm'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    Parent
+                  </button>
+                  <button
+                    onClick={() => setCategoryFilter('sub')}
+                    className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                      categoryFilter === 'sub'
+                        ? 'bg-brand-primary text-white shadow-sm'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    Sub
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
-
+          
+          {/* Results Summary */}
+          <div className="mt-3 pt-3 border-t border-border-primary">
+            <p className="text-xs text-text-secondary">
+              Showing {sortedCategories.length} of {categories.length} categories
+              {searchTerm && ` matching "${searchTerm}"`}
+              {categoryFilter !== 'all' && ` (${categoryFilter === 'parent' ? 'Parent' : 'Sub'} categories only)`}
+            </p>
+          </div>
         </div>
 
         {/* Categories Grid */}
         {sortedCategories.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-brand-primary mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 10l1.553-4.66A2 2 0 016.447 4h11.106a2 2 0 011.894 1.34L21 10m-9 4v6m-4 0h8" />
-            </svg>
-            <div className="text-lg text-gray-500 mb-2">No categories found.</div>
-            <div className="text-sm text-gray-400 mb-6">
-              {searchTerm ? 'Try adjusting your search term.' : 'Click the button below to add your first category.'}
+          <div className="flex flex-col items-center justify-center py-12">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-3">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 10l1.553-4.66A2 2 0 016.447 4h11.106a2 2 0 011.894 1.34L21 10m-9 4v6m-4 0h8" />
+              </svg>
+            </div>
+            <div className="text-lg font-semibold text-gray-600 mb-1">No categories found</div>
+            <div className="text-sm text-gray-400 mb-4 text-center max-w-sm">
+              {searchTerm ? 'Try adjusting your search terms or filters.' : 'Get started by creating your first category to organize your products.'}
             </div>
             <button
-              className="bg-brand-primary hover:bg-brand-primary-dark text-white font-semibold py-2 px-6 rounded-lg transition-colors"
+              className="bg-brand-primary hover:bg-brand-primary-dark text-white font-semibold py-2 px-6 rounded-lg transition-colors shadow-sm hover:shadow-md text-sm"
               onClick={() => router.push('/admin/categories/add')}
             >
+              <Plus className="h-4 w-4 inline mr-2" />
               Add Category
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
             {sortedCategories.map((category: Category) => {
-              const IconComponent = (LucideIcons as any)[category.icon] || LucideIcons["Box"];
               const parentCategory = category.parentId ? categories.find(c => c._id === category.parentId) : null;
               
               return (
-                <div key={category._id} className={`bg-surface-primary rounded-lg p-2 shadow-md hover:shadow-lg transition-shadow flex flex-col md:flex-row items-center justify-center md:items-center gap-2 w-full max-w-md mx-auto ${category.parentId ? 'border-l-4 border-brand-primary/30' : ''}`}>
-                  {category.thumbnail && (
-                    <img src={category.thumbnail} alt={category.name} className="w-14 h-14 object-contain rounded border shadow mb-2 md:mb-0 bg-white" />
-                  )}
-                  <div className="flex-1 w-full flex flex-col items-center md:items-start">
-                    <div className="flex flex-col items-center md:items-start w-full mb-2">
-                      <div className="flex items-center gap-1 mb-2 w-full justify-center md:justify-start">
-                        <IconComponent className="h-6 w-6 text-brand-primary" />
-                        <h3 className="text-base font-semibold text-text-primary">{category.name}</h3>
-                        {/* {category.slug && <span className="ml-2 text-xs text-gray-400 bg-gray-100 rounded px-2 py-0.5">{category.slug}</span>} */}
-                      </div>
-                      {parentCategory && (
-                        <div className="text-xs text-brand-primary bg-brand-primary/10 px-2 py-1 rounded mb-2">
-                          Subcategory of: {parentCategory.name}
-                        </div>
-                      )}
-                      <p className="text-text-secondary text-sm mb-2 text-center md:text-left w-full">{category.description}</p>
-                      <div className="flex flex-wrap gap-2 items-center justify-center md:justify-start text-xs mb-2 w-full">
-                        <span className={`px-2 py-1 rounded-full font-medium ${category.hide ? 'bg-brand-error/10 text-brand-error' : 'bg-brand-success/10 text-brand-success'}`}>{category.hide ? 'Hidden' : 'Active'}</span>
-                        <span className={`px-2 py-1 rounded-full font-medium ${category.popular ? 'bg-brand-success/10 text-brand-success' : 'bg-brand-error/10 text-brand-error'}`}>{category.popular ? 'Popular' : 'Normal'}</span>
-                      </div>
-                      <div className="flex flex-wrap gap-2 items-center justify-center md:justify-start text-sm text-text-tertiary w-full">
-                        <span>{category.productCount || 0} products</span>
-                        <span>•</span>
-                        <span>Sort: {typeof category.sortOrder === 'number' ? category.sortOrder : 0}</span>
+                <div 
+                  key={category._id} 
+                  className={`bg-white rounded-lg shadow-sm hover:shadow-md transition-all duration-300 border ${
+                    category.parentId 
+                      ? 'border-l-3 border-l-brand-primary/40 border-gray-200' 
+                      : 'border-gray-200'
+                  } overflow-hidden group cursor-pointer`}
+                >
+                  {/* Image Section - Smaller but still prominent */}
+                  <div className="relative h-32 bg-gradient-to-br from-gray-50 to-gray-100">
+                    {category.thumbnail ? (
+                      <img 
+                        src={category.thumbnail} 
+                        alt={category.name} 
+                        className="w-full h-full object-contain p-3"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                          e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                        }}
+                      />
+                    ) : null}
+                    {/* Fallback when no image or image fails to load */}
+                    <div className={`w-full h-full flex items-center justify-center ${category.thumbnail ? 'hidden' : ''}`}>
+                      <div className="w-12 h-12 bg-gray-200 rounded-lg flex items-center justify-center">
+                        <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
                       </div>
                     </div>
-                    <div className="w-full pt-4 border-t border-border-primary flex flex-col gap-2 md:flex-row md:items-center md:gap-0">
-                      <button className="bg-brand-primary hover:bg-brand-primary-dark text-text-inverse py-2 px-6 rounded text-sm transition-colors w-full md:w-auto md:mr-auto">View Products</button>
-                      <div className="flex flex-row gap-2 w-full md:w-auto md:ml-4 justify-end">
-                        <button
-                          className="p-2 text-text-tertiary hover:text-brand-primary transition-colors w-full md:w-auto"
-                          onClick={() => openEditCategory(category)}
-                        >
-                          <Edit className="h-4 w-4 mx-auto" />
-                        </button>
-                        <button
-                          className="p-2 text-text-tertiary hover:text-brand-error transition-colors w-full md:w-auto"
-                          onClick={() => setConfirmDeleteCategory(category)}
-                        >
-                          <Trash2 className="h-4 w-4 mx-auto" />
-                        </button>
+                    
+                    {/* Status badges overlay */}
+                    <div className="absolute top-2 right-2 flex flex-col gap-1">
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium shadow-sm ${
+                        category.hide 
+                          ? 'bg-red-100 text-red-700' 
+                          : 'bg-green-100 text-green-700'
+                      }`}>
+                        {category.hide ? 'Hidden' : 'Active'}
+                      </span>
+                      {category.popular && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700 shadow-sm">
+                          Popular
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Content Section */}
+                  <div className="p-3">
+                    {/* Category Name and Parent Info */}
+                    <div className="mb-2">
+                      <h3 className="text-sm font-bold text-gray-900 group-hover:text-brand-primary transition-colors mb-1">
+                        {category.name}
+                      </h3>
+                      {parentCategory && (
+                        <div className="flex items-center gap-1.5 text-xs text-gray-600">
+                          <span className="w-1.5 h-1.5 bg-brand-primary rounded-full"></span>
+                          <span>Subcategory of {parentCategory.name}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Description */}
+                    {category.description && (
+                      <p className="text-gray-600 text-xs mb-3 line-clamp-2">
+                        {category.description}
+                      </p>
+                    )}
+
+                    {/* Stats Row */}
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-6 h-6 bg-blue-100 rounded flex items-center justify-center">
+                            <svg className="w-3 h-3 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                            </svg>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Products</p>
+                            <p className="text-xs font-semibold text-gray-900">{category.productCount || 0}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-6 h-6 bg-purple-100 rounded flex items-center justify-center">
+                            <svg className="w-3 h-3 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                            </svg>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Sort</p>
+                            <p className="text-xs font-semibold text-gray-900">{typeof category.sortOrder === 'number' ? category.sortOrder : 0}</p>
+                          </div>
+                        </div>
                       </div>
+                      
+                      {/* Additional Flags */}
+                      <div className="flex items-center gap-1">
+                        {category.showOnHome && (
+                          <span className="w-2 h-2 bg-blue-500 rounded-full" title="Shows on home page"></span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Actions Section */}
+                    <div className="flex items-center justify-end gap-1 pt-2 border-t border-gray-100">
+                      <button
+                        className="p-1.5 text-gray-400 hover:text-brand-primary hover:bg-gray-50 rounded transition-all"
+                        onClick={() => openEditCategory(category)}
+                        title="Edit category"
+                      >
+                        <Edit className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-gray-50 rounded transition-all"
+                        onClick={() => setConfirmDeleteCategory(category)}
+                        title="Delete category"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
                     </div>
                   </div>
                 </div>

@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from "next/navigation";
 import AdminLayout from "../../../components/AdminLayout";
-import { useAppSelector } from '../../../lib/store';
+import { useAppSelector } from '../../../lib/store'
+import { isAdminUser, hasAccessToSection } from '../../../lib/adminAuth';
 import { Settings, Save, Eye, Receipt, Upload, FileText, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import InvoiceSettings from '@/components/InvoiceSettings';
@@ -91,9 +92,9 @@ export default function InvoiceSettingsPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user || user.role !== "admin") {
-      router.push("/");
-      return;
+    if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'invoice-settings')) {
+      router.push("/")
+      return
     }
     
     loadInvoiceSettings();
@@ -119,16 +120,10 @@ export default function InvoiceSettingsPage() {
     toast.success('Invoice settings saved successfully!');
   };
 
-  if (!user || user.role !== "admin") {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-spectra mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
-  }
+  if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'invoice-settings')) {
+      router.push("/")
+      return
+    }
 
   if (loading) {
     return (

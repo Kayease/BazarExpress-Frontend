@@ -44,6 +44,7 @@ import { useRouter } from "next/navigation"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
 import ConfirmDeleteModal from "@/components/ui/ConfirmDeleteModal"
+import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api-client"
 
 // --- Types ---
 type PromoType = "percentage" | "fixed"
@@ -120,44 +121,63 @@ export default function PromoCodesPage() {
 
   // --- Fetch Promos ---
   useEffect(() => {
-    setLoading(true)
-    fetch(API)
-      .then((r) => r.json())
-      .then((data) => {
+    const fetchPromos = async () => {
+      setLoading(true)
+      try {
+        const data = await apiGet(API)
         if (Array.isArray(data)) {
           setPromos(data)
         } else {
           setPromos([])
           toast.error(data?.error || "Failed to load promocodes")
         }
-      })
-      .catch(() => {
+      } catch (error: any) {
         setPromos([])
-        toast.error("Failed to load promocodes")
-      })
-      .finally(() => setLoading(false))
+        toast.error(error.message || "Failed to load promocodes")
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchPromos()
   }, [])
 
   // --- Fetch Categories/Products for Multiselect ---
   useEffect(() => {
-    setFetchingCats(true)
-    fetch(CATEGORY_API)
-      .then((r) => r.json())
-      .then((data) => setCategories(data))
-      .catch(() => toast.error("Failed to load categories"))
-      .finally(() => setFetchingCats(false))
-    setFetchingProds(true)
-    fetch(PRODUCT_API)
-      .then((r) => r.json())
-      .then((data) => setProducts(data))
-      .catch(() => toast.error("Failed to load products"))
-      .finally(() => setFetchingProds(false))
-    setFetchingBrands(true)
-    fetch(BRAND_API)
-      .then((r) => r.json())
-      .then((data) => setBrands(data))
-      .catch(() => toast.error("Failed to load brands"))
-      .finally(() => setFetchingBrands(false))
+    const fetchData = async () => {
+      // Fetch categories
+      setFetchingCats(true)
+      try {
+        const categoryData = await apiGet(CATEGORY_API)
+        setCategories(categoryData)
+      } catch (error) {
+        toast.error("Failed to load categories")
+      } finally {
+        setFetchingCats(false)
+      }
+
+      // Fetch products
+      setFetchingProds(true)
+      try {
+        const productData = await apiGet(PRODUCT_API)
+        setProducts(productData)
+      } catch (error) {
+        toast.error("Failed to load products")
+      } finally {
+        setFetchingProds(false)
+      }
+
+      // Fetch brands
+      setFetchingBrands(true)
+      try {
+        const brandData = await apiGet(BRAND_API)
+        setBrands(brandData)
+      } catch (error) {
+        toast.error("Failed to load brands")
+      } finally {
+        setFetchingBrands(false)
+      }
+    }
+    fetchData()
   }, [])
 
   // --- Form State ---
@@ -246,44 +266,33 @@ export default function PromoCodesPage() {
       products: form.appliesTo === "products" ? form.products : [],
     }
     try {
-      let res
       if (editPromo) {
-        res = await fetch(`${API}/${editPromo._id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        })
+        await apiPut(`${API}/${editPromo._id}`, payload)
       } else {
-        res = await fetch(API, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        })
+        await apiPost(API, payload)
       }
-      if (!res.ok) throw new Error("Failed to save promocode")
       toast.success(editPromo ? "Promocode updated" : "Promocode added")
       setShowForm(false)
       setEditPromo(null)
       setForm(initialForm)
       // Refresh list
       setLoading(true)
-      fetch(API)
-        .then((r) => r.json())
-        .then((data) => {
-          if (Array.isArray(data)) {
-            setPromos(data)
-          } else {
-            setPromos([])
-            toast.error(data?.error || "Failed to load promocodes")
-          }
-        })
-        .catch(() => {
+      try {
+        const data = await apiGet(API)
+        if (Array.isArray(data)) {
+          setPromos(data)
+        } else {
           setPromos([])
-          toast.error("Failed to load promocodes")
-        })
-        .finally(() => setLoading(false))
-    } catch (err) {
-      toast.error("Failed to save promocode")
+          toast.error(data?.error || "Failed to load promocodes")
+        }
+      } catch (error) {
+        setPromos([])
+        toast.error("Failed to load promocodes")
+      } finally {
+        setLoading(false)
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save promocode")
     } finally {
       setFormLoading(false)
     }
@@ -294,30 +303,28 @@ export default function PromoCodesPage() {
     if (!showDelete) return
     setFormLoading(true)
     try {
-      const res = await fetch(`${API}/${showDelete._id}`, { method: "DELETE" })
-      if (!res.ok) throw new Error()
+      await apiDelete(`${API}/${showDelete._id}`)
       toast.success("Promocode deleted")
       setShowDelete(null)
       setPromos((prev) => prev.filter((p) => p._id !== showDelete._id))
       // Refresh list
       setLoading(true)
-      fetch(API)
-        .then((r) => r.json())
-        .then((data) => {
-          if (Array.isArray(data)) {
-            setPromos(data)
-          } else {
-            setPromos([])
-            toast.error(data?.error || "Failed to load promocodes")
-          }
-        })
-        .catch(() => {
+      try {
+        const data = await apiGet(API)
+        if (Array.isArray(data)) {
+          setPromos(data)
+        } else {
           setPromos([])
-          toast.error("Failed to load promocodes")
-        })
-        .finally(() => setLoading(false))
-    } catch {
-      toast.error("Failed to delete promocode")
+          toast.error(data?.error || "Failed to load promocodes")
+        }
+      } catch (error) {
+        setPromos([])
+        toast.error("Failed to load promocodes")
+      } finally {
+        setLoading(false)
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete promocode")
     } finally {
       setFormLoading(false)
     }
@@ -335,15 +342,16 @@ export default function PromoCodesPage() {
     if (form.appliesTo !== "products") return;
     setFetchingProds(true)
     if (productSearchTimeout.current) clearTimeout(productSearchTimeout.current)
-    productSearchTimeout.current = setTimeout(() => {
-      fetch(`${PRODUCT_API}/paginated?search=${encodeURIComponent(productSearch)}&page=${productPage}&limit=20`)
-        .then((r) => r.json())
-        .then((data) => {
-          setProductResults(data.products || [])
-          setProductTotalPages(data.totalPages || 1)
-        })
-        .catch(() => toast.error("Failed to load products"))
-        .finally(() => setFetchingProds(false))
+    productSearchTimeout.current = setTimeout(async () => {
+      try {
+        const data = await apiGet(`${PRODUCT_API}/paginated?search=${encodeURIComponent(productSearch)}&page=${productPage}&limit=20`)
+        setProductResults(data.products || [])
+        setProductTotalPages(data.totalPages || 1)
+      } catch (error) {
+        toast.error("Failed to load products")
+      } finally {
+        setFetchingProds(false)
+      }
     }, 300)
     return () => {
       if (productSearchTimeout.current) clearTimeout(productSearchTimeout.current)
@@ -372,15 +380,16 @@ export default function PromoCodesPage() {
     if (form.appliesTo !== "categories") return;
     setFetchingCats(true);
     if (categorySearchTimeout.current) clearTimeout(categorySearchTimeout.current);
-    categorySearchTimeout.current = setTimeout(() => {
-      fetch(`${CATEGORY_API}/paginated?search=${encodeURIComponent(categorySearch)}&page=${categoryPage}&limit=20`)
-        .then((r) => r.json())
-        .then((data) => {
-          setCategoryResults(data.items || []);
-          setCategoryTotalPages(data.totalPages || 1);
-        })
-        .catch(() => toast.error("Failed to load categories"))
-        .finally(() => setFetchingCats(false));
+    categorySearchTimeout.current = setTimeout(async () => {
+      try {
+        const data = await apiGet(`${CATEGORY_API}/paginated?search=${encodeURIComponent(categorySearch)}&page=${categoryPage}&limit=20`)
+        setCategoryResults(data.items || []);
+        setCategoryTotalPages(data.totalPages || 1);
+      } catch (error) {
+        toast.error("Failed to load categories")
+      } finally {
+        setFetchingCats(false)
+      }
     }, 300);
     return () => {
       if (categorySearchTimeout.current) clearTimeout(categorySearchTimeout.current)
@@ -397,15 +406,16 @@ export default function PromoCodesPage() {
     if (form.appliesTo !== "brands") return;
     setFetchingBrands(true);
     if (brandSearchTimeout.current) clearTimeout(brandSearchTimeout.current);
-    brandSearchTimeout.current = setTimeout(() => {
-      fetch(`${BRAND_API}/paginated?search=${encodeURIComponent(brandSearch)}&page=${brandPage}&limit=20`)
-        .then((r) => r.json())
-        .then((data) => {
-          setBrandResults(data.items || []);
-          setBrandTotalPages(data.totalPages || 1);
-        })
-        .catch(() => toast.error("Failed to load brands"))
-        .finally(() => setFetchingBrands(false));
+    brandSearchTimeout.current = setTimeout(async () => {
+      try {
+        const data = await apiGet(`${BRAND_API}/paginated?search=${encodeURIComponent(brandSearch)}&page=${brandPage}&limit=20`)
+        setBrandResults(data.items || []);
+        setBrandTotalPages(data.totalPages || 1);
+      } catch (error) {
+        toast.error("Failed to load brands")
+      } finally {
+        setFetchingBrands(false)
+      }
     }, 300);
     return () => {
       if (brandSearchTimeout.current) clearTimeout(brandSearchTimeout.current)

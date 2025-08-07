@@ -9,6 +9,8 @@ import CategoryFormModal from "./CategoryFormModal";
 import BrandFormModal from "./BrandFormModal";
 import TaxFormModal from "../app/admin/taxes/TaxFormModal";
 import WarehouseFormModal from "./WarehouseFormModal";
+import WarehouseSelector from "./WarehouseSelector";
+import { useRoleAccess } from "./RoleBasedAccess";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -58,6 +60,7 @@ async function deleteImageFromCloudinary(imageUrl: string): Promise<boolean> {
 
 export default function AdvancedProductForm({ mode, initialProduct = null, productId = "" }: { mode: 'add' | 'edit', initialProduct?: any, productId?: string }) {
   const router = useRouter();
+  const { canCreateWarehouse, canCreateTax, isWarehouseRestricted } = useRoleAccess();
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<any[]>([]);
   const [subcategories, setSubcategories] = useState<any[]>([]);
@@ -789,15 +792,22 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                       <option key={tax._id} value={tax._id}>{tax.name}</option>
                     ))}
                   </select>
-                  <button
-                    type="button"
-                    className="ml-0 h-[48px] px-4 bg-brand-primary text-white rounded-r-lg text-lg flex items-center justify-center"
-                    style={{ minWidth: "48px" }}
-                    onClick={() => setShowTaxModal(true)}
-                  >
-                    +
-                  </button>
+                  {canCreateTax() && (
+                    <button
+                      type="button"
+                      className="ml-0 h-[48px] px-4 bg-brand-primary text-white rounded-r-lg text-lg flex items-center justify-center"
+                      style={{ minWidth: "48px" }}
+                      onClick={() => setShowTaxModal(true)}
+                    >
+                      +
+                    </button>
+                  )}
                 </div>
+                {!canCreateTax() && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Contact administrator to add new taxes
+                  </p>
+                )}
               </div>
               <TaxFormModal
                 open={showTaxModal}
@@ -819,28 +829,28 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                   Warehouse <span className="text-red-500">*</span>
                 </label>
                 <div className="flex items-stretch gap-2 relative">
-                  <select
+                  <WarehouseSelector
                     value={product.warehouse ?? ""}
-                    onChange={e => setProduct({ ...product, warehouse: e.target.value })}
-                    className="w-full border border-gray-300 rounded-l-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                    onChange={(warehouseId) => setProduct({ ...product, warehouse: warehouseId })}
                     required
-                  >
-                    <option value="">Select Warehouse</option>
-                    {warehouses.map((warehouse: any) => (
-                      <option key={warehouse._id} value={warehouse._id}>
-                        {warehouse.name}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    className="ml-0 h-[48px] px-4 bg-brand-primary text-white rounded-r-lg text-lg flex items-center justify-center"
-                    style={{ minWidth: "48px" }}
-                    onClick={() => setShowWarehouseModal(true)}
-                  >
-                    +
-                  </button>
+                    className="rounded-l-lg"
+                  />
+                  {canCreateWarehouse() && (
+                    <button
+                      type="button"
+                      className="ml-0 h-[48px] px-4 bg-brand-primary text-white rounded-r-lg text-lg flex items-center justify-center"
+                      style={{ minWidth: "48px" }}
+                      onClick={() => setShowWarehouseModal(true)}
+                    >
+                      +
+                    </button>
+                  )}
                 </div>
+                {!canCreateWarehouse() && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Contact administrator to add new warehouses
+                  </p>
+                )}
               </div>
               <WarehouseFormModal
                 open={showWarehouseModal}

@@ -1,39 +1,19 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import React, { useState, useEffect } from "react"
 import AdminLayout from "../../../components/AdminLayout"
 import { Plus, Pencil, Trash2, Eye } from "lucide-react"
-import { useAppSelector } from '../../../lib/store';
+import { useAppSelector } from '../../../lib/store'
+import { isAdminUser, hasAccessToSection } from '../../../lib/adminAuth';
 import { useRouter } from 'next/navigation';
-import GoogleMapsModal from '../../../components/GoogleMapsModal';
+
 import toast from 'react-hot-toast';
 import ConfirmDeleteModal from '../../../components/ui/ConfirmDeleteModal';
 import WarehouseFormModal from '../../../components/WarehouseFormModal';
+import { apiGet, apiPost, apiPut, apiDelete } from '../../../lib/api-client';
+import { Warehouse, defaultWarehouse } from '../../../types/warehouse';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL
-
-// Define the Warehouse type
-interface Warehouse {
-  _id: string;
-  name: string;
-  address: string;
-  location: { lat: number | null; lng: number | null };
-  contactPhone: string;
-  email: string;
-  capacity: number;
-  status: 'active' | 'inactive';
-  deliverySettings?: {
-    isDeliveryEnabled: boolean;
-    disabledMessage?: string;
-    deliveryPincodes: string[];
-    is24x7Delivery: boolean;
-    deliveryDays: string[];
-    deliveryHours?: {
-      start: string;
-      end: string;
-    };
-  };
-}
 
 export default function AdminWarehouse() {
   const user = useAppSelector((state) => state.auth.user);
@@ -42,107 +22,42 @@ export default function AdminWarehouse() {
   // Explicitly type warehouses as Warehouse[]
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [showModal, setShowModal] = useState(false);
-  const [editing, setEditing] = useState<any | null>(null);
-  const [form, setForm] = useState<{
-    name: string;
-    address: string;
-    location: { lat: number | null; lng: number | null };
-    contactPhone: string;
-    email: string;
-    capacity: number;
-    deliverySettings: {
-      isDeliveryEnabled: boolean;
-      disabledMessage: string;
-      deliveryPincodes: string[];
-      is24x7Delivery: boolean;
-      deliveryDays: string[];
-      deliveryHours: {
-        start: string;
-        end: string;
-      };
-    };
-  }>({
-    name: '',
-    address: '',
-    location: { lat: null, lng: null },
-    contactPhone: '',
-    email: '',
-    capacity: 0,
-    deliverySettings: {
-      isDeliveryEnabled: true,
-      disabledMessage: '',
-      deliveryPincodes: [],
-      is24x7Delivery: true,
-      deliveryDays: [],
-      deliveryHours: {
-        start: '09:00',
-        end: '18:00'
-      }
-    }
-  });
+  const [editing, setEditing] = useState<Warehouse | null>(null);
+  const [form, setForm] = useState<Warehouse>(defaultWarehouse);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [showMapModal, setShowMapModal] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    if (!user || user.role !== 'admin') {
-      router.push('/');
+    if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'warehouse')) {
+      router.push("/")
+      return
     }
-  }, [user, router]);
+    fetchWarehouses();
+  }, [user]);
 
   const fetchWarehouses = async () => {
-    if (!user) return;
-    setLoading(true);
-    setError('');
     try {
-      const res = await fetch(`${API_URL}/warehouses`);
-      if (!res.ok) throw new Error('Failed to fetch warehouses');
-      const data: Warehouse[] = await res.json();
+      setLoading(true);
+      const data = await apiGet(`${API_URL}/warehouses`);
       setWarehouses(data);
-    } catch (err) {
-      setError('Could not load warehouses.');
-      toast.error('Could not load warehouses.');
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Could not load warehouses.';
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { fetchWarehouses(); }, [user]);
-
   const openAdd = () => {
     setEditing(null);
-    setForm({
-      name: '',
-      address: '',
-      location: { lat: null, lng: null },
-      contactPhone: '',
-      email: '',
-      capacity: 0,
-      deliverySettings: {
-        isDeliveryEnabled: true,
-        disabledMessage: '',
-        deliveryPincodes: [],
-        is24x7Delivery: true,
-        deliveryDays: [],
-        deliveryHours: {
-          start: '09:00',
-          end: '18:00'
-        }
-      }
-    });
+    setForm(defaultWarehouse);
     setShowModal(true);
   };
   const openEdit = (w: Warehouse) => {
     setEditing(w);
     setForm({
-      name: w.name,
-      address: w.address,
-      location: w.location,
-      contactPhone: w.contactPhone,
-      email: w.email,
-      capacity: w.capacity,
+      ...w,
       deliverySettings: {
         isDeliveryEnabled: w.deliverySettings?.isDeliveryEnabled ?? true,
         disabledMessage: w.deliverySettings?.disabledMessage ?? '',
@@ -157,17 +72,7 @@ export default function AdminWarehouse() {
     });
     setShowModal(true);
   };
-  const handleLocationSelect = (location: any) => {
-    setForm({
-      ...form,
-      address: location.address,
-      location: {
-        lat: location.latitude,
-        lng: location.longitude,
-      },
-    });
-  };
-  const handleSubmit = async (e: any) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
     if (!form.name || !form.address || !user.id) {
@@ -177,40 +82,23 @@ export default function AdminWarehouse() {
     }
     setLoading(true);
     try {
-      let res;
       let data: Warehouse;
-      if (editing) {
-        res = await fetch(`${API_URL}/warehouses/${editing._id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...form }),
-        });
-        if (!res.ok) throw new Error('Failed to update warehouse');
-        data = await res.json();
-        setWarehouses(warehouses.map(w => w._id === editing._id ? data : w));
+      if (editing && editing._id) {
+        data = await apiPut(`${API_URL}/warehouses/${editing._id}`, form);
+        setWarehouses(warehouses.map(w => w._id === editing?._id ? data : w));
         toast.dismiss();
         toast.success('Warehouse updated');
       } else {
-        res = await fetch(`${API_URL}/warehouses`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...form, userId: user.id }),
-        });
-        if (!res.ok) {
-          const errData = await res.json();
-          toast.dismiss();
-          toast.error(errData.error || 'Failed to add warehouse');
-          throw new Error(errData.error || 'Failed to add warehouse');
-        }
-        data = await res.json();
+        data = await apiPost(`${API_URL}/warehouses`, { ...form, userId: user.id });
         setWarehouses([data, ...warehouses]);
         toast.dismiss();
         toast.success('Warehouse added');
       }
       setShowModal(false);
-    } catch (err) {
+    } catch (err: unknown) {
       toast.dismiss();
-      toast.error('Error saving warehouse');
+      const errorMessage = err instanceof Error ? err.message : 'Error saving warehouse';
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -218,35 +106,28 @@ export default function AdminWarehouse() {
   const handleDelete = async (id: string) => {
     setDeleting(true);
     try {
-      const res = await fetch(`${API_URL}/warehouses/${id}`, { method: 'DELETE' });
-      if (!res.ok) {
-        const error = await res.json();
-        toast.dismiss();
-        toast.error(error.error || 'Failed to delete warehouse');
-        throw new Error(error.error || 'Failed to delete warehouse');
-      }
+      await apiDelete(`${API_URL}/warehouses/${id}`);
       setWarehouses(warehouses.filter(w => w._id !== id));
       toast.dismiss();
       toast.success('Warehouse deleted');
       setConfirmDeleteId(null);
-    } catch (err) {
-      // Error is already shown by the toast above
+    } catch (err: unknown) {
+      toast.dismiss();
+      const errorMessage = err instanceof Error ? err.message : 'Failed to delete warehouse';
+      toast.error(errorMessage);
       console.error('Error deleting warehouse:', err);
     } finally {
       setDeleting(false);
     }
   };
 
-  // Helper function to capitalize first letter
-  const capitalizeFirstLetter = (str: string) => {
-    return str.charAt(0).toUpperCase() + str.slice(1);
-  };
 
-  if (!user || user.role !== "admin") {
+
+  if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'warehouse')) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-spectra mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-primary mx-auto mb-4"></div>
           <p className="text-gray-600">Loading...</p>
         </div>
       </div>
@@ -299,7 +180,7 @@ export default function AdminWarehouse() {
                 </tr>
               )}
               {warehouses.map(w => (
-                <tr key={w._id} className="bg-white border-b hover:bg-gray-50 transition group">
+                <tr key={w._id || `warehouse-${Math.random()}`} className="bg-white border-b hover:bg-gray-50 transition group">
                   <td className="py-2 px-3 align-middle max-w-xs whitespace-nowrap text-sm font-medium text-gray-900 truncate">{w.name}</td>
                   <td className="py-2 px-3 align-middle max-w-xs whitespace-nowrap text-xs text-gray-700 truncate">{w.address}</td>
                   <td className="py-2 px-3 align-middle text-xs text-gray-700">{w.contactPhone}</td>
@@ -338,7 +219,7 @@ export default function AdminWarehouse() {
                       </button>
                       <button
                         className="inline-flex items-center justify-center bg-red-500 hover:bg-red-700 text-white rounded p-1.5 text-xs"
-                        onClick={() => setConfirmDeleteId(w._id)}
+                        onClick={() => setConfirmDeleteId(w._id || null)}
                         aria-label="Delete"
                       >
                         <Trash2 className="h-4 w-4" />

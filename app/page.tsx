@@ -2,7 +2,6 @@
 
 import { useAppContext } from "@/components/app-provider";
 import { useLocation } from "@/components/location-provider";
-import LocationStatusIndicator from "@/components/location-status-indicator"
 import { useToast } from "@/hooks/use-toast"
 import { MapPin, Loader2 } from "lucide-react"
 import { 
@@ -90,7 +89,6 @@ export default function Home() {
                 </div>
               </div>
             )}
-            <LocationStatusIndicator />
           </div>
           <CategorySectionWithSuspense />
           <ProductSectionWithSuspense onAddToCart={handleAddToCart} searchQuery={searchQuery} />

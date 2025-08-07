@@ -3,7 +3,8 @@ export const dynamic = 'force-dynamic';
 
 import { useEffect, useState, useMemo } from "react";
 import AdminLayout from "../../../components/AdminLayout";
-import { useAppSelector } from '../../../lib/store';
+import { useAppSelector } from '../../../lib/store'
+import { isAdminUser, hasAccessToSection } from '../../../lib/adminAuth';
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Plus,
@@ -47,69 +48,10 @@ export default function AdminTaxes() {
 
   // Auth Guard
   useEffect(() => {
-    if (!user || user.role !== "admin") {
-      router.push("/");
+    if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'taxes')) {
+      router.push("/")
+      return
     }
-  }, [user, router]);
-
-  // State
-  const [taxes, setTaxes] = useState<Tax[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<Tax | null>(null);
-  const [search, setSearch] = useState("");
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editTax, setEditTax] = useState<Tax | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const TAXES_PER_PAGE = 10;
-  const totalPages = Math.ceil(taxes.length / TAXES_PER_PAGE);
-  const paginatedTaxes = taxes.slice((currentPage - 1) * TAXES_PER_PAGE, currentPage * TAXES_PER_PAGE);
-
-
-  // Fetch taxes
-  const fetchTaxes = async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const res = await fetch(`${API_URL}/taxes`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
-      if (!res.ok) throw new Error("Failed to fetch taxes");
-      const data = await res.json();
-      setTaxes(data);
-    } catch (err) {
-      setError("Could not load taxes.");
-      toast.error("Could not load taxes.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (user && user.role === "admin") fetchTaxes();
-    // eslint-disable-next-line
-  }, [user]);
-
-  // Delete Tax
-  const handleDelete = async (id: string) => {
-    setDeletingId(id);
-    try {
-      const res = await fetch(`${API_URL}/taxes/${id}`, {
-        method: "DELETE",
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        if (res.status === 400 && data?.error?.includes('used by one or more products')) {
-          toast.error('Cannot delete tax: It is used by one or more products. Remove or update those products first.');
-        } else {
-          toast.error("Failed to delete tax");
-        }
-        setConfirmDelete(null);
-        fetchTaxes();
-        return;
-      }
       toast.success("Tax deleted successfully");
       setConfirmDelete(null);
       fetchTaxes();
@@ -149,16 +91,10 @@ export default function AdminTaxes() {
   }, [searchParams, router]);
 
   // UI
-  if (!user || user.role !== "admin") {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="animate-spin h-12 w-12 text-brand-primary mx-auto mb-4" />
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
-  }
+  if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'taxes')) {
+      router.push("/")
+      return
+    }
 
   return (
     <AdminLayout>

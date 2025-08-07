@@ -13,6 +13,8 @@ import toast from "react-hot-toast";
 import { LocationProvider } from "@/components/location-provider";
 import { ReactQueryProvider } from "@/lib/react-query";
 import { migrateLocalStorageData, shouldRunMigration } from "@/lib/migration";
+import { validateAuthState } from "@/lib/auth-utils";
+import { fetchProfile } from "@/lib/slices/authSlice";
 
 interface AppContextType {
   isCartOpen: boolean;
@@ -167,8 +169,14 @@ function CartProvider({ children }: { children: ReactNode }) {
         });
         setCartItems(dbCartItems);
         // Don't persist to localStorage for logged-in users
-      } catch (error) {
+      } catch (error: any) {
         console.error('Failed to load cart from database:', error);
+        // If it's a 401 error, the user will be logged out automatically by the interceptor
+        if (error.response?.status === 401) {
+          console.log('Cart load failed due to authentication error - user will be logged out');
+        } else if (error.message === 'No authentication token found') {
+          console.log('Cart load skipped - no authentication token');
+        }
         // For logged-in users, if DB fails, show empty cart instead of local storage
         setCartItems([]);
       } finally {
@@ -534,8 +542,14 @@ function WishlistProvider({ children }: { children: ReactNode }) {
         }));
         setWishlistItems(dbWishlistItems);
         // Don't persist to localStorage for logged-in users
-      } catch (error) {
+      } catch (error: any) {
         console.error('Failed to load wishlist from database:', error);
+        // If it's a 401 error, the user will be logged out automatically by the interceptor
+        if (error.response?.status === 401) {
+          console.log('Wishlist load failed due to authentication error - user will be logged out');
+        } else if (error.message === 'No authentication token found') {
+          console.log('Wishlist load skipped - no authentication token');
+        }
         // For logged-in users, if DB fails, show empty wishlist instead of local storage
         setWishlistItems([]);
       } finally {
@@ -705,17 +719,30 @@ function AppProviderInner({ children }: { children: ReactNode }) {
   const dispatch = useDispatch();
   const router = useRouter();
 
-  // Run migration on app start
+  // Run migration and auth validation on app start
   useEffect(() => {
     if (shouldRunMigration()) {
       migrateLocalStorageData();
     }
     
+    // Validate auth state consistency
+    validateAuthState();
+    
+    // Auto-load user profile if token exists but no user data
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    if (token && !reduxUser) {
+      console.log('Token found but no user data - fetching profile');
+      dispatch(fetchProfile());
+    }
+    
     // Load debug utilities in development
     if (process.env.NODE_ENV === 'development') {
       import('@/lib/debug-cart-wishlist');
+      import('@/lib/debug-auth');
     }
-  }, []);
+  }, [dispatch, reduxUser]);
+
+
 
 
 

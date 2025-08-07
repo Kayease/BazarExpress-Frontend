@@ -21,6 +21,22 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
+// Add response interceptor to handle 401 errors
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Token is invalid or expired, clear it
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('token');
+        // Dispatch logout action if we have access to store
+        window.dispatchEvent(new CustomEvent('auth:logout'));
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 export interface InvoiceSettingsData {
   _id?: string;
   businessName: string;

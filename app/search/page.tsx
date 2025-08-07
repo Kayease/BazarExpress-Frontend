@@ -9,7 +9,6 @@ import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@
 import { Apple, Milk, Cookie, Coffee, Drumstick, Carrot, Fish, Pill, Home, Baby, Smartphone, FilterIcon, XIcon } from 'lucide-react';
 import Link from "next/link";
 import { useLocation } from "@/components/location-provider";
-import LocationStatusIndicator from "@/components/location-status-indicator";
 import ProductCard from "@/components/product-card";
 import { useCartContext, useWishlistContext } from "@/components/app-provider";
 import ProductGridSkeleton from "@/components/product-grid-skeleton";
@@ -153,11 +152,15 @@ function SearchPage() {
     if (!filteredProducts) return [];
     let sorted = [...filteredProducts];
     if (sort === "price-low-high") {
-      sorted.sort((a, b) => a.price - b.price);
+      sorted.sort((a, b) => (a.price || 0) - (b.price || 0));
     } else if (sort === "price-high-low") {
-      sorted.sort((a, b) => b.price - a.price);
+      sorted.sort((a, b) => (b.price || 0) - (a.price || 0));
     } else if (sort === "newest") {
-      sorted.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      sorted.sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateB - dateA;
+      });
     }
     // Default: relevance (no sort)
     return sorted;
@@ -439,8 +442,6 @@ function SearchPage() {
 
           {/* Main Content */}
           <main className="flex-1">
-            {/* Location Status Indicator */}
-            <LocationStatusIndicator />
             {/* Category Header */}
             {(categoryParam || q) && (
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">

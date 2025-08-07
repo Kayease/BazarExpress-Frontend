@@ -16,6 +16,7 @@ import {
   Info
 } from "lucide-react"
 import { useAppSelector } from '../../../lib/store'
+import { isAdminUser, hasAccessToSection } from '../../../lib/adminAuth'
 import { useRouter } from 'next/navigation'
 import toast from "react-hot-toast"
 import { API_URL } from '../../../lib/config'
@@ -50,24 +51,10 @@ export default function AdminNewsletter() {
   const router = useRouter();
 
   useEffect(() => {
-    if (!user || user.role !== "admin") {
-      router.push("/");
-    } else {
-      fetchSubscribers();
-      fetchStats();
+    if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'newsletter')) {
+      router.push("/")
+      return
     }
-  }, [user, router, token]);
-
-  if (!user || user.role !== "admin") {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-spectra mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    )
-  }
 
   // State for subscribers
   const [subscribers, setSubscribers] = useState<Subscriber[]>([])

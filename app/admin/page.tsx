@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import AdminLayout from "../../components/AdminLayout"
 import { useAppSelector } from '../../lib/store'
+import { isAdminUser } from '../../lib/adminAuth'
 import { Users, ShoppingCart, Package, IndianRupee, TrendingUp, Eye } from "lucide-react"
 
 // Mock data for dashboard
@@ -38,12 +39,12 @@ export default function AdminDashboard() {
   const router = useRouter()
 
   useEffect(() => {
-    if (!user || user.role !== "admin") {
+    if (!user || !isAdminUser(user.role)) {
       router.push("/")
     }
   }, [user, router])
 
-  if (!user || user.role !== "admin") {
+  if (!user || !isAdminUser(user.role)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">

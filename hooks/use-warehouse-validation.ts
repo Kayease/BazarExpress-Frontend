@@ -16,8 +16,8 @@ import {
 } from '@/lib/warehouse-validation';
 
 export interface WarehouseValidationHook {
-  canAddToCart: (product: any) => boolean;
-  getWarehouseConflictInfo: (product: any) => {
+  canAddToCart: (product: ProductWithWarehouse) => boolean;
+  getWarehouseConflictInfo: (product: ProductWithWarehouse) => {
     hasConflict: boolean;
     existingWarehouse?: string;
     productWarehouse?: string;
@@ -49,7 +49,7 @@ export function useWarehouseValidation(): WarehouseValidationHook {
   }, [cartItemsForValidation]);
 
   // Check if product can be added to cart
-  const canAddToCart = (product: any): boolean => {
+  const canAddToCart = (product: ProductWithWarehouse): boolean => {
     if (!product || !product.warehouse) return false;
     
     const productForValidation: ProductWithWarehouse = {
@@ -63,7 +63,7 @@ export function useWarehouseValidation(): WarehouseValidationHook {
   };
 
   // Get detailed conflict information
-  const getWarehouseConflictInfo = (product: any) => {
+  const getWarehouseConflictInfo = (product: ProductWithWarehouse) => {
     if (!product || !product.warehouse) {
       return {
         hasConflict: true,
@@ -99,7 +99,7 @@ export function useWarehouseValidation(): WarehouseValidationHook {
 /**
  * Hook specifically for product cards to determine UI states
  */
-export function useProductCardState(product: any) {
+export function useProductCardState(product: ProductWithWarehouse) {
   const { cartItems } = useCartContext();
   const validation = useWarehouseValidation();
 

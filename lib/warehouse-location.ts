@@ -1,4 +1,6 @@
 // Warehouse-based location and delivery service
+import { WarehouseInfo, ProductWithWarehouse } from './warehouse-validation';
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 
 export interface PincodeDeliveryCheck {
@@ -37,11 +39,11 @@ export interface PincodeDeliveryCheck {
 
 export interface ProductsByPincode {
   success: boolean;
-  products: any[];
+  products: ProductWithWarehouse[];
   totalProducts: number;
   deliveryMode: 'custom' | 'global';
   deliveryMessage: string;
-  warehouses: any[];
+  warehouses: WarehouseInfo[];
   pagination: {
     page: number;
     limit: number;
@@ -58,7 +60,7 @@ export interface LocationState {
   deliveryMessage: string;
   showOverlay: boolean;
   overlayMessage: string;
-  matchedWarehouse: any;
+  matchedWarehouse: WarehouseInfo | null;
   isGlobalMode: boolean;
 }
 

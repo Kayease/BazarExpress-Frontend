@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react"
 import AdminLayout from "../../../components/AdminLayout"
 import { Plus, Pencil, Trash2, ShoppingBag, Cat, Baby } from "lucide-react"
-import { useAppSelector } from '../../../lib/store';
+import { useAppSelector } from '../../../lib/store'
+import { isAdminUser, hasAccessToSection } from '../../../lib/adminAuth';
 import { useRouter } from 'next/navigation';
 import toast from "react-hot-toast";
 import { uploadToCloudinary } from "../../../lib/uploadToCloudinary";
@@ -29,24 +30,10 @@ export default function AdminBanner() {
   const router = useRouter();
 
   useEffect(() => {
-    if (!user || user.role !== "admin") {
-      router.push("/");
-    } else {
-      fetchBanners();
-      fetchCategories();
+    if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'banners')) {
+      router.push("/")
+      return
     }
-  }, [user, router]);
-
-  if (!user || user.role !== "admin") {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-spectra mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    )
-  }
 
   const [banners, setBanners] = useState<Banner[]>([])
   const [categories, setCategories] = useState<Category[]>([])

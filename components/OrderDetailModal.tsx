@@ -5,7 +5,6 @@ import Image from 'next/image';
 import { X, Package, MapPin, CreditCard, Calendar, Truck, CheckCircle, Download } from 'lucide-react';
 import { calculateProductTax, isInterStateTransaction } from '@/lib/tax-calculation';
 import InvoiceModal from './InvoiceModal';
-import { useCategories, useBrands } from '@/hooks/use-api';
 
 interface OrderItem {
   productId: string;
@@ -16,6 +15,8 @@ interface OrderItem {
   image?: string;
   category?: string;
   brand?: string;
+  categoryId?: string | { _id: string; name: string };
+  brandId?: string | { _id: string; name: string };
   priceIncludesTax?: boolean;
   tax?: {
     _id?: string;
@@ -134,33 +135,6 @@ const getStatusIcon = (status: string) => {
 export default function OrderDetailModal({ isOpen, onClose, order }: OrderDetailModalProps) {
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [invoiceOrderData, setInvoiceOrderData] = useState<any>(null);
-
-  // Fetch categories and brands for lookup
-  const { data: categories = [] } = useCategories();
-  const { data: brands = [] } = useBrands();
-
-  // Helper functions to get names by ID
-  const getBrandName = (brandId: any) => {
-    if (!brandId) return 'Unknown Brand';
-    // If brandId is an object (populated), use its name
-    if (typeof brandId === 'object' && brandId !== null) {
-      return brandId.name || 'Unknown Brand';
-    }
-    // If brandId is a string (just the ID), look it up
-    const brand = brands.find((b: any) => b._id === brandId);
-    return brand ? brand.name : 'Unknown Brand';
-  };
-
-  const getCategoryName = (categoryId: any) => {
-    if (!categoryId) return 'Unknown Category';
-    // If categoryId is an object (populated), use its name
-    if (typeof categoryId === 'object' && categoryId !== null) {
-      return categoryId.name || 'Unknown Category';
-    }
-    // If categoryId is a string (just the ID), look it up
-    const category = categories.find((c: any) => c._id === categoryId);
-    return category ? category.name : 'Unknown Category';
-  };
 
   if (!isOpen || !order) return null;
 
@@ -429,14 +403,14 @@ export default function OrderDetailModal({ isOpen, onClose, order }: OrderDetail
                       <h5 className="font-medium text-gray-900 mb-1">{item.name}</h5>
                       <div className="flex items-center space-x-4 text-sm text-gray-500">
                         <span>Qty: {item.quantity}</span>
-                        {item.brand && (
+                        {item.brandId && (
                           <span>
-                            Brand: {getBrandName(item.brand)}
+                            Brand: {typeof item.brandId === 'object' ? item.brandId.name : (typeof item.brandId === 'string' && item.brandId.length > 20 ? 'Loading...' : item.brandId)}
                           </span>
                         )}
-                        {item.category && (
+                        {item.categoryId && (
                           <span>
-                            Category: {getCategoryName(item.category)}
+                            Category: {typeof item.categoryId === 'object' ? item.categoryId.name : (typeof item.categoryId === 'string' && item.categoryId.length > 20 ? 'Loading...' : item.categoryId)}
                           </span>
                         )}
                         {item.tax && (

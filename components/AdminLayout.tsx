@@ -47,74 +47,84 @@ interface AdminLayoutProps {
   children: React.ReactNode
 }
 
-const menuItems = [
-  {
-    title: "Admin Dashboard",
-    items: [
-      { name: "Home", href: "/admin", icon: Home },
-      { name: "Users", href: "/admin/users", icon: Users },
-      { name: "Reports", href: "/admin/reports", icon: BarChart3 },
-      { name: "Notice", href: "/admin/notices", icon: Bell },
-    ],
-  },
-  {
-    title: "PRODUCTS",
-    items: [
-      { name: "Brand", href: "/admin/brands", icon: Tag },
-      { name: "Warehouses", href: "/admin/warehouse", icon: Building2 },
-      { name: "Categories", href: "/admin/categories", icon: Grid3X3 },
-      { name: "Products", href: "/admin/products", icon: Package },
-      { name: "Promocodes", href: "/admin/promocodes", icon: Percent },
-      { name: "Taxes", href: "/admin/taxes", icon: function TaxesIcon(props: any) {
-          // Custom icon: a document with a percent sign
-          return (
-            <svg
-              width={20}
-              height={20}
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={1.5}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              {...props}
-            >
-              <rect x="4" y="3" width="16" height="18" rx="2" />
-              <path d="M9 9h6" />
-              <path d="M9 13h6" />
-              <circle cx="9" cy="17" r="1" />
-              <circle cx="15" cy="17" r="1" />
-              <path d="M8 7l8 10" />
-            </svg>
-          );
-        }
-      },
-      { name: "Delivery Settings", href: "/admin/delivery", icon: Truck },
-    ],
-  },
-  {
-    title: "ORDERS",
-    items: [
-      { name: "All Orders", href: "/admin/orders", icon: ShoppingCart },
-      { name: "New Orders", href: "/admin/orders/new", icon: ShoppingBag },
-      { name: "Shipped Orders", href: "/admin/orders/shipped", icon: Truck },
-      { name: "Delivered Orders", href: "/admin/orders/delivered", icon: CheckCircle },
-      { name: "Cancelled Orders", href: "/admin/orders/cancelled", icon: X },
-      { name: "Refunded Orders", href: "/admin/orders/refunded", icon: RefreshCw },
-    ],
-  },
-  {
-    title: "OTHER",
-    items: [
-      { name: "Banners", href: "/admin/banners", icon: ImageIcon },
-      { name: "Blog", href: "/admin/blog", icon: BookOpen },
-      { name: "Newsletter", href: "/admin/newsletter", icon: Send },
-      { name: "Enquiry", href: "/admin/enquiry", icon: Mail },
-      { name: "Rating & Reviews", href: "/admin/reviews", icon: Star },
-      { name: "Invoice Settings", href: "/admin/invoice-settings", icon: Receipt },
-    ],
-  },
-]
+// Define role-based menu items
+const getRoleBasedMenuItems = (userRole: string) => {
+  const allMenuItems = [
+    {
+      title: "Admin Dashboard",
+      items: [
+        { name: "Home", href: "/admin", icon: Home, roles: ['admin', 'marketing_content_manager', 'customer_support_executive', 'report_finance_analyst', 'order_warehouse_management', 'product_inventory_management'] },
+        { name: "Users", href: "/admin/users", icon: Users, roles: ['admin', 'customer_support_executive'] },
+        { name: "Reports", href: "/admin/reports", icon: BarChart3, roles: ['admin', 'report_finance_analyst'] },
+        { name: "Notice", href: "/admin/notices", icon: Bell, roles: ['admin', 'marketing_content_manager'] },
+      ],
+    },
+    {
+      title: "PRODUCTS",
+      items: [
+        { name: "Brand", href: "/admin/brands", icon: Tag, roles: ['admin', 'product_inventory_management'] },
+        { name: "Warehouses", href: "/admin/warehouse", icon: Building2, roles: ['admin', 'order_warehouse_management'] },
+        { name: "Categories", href: "/admin/categories", icon: Grid3X3, roles: ['admin', 'product_inventory_management'] },
+        { name: "Products", href: "/admin/products", icon: Package, roles: ['admin', 'product_inventory_management'] },
+        { name: "Promocodes", href: "/admin/promocodes", icon: Percent, roles: ['admin', 'marketing_content_manager'] },
+        { name: "Taxes", href: "/admin/taxes", icon: function TaxesIcon(props: any) {
+            // Custom icon: a document with a percent sign
+            return (
+              <svg
+                width={20}
+                height={20}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                {...props}
+              >
+                <rect x="4" y="3" width="16" height="18" rx="2" />
+                <path d="M9 9h6" />
+                <path d="M9 13h6" />
+                <circle cx="9" cy="17" r="1" />
+                <circle cx="15" cy="17" r="1" />
+                <path d="M8 7l8 10" />
+              </svg>
+            );
+          }, roles: ['admin', 'report_finance_analyst']
+        },
+        { name: "Delivery Settings", href: "/admin/delivery", icon: Truck, roles: ['admin', 'report_finance_analyst'] },
+      ],
+    },
+    {
+      title: "ORDERS",
+      items: [
+        { name: "All Orders", href: "/admin/orders", icon: ShoppingCart, roles: ['admin', 'customer_support_executive', 'order_warehouse_management'] },
+        { name: "New Orders", href: "/admin/orders/new", icon: ShoppingBag, roles: ['admin', 'customer_support_executive', 'order_warehouse_management'] },
+        { name: "Processing Orders", href: "/admin/orders/processing", icon: Package, roles: ['admin', 'customer_support_executive', 'order_warehouse_management'] },
+        { name: "Shipped Orders", href: "/admin/orders/shipped", icon: Truck, roles: ['admin', 'customer_support_executive', 'order_warehouse_management'] },
+        { name: "Delivered Orders", href: "/admin/orders/delivered", icon: CheckCircle, roles: ['admin', 'customer_support_executive', 'order_warehouse_management'] },
+        { name: "Cancelled Orders", href: "/admin/orders/cancelled", icon: X, roles: ['admin', 'customer_support_executive', 'order_warehouse_management'] },
+        { name: "Refunded Orders", href: "/admin/orders/refunded", icon: RefreshCw, roles: ['admin', 'customer_support_executive', 'order_warehouse_management'] },
+      ],
+    },
+    {
+      title: "OTHER",
+      items: [
+        { name: "Banners", href: "/admin/banners", icon: ImageIcon, roles: ['admin', 'marketing_content_manager'] },
+        { name: "Blog", href: "/admin/blog", icon: BookOpen, roles: ['admin', 'marketing_content_manager'] },
+        { name: "Newsletter", href: "/admin/newsletter", icon: Send, roles: ['admin', 'marketing_content_manager'] },
+        { name: "Enquiry", href: "/admin/enquiry", icon: Mail, roles: ['admin', 'customer_support_executive'] },
+        { name: "Rating & Reviews", href: "/admin/reviews", icon: Star, roles: ['admin', 'customer_support_executive'] },
+        { name: "Invoice Settings", href: "/admin/invoice-settings", icon: Receipt, roles: ['admin', 'report_finance_analyst'] },
+      ],
+    },
+  ];
+
+  // Filter menu items based on user role
+  return allMenuItems.map(section => ({
+    ...section,
+    items: section.items.filter(item => item.roles.includes(userRole))
+  })).filter(section => section.items.length > 0);
+};
 
 export default function AdminLayout({ children }: AdminLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(() => {
@@ -128,6 +138,9 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const router = useRouter()
   const user = useAppSelector((state: { auth: { user: any } }) => state.auth.user)
   const dispatch = useAppDispatch();
+
+  // Get role-based menu items
+  const menuItems = getRoleBasedMenuItems(user?.role || 'admin');
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -171,7 +184,15 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           {sidebarOpen && (
             <div>
               <div className="font-semibold text-white leading-tight">{user?.name || 'Admin'}</div>
-              <div className="text-xs text-purple-200/80">Administrator</div>
+              <div className="text-xs text-purple-200/80">
+                {user?.role === 'admin' ? 'Administrator' :
+                 user?.role === 'marketing_content_manager' ? 'Marketing Manager' :
+                 user?.role === 'customer_support_executive' ? 'Support Executive' :
+                 user?.role === 'report_finance_analyst' ? 'Finance Analyst' :
+                 user?.role === 'order_warehouse_management' ? 'Warehouse Manager' :
+                 user?.role === 'product_inventory_management' ? 'Inventory Manager' :
+                 'User'}
+              </div>
             </div>
           )}
         </div>

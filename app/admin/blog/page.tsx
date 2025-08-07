@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import AdminLayout from "../../../components/AdminLayout"
 import { Plus, Pencil, Trash2, Loader2, AlertTriangle } from "lucide-react"
 import { useAppSelector } from '../../../lib/store'
+import { isAdminUser, hasAccessToSection } from '../../../lib/adminAuth'
 import { useRouter } from 'next/navigation'
 import toast from "react-hot-toast"
 import { uploadToCloudinary } from "../../../lib/uploadToCloudinary"
@@ -66,40 +67,10 @@ export default function AdminBlog() {
   const paginatedBlogs = blogs.slice((currentPage - 1) * BLOGS_PER_PAGE, currentPage * BLOGS_PER_PAGE);
 
   useEffect(() => {
-    if (!user || user.role !== "admin") {
+    if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'blog')) {
       router.push("/")
-    } else {
-      fetchBlogs()
+      return
     }
-  }, [user, router])
-
-  const fetchBlogs = async () => {
-    try {
-      setLoading(true)
-      const response = await fetch(`${API_URL}/blogs`)
-      if (!response.ok) {
-        throw new Error("Failed to fetch blogs")
-      }
-      const data = await response.json()
-      setBlogs(data.blogs || data)
-    } catch (error) {
-      console.error("Error fetching blogs:", error)
-      toast.error("Failed to load blogs")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  if (!user || user.role !== "admin") {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-spectra mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    )
-  }
 
   const openAdd = () => {
     setEditing(null)

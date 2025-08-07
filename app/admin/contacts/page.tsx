@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react"
 import AdminLayout from "../../../components/AdminLayout"
 import { Mail, Eye, Trash2, CheckCircle, Clock, MessageCircle } from "lucide-react"
-import { useAppSelector } from '../../../lib/store';
+import { useAppSelector } from '../../../lib/store'
+import { isAdminUser, hasAccessToSection } from '../../../lib/adminAuth';
 import { useRouter } from 'next/navigation';
 import toast from "react-hot-toast";
 
@@ -24,23 +25,10 @@ export default function AdminContacts() {
   const router = useRouter();
 
   useEffect(() => {
-    if (!user || user.role !== "admin") {
-      router.push("/");
-    } else {
-      fetchContacts();
+    if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'contacts')) {
+      router.push("/")
+      return
     }
-  }, [user, router]);
-
-  if (!user || user.role !== "admin") {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-spectra mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    )
-  }
 
   const [contacts, setContacts] = useState<Contact[]>([])
   const [loading, setLoading] = useState(false)

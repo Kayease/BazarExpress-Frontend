@@ -54,6 +54,7 @@ import { validateCartDelivery, CartValidationResponse } from "@/lib/location";
 import CartValidationAlert from "@/components/CartValidationAlert";
 import { calculateCartTax, CartTaxCalculation, isInterStateTransaction, formatTaxAmount } from "@/lib/tax-calculation";
 import OrderSuccessModal from "@/components/OrderSuccessModal";
+import AddressModal from "@/components/AddressModal";
 
 interface PaymentMethod {
   id: string;
@@ -223,40 +224,7 @@ interface MixedWarehouseDelivery {
   };
 }
 
-// Helper for parsing Google address components
-function parseAddressComponents(components: any[]): any {
-  let area = "", city = "", state = "", country = "", pin = "";
-  for (const comp of components) {
-    if (comp.types.includes("sublocality_level_1")) area = comp.long_name;
-    if (comp.types.includes("locality")) city = comp.long_name;
-    if (comp.types.includes("administrative_area_level_1")) state = comp.long_name;
-    if (comp.types.includes("country")) country = comp.long_name;
-    if (comp.types.includes("postal_code")) pin = comp.long_name;
-  }
-  return { area, city, state, country, pin };
-}
 
-// Fetch address from lat/lng and update addressForm
-function fetchAddress(lat: number, lng: number, setAddressForm: any) {
-  fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}`)
-    .then(res => res.json())
-    .then(data => {
-      if (data.status === "OK" && data.results.length > 0) {
-        const result = data.results[0];
-        const comps = parseAddressComponents(result.address_components);
-        setAddressForm((prev: any) => ({
-          ...prev,
-          area: result.formatted_address,
-          city: comps.city,
-          state: comps.state,
-          country: comps.country,
-          pincode: comps.pin,
-          lat,
-          lng
-        }));
-      }
-    });
-}
 
 // Extract state from warehouse address string
 function extractStateFromAddress(address: string): string {
@@ -383,12 +351,6 @@ export default function PaymentPage() {
   const [showAddAddressModal, setShowAddAddressModal] = useState<boolean>(false);
   const [isLoadingAddresses, setIsLoadingAddresses] = useState<boolean>(false);
   const [isAddingAddress, setIsAddingAddress] = useState<boolean>(false);
-  const modalRef = useRef<HTMLDivElement>(null);
-  const [addressForm, setAddressForm] = useState<Partial<Address>>({});
-  const mapRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const mapInstance = useRef<any>(null);
-  const markerInstance = useRef<any>(null);
 
   // Promo code states
   const [appliedPromoCode, setAppliedPromoCode] = useState<any>(null);
@@ -873,9 +835,13 @@ export default function PaymentPage() {
         if (newAddress.isDefault) {
           setSelectedAddress(data.address.id);
         }
+        setShowAddAddressModal(false);
+        toast.success('Address added successfully!');
       }
     } catch (error) {
       console.error('Error adding address:', error);
+      const errorMsg = typeof error === "object" && error !== null && "message" in error ? (error as any).message : String(error);
+      toast.error(`Failed to add address: ${errorMsg}`);
       throw error;
     } finally {
       setIsAddingAddress(false);
@@ -1887,157 +1853,7 @@ export default function PaymentPage() {
     }
   };
 
-  // Google Maps logic for Add Address Modal
-  useEffect(() => {
-    if (!showAddAddressModal) return;
-    let map: any;
-    let marker: any;
-    let autocomplete: any;
-    let googleScript: HTMLScriptElement | null = null;
 
-    function loadGoogleMapsScript(callback: () => void) {
-      if (window.google && window.google.maps) {
-        callback();
-        return;
-      }
-      googleScript = document.createElement("script");
-      googleScript.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places`;
-      googleScript.async = true;
-      googleScript.onload = callback;
-      document.body.appendChild(googleScript);
-    }
-
-    function initMap() {
-      if (!mapRef.current || !window.google || !window.google.maps) return;
-      const center = {
-        lat: addressForm.lat || 28.6139,
-        lng: addressForm.lng || 77.2090
-      };
-      map = new window.google.maps.Map(mapRef.current, {
-        center,
-        zoom: 14,
-        mapTypeControl: false,
-        fullscreenControl: false,
-        streetViewControl: false,
-        zoomControl: false,
-        rotateControl: false,
-        scaleControl: false,
-      });
-      mapInstance.current = map;
-      marker = new window.google.maps.Marker({
-        position: center,
-        map,
-        draggable: true,
-      });
-      markerInstance.current = marker;
-      fetchAddress(center.lat, center.lng, setAddressForm);
-      marker.addListener("dragend", () => {
-        const pos = marker.getPosition();
-        fetchAddress(pos.lat(), pos.lng(), setAddressForm);
-      });
-      map.addListener("click", (e: any) => {
-        marker.setPosition(e.latLng);
-        fetchAddress(e.latLng.lat(), e.latLng.lng(), setAddressForm);
-      });
-      if (inputRef.current) {
-        try {
-          autocomplete = new window.google.maps.places.Autocomplete(inputRef.current);
-          console.log('[Autocomplete] Attached to inputRef', inputRef.current);
-          autocomplete.bindTo("bounds", map);
-          autocomplete.addListener("place_changed", () => {
-            const place = autocomplete.getPlace();
-            console.log('[Autocomplete] place_changed event:', place);
-            if (!place.geometry) {
-              console.warn('[Autocomplete] No geometry for selected place:', place);
-              return;
-            }
-            map.panTo(place.geometry.location);
-            map.setZoom(16);
-            marker.setPosition(place.geometry.location);
-            fetchAddress(place.geometry.location.lat(), place.geometry.location.lng(), setAddressForm);
-          });
-        } catch (err) {
-          console.error('[Autocomplete] Failed to attach:', err);
-        }
-      } else {
-        console.warn('[Autocomplete] inputRef.current is null, cannot attach Autocomplete');
-      }
-    }
-
-    loadGoogleMapsScript(initMap);
-
-    return () => {
-      if (googleScript) {
-        document.body.removeChild(googleScript);
-      }
-    };
-  }, [showAddAddressModal]);
-
-  // Fetch current location automatically when adding a new address
-  useEffect(() => {
-    if (showAddAddressModal) {
-      if (!navigator.geolocation) return;
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const lat = position.coords.latitude;
-          const lng = position.coords.longitude;
-          setAddressForm((prev) => ({ ...prev, lat, lng }));
-          if (mapInstance.current && window.google && window.google.maps) {
-            mapInstance.current.setCenter({ lat, lng });
-            mapInstance.current.setZoom(16);
-            markerInstance.current.setPosition({ lat, lng });
-            fetchAddress(lat, lng, setAddressForm);
-          }
-        },
-        () => { }
-      );
-    }
-  }, [showAddAddressModal]);
-
-  // Ensure Google Places Autocomplete dropdown is positioned correctly
-  useEffect(() => {
-    if (!showAddAddressModal) return;
-    let observer: MutationObserver | null = null;
-    function positionPacContainer() {
-      const input = inputRef.current;
-      const pac = document.querySelector('.pac-container') as HTMLElement;
-      if (input && pac) {
-        const rect = input.getBoundingClientRect();
-        pac.style.width = rect.width + 'px';
-        pac.style.position = 'fixed';
-        pac.style.left = rect.left + 'px';
-        pac.style.top = rect.bottom + 'px';
-        pac.style.zIndex = '99999';
-      }
-    }
-    observer = new MutationObserver(positionPacContainer);
-    observer.observe(document.body, { childList: true, subtree: true });
-    window.addEventListener('scroll', positionPacContainer, true);
-    window.addEventListener('resize', positionPacContainer);
-    setTimeout(positionPacContainer, 500);
-    return () => {
-      if (observer) observer.disconnect();
-      window.removeEventListener('scroll', positionPacContainer, true);
-      window.removeEventListener('resize', positionPacContainer);
-    };
-  }, [showAddAddressModal]);
-
-  function handleUseMyLocation() {
-    if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const lat = position.coords.latitude;
-        const lng = position.coords.longitude;
-        if (mapInstance.current && window.google && window.google.maps) {
-          mapInstance.current.setCenter({ lat, lng });
-          mapInstance.current.setZoom(16);
-          markerInstance.current.setPosition({ lat, lng });
-          fetchAddress(lat, lng, setAddressForm);
-        }
-      },
-      () => { }
-    );
-  }
 
   // Show loading if user is not authenticated
   if (!user || !token) {
@@ -2195,10 +2011,7 @@ export default function PaymentPage() {
                   <MapPin className="h-12 w-12 text-gray-300 mx-auto mb-3" />
                   <p className="text-gray-600 mb-4">No delivery address found</p>
                   <Button
-                    onClick={() => {
-                      setAddressForm({});
-                      setShowAddAddressModal(true);
-                    }}
+                    onClick={() => setShowAddAddressModal(true)}
                     className="bg-green-600 hover:bg-green-700"
                   >
                     <Plus className="h-4 w-4 mr-2" />
@@ -2533,7 +2346,6 @@ export default function PaymentPage() {
                   <p className="text-gray-600 mb-4">No addresses found</p>
                   <Button
                     onClick={() => {
-                      setAddressForm({});
                       setShowAddAddressModal(true);
                       setShowAddressModal(false);
                     }}
@@ -2596,7 +2408,6 @@ export default function PaymentPage() {
                   
                   <Button
                     onClick={() => {
-                      setAddressForm({});
                       setShowAddAddressModal(true);
                       setShowAddressModal(false);
                     }}
@@ -2614,221 +2425,12 @@ export default function PaymentPage() {
       )}
 
       {/* Add Address Modal */}
-      {showAddAddressModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[999] p-4">
-          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-gray-900">Add New Address</h2>
-                <button
-                  onClick={() => setShowAddAddressModal(false)}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  <X className="h-6 w-6" />
-                </button>
-              </div>
-
-              <form onSubmit={(e) => {
-                e.preventDefault();
-                // Basic validation
-                if (!addressForm.name || !addressForm.building || !addressForm.area || 
-                    !addressForm.city || !addressForm.state || !addressForm.pincode) {
-                  toast.error('Please fill in all required fields');
-                  return;
-                }
-                handleAddAddress(addressForm as Omit<Address, 'id'>);
-              }} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Address Type *
-                    </label>
-                    <select
-                      value={addressForm.type || 'Home'}
-                      onChange={(e) => setAddressForm(prev => ({ ...prev, type: e.target.value as any }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                      required
-                    >
-                      <option value="Home">Home</option>
-                      <option value="Office">Office</option>
-                      <option value="Hotel">Hotel</option>
-                      <option value="Other">Other</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Full Name *
-                    </label>
-                    <input
-                      type="text"
-                      value={addressForm.name || ''}
-                      onChange={(e) => setAddressForm(prev => ({ ...prev, name: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Building/House No. *
-                  </label>
-                  <input
-                    type="text"
-                    value={addressForm.building || ''}
-                    onChange={(e) => setAddressForm(prev => ({ ...prev, building: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                    required
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Floor (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      value={addressForm.floor || ''}
-                      onChange={(e) => setAddressForm(prev => ({ ...prev, floor: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Area/Locality *
-                    </label>
-                    <input
-                      type="text"
-                      value={addressForm.area || ''}
-                      onChange={(e) => setAddressForm(prev => ({ ...prev, area: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Landmark (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={addressForm.landmark || ''}
-                    onChange={(e) => setAddressForm(prev => ({ ...prev, landmark: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      City *
-                    </label>
-                    <input
-                      type="text"
-                      value={addressForm.city || ''}
-                      onChange={(e) => setAddressForm(prev => ({ ...prev, city: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      State *
-                    </label>
-                    <input
-                      type="text"
-                      value={addressForm.state || ''}
-                      onChange={(e) => setAddressForm(prev => ({ ...prev, state: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Pincode *
-                    </label>
-                    <input
-                      type="text"
-                      value={addressForm.pincode || ''}
-                      onChange={(e) => setAddressForm(prev => ({ ...prev, pincode: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Phone Number (Optional)
-                  </label>
-                  <input
-                    type="tel"
-                    value={addressForm.phone || ''}
-                    onChange={(e) => setAddressForm(prev => ({ ...prev, phone: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Delivery Instructions (Optional)
-                  </label>
-                  <textarea
-                    value={addressForm.additionalInstructions || ''}
-                    onChange={(e) => setAddressForm(prev => ({ ...prev, additionalInstructions: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                    rows={3}
-                  />
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="setDefault"
-                    checked={addressForm.isDefault || false}
-                    onChange={(e) => setAddressForm(prev => ({ ...prev, isDefault: e.target.checked }))}
-                    className="rounded border-gray-300 text-green-600 focus:ring-green-500"
-                  />
-                  <label htmlFor="setDefault" className="text-sm text-gray-700">
-                    Set as default address
-                  </label>
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setShowAddAddressModal(false)}
-                    className="flex-1"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    disabled={isAddingAddress}
-                    className="flex-1 bg-green-600 hover:bg-green-700"
-                  >
-                    {isAddingAddress ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Adding...
-                      </>
-                    ) : (
-                      'Add Address'
-                    )}
-                  </Button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
+      <AddressModal
+        isOpen={showAddAddressModal}
+        onClose={() => setShowAddAddressModal(false)}
+        onAddAddress={handleAddAddress}
+        isSubmitting={isAddingAddress}
+      />
 
       {/* Delivery Unavailable Modal */}
       <DeliveryUnavailableModal

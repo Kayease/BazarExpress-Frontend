@@ -7,7 +7,7 @@ import OrdersTable from "../../../../components/OrdersTable"
 import { useAppSelector } from '../../../lib/store'
 import { isAdminUser, hasAccessToSection } from '../../../lib/adminAuth'
 
-export default function AdminDeliveredOrders() {
+export default function AdminProcessingOrders() {
   const user = useAppSelector((state) => state.auth.user)
   const router = useRouter()
 
@@ -26,11 +26,11 @@ export default function AdminDeliveredOrders() {
   return (
     <AdminLayout>
       <OrdersTable 
-        title="Delivered Orders" 
-        statusFilter="delivered"
+        title="Processing Orders" 
+        statusFilter="processing"
         showStatusFilter={false}
         showWarehouseFilter={true}
       />
     </AdminLayout>
   )
-} 
+}

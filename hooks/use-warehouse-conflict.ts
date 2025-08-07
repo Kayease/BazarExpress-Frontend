@@ -2,15 +2,15 @@
 import { useState, useCallback, useEffect } from "react";
 import { useCartContext } from "@/components/app-provider";
 import { useLocation } from "@/components/location-provider";
-import { getWarehouseConflictInfo, findAnyWarehouseInCart, isGlobalWarehouse } from "@/lib/warehouse-validation";
+import { getWarehouseConflictInfo, findAnyWarehouseInCart, isGlobalWarehouse, WarehouseInfo, ProductWithWarehouse } from "@/lib/warehouse-validation";
 import toast from "react-hot-toast";
 
 export function useWarehouseConflict() {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [conflictProduct, setConflictProduct] = useState<any>(null);
+  const [conflictProduct, setConflictProduct] = useState<ProductWithWarehouse | null>(null);
   const [locationConflict, setLocationConflict] = useState<{
-    newWarehouse: any;
-    existingWarehouse: any;
+    newWarehouse: WarehouseInfo;
+    existingWarehouse: WarehouseInfo;
   } | null>(null);
   const [hasInitialized, setHasInitialized] = useState(false);
   const { cartItems, clearCart, isLoadingCart } = useCartContext();
@@ -132,7 +132,7 @@ export function useWarehouseConflict() {
     }
   }, [locationState.matchedWarehouse, locationState.isGlobalMode, cartItems, isLoadingCart, hasInitialized]);
 
-  const showConflictModal = useCallback((product: any) => {
+  const showConflictModal = useCallback((product: ProductWithWarehouse) => {
     const conflictInfo = getWarehouseConflictInfo(product, cartItems);
     if (conflictInfo.hasConflict) {
       setConflictProduct(product);

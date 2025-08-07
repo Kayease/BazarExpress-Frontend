@@ -2,6 +2,7 @@
 import React, { useEffect } from "react";
 import { AlertTriangle, Globe, ShoppingCart, X, Store, Clock, Truck, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { WarehouseInfo } from "@/lib/warehouse-validation";
 
 interface WarehouseConflictModalProps {
   isOpen: boolean;
@@ -12,7 +13,7 @@ interface WarehouseConflictModalProps {
   onSwitchToGlobal: () => void;
   onContinueShopping: () => void;
   isLocationConflict?: boolean;
-  newWarehouse?: any;
+  newWarehouse?: WarehouseInfo;
 }
 
 const WarehouseConflictModal: React.FC<WarehouseConflictModalProps> = ({

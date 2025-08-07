@@ -22,6 +22,7 @@ export interface Warehouse {
   email: string;
   capacity: number;
   userId?: string;
+  status?: 'active' | 'inactive';
   deliverySettings: DeliverySettings;
 }
 

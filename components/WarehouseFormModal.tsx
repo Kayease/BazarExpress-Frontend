@@ -3,27 +3,7 @@ import ReactDOM from "react-dom";
 import { X, MapPin, Truck, Clock, Settings } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAppSelector } from '@/lib/store';
-
-interface Warehouse {
-  _id?: string;
-  name: string;
-  address: string;
-  location: { lat: number | null; lng: number | null };
-  contactPhone: string;
-  email: string;
-  capacity: number;
-  deliverySettings: {
-    isDeliveryEnabled: boolean;
-    disabledMessage: string;
-    deliveryPincodes: string[];
-    is24x7Delivery: boolean;
-    deliveryDays: string[];
-    deliveryHours: {
-      start: string;
-      end: string;
-    };
-  };
-}
+import { Warehouse, defaultWarehouse } from '@/types/warehouse';
 
 interface WarehouseFormModalProps {
   open: boolean;
@@ -32,25 +12,7 @@ interface WarehouseFormModalProps {
   onSuccess: (warehouse: Warehouse) => void;
 }
 
-const defaultWarehouse: Warehouse = {
-  name: "",
-  address: "",
-  location: { lat: null, lng: null },
-  contactPhone: "",
-  email: "",
-  capacity: 0,
-  deliverySettings: {
-    isDeliveryEnabled: true,
-    disabledMessage: '',
-    deliveryPincodes: [],
-    is24x7Delivery: true,
-    deliveryDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
-    deliveryHours: {
-      start: '09:00',
-      end: '18:00'
-    }
-  }
-};
+
 
 export default function WarehouseFormModal({ open, onClose, warehouse, onSuccess }: WarehouseFormModalProps) {
   const user = useAppSelector((state) => state.auth.user);
@@ -188,7 +150,7 @@ export default function WarehouseFormModal({ open, onClose, warehouse, onSuccess
     setForm(f => ({ ...f, [name]: type === "number" ? Number(value) : value }));
   };
 
-  const handleDeliverySettingChange = (field: string, value: any) => {
+  const handleDeliverySettingChange = (field: string, value: boolean | string | string[]) => {
     setForm(f => ({
       ...f,
       deliverySettings: {
@@ -289,8 +251,9 @@ export default function WarehouseFormModal({ open, onClose, warehouse, onSuccess
       toast.success(warehouse ? "Warehouse updated" : "Warehouse added");
       onSuccess(data);
       onClose();
-    } catch (err: any) {
-      toast.error(err.message || "Error saving warehouse");
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : "Error saving warehouse";
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }

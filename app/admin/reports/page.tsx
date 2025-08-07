@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import AdminLayout from "../../../components/AdminLayout"
 import { useAppSelector } from '../../../lib/store'
+import { isAdminUser, hasAccessToSection } from '../../../lib/adminAuth'
 import { BarChart3, TrendingUp, TrendingDown, IndianRupee, Users, ShoppingCart, Calendar } from "lucide-react"
 
 export default function AdminReports() {
@@ -11,37 +12,10 @@ export default function AdminReports() {
   const router = useRouter()
 
   useEffect(() => {
-    if (!user || user.role !== "admin") {
+    if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'reports')) {
       router.push("/")
+      return
     }
-  }, [user, router])
-
-  const salesData = {
-    thisMonth: 45678.9,
-    lastMonth: 38234.5,
-    growth: 19.5,
-    ordersThisMonth: 856,
-    ordersLastMonth: 723,
-    orderGrowth: 18.4,
-  }
-
-  const topCategories = [
-    { name: "Electronics", sales: 25430.5, percentage: 55.7 },
-    { name: "Fashion", sales: 12340.25, percentage: 27.0 },
-    { name: "Home & Kitchen", sales: 5678.9, percentage: 12.4 },
-    { name: "Sports", sales: 2229.25, percentage: 4.9 },
-  ]
-
-  if (!user || user.role !== "admin") {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-spectra mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <AdminLayout>

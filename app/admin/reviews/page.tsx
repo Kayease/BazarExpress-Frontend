@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import AdminLayout from "../../../components/AdminLayout"
 import { useAppSelector } from '../../../lib/store'
+import { isAdminUser, hasAccessToSection } from '../../../lib/adminAuth'
 import { Search, Filter, Star, CheckCircle, X, Eye, MoreHorizontal } from "lucide-react"
 
 // Mock reviews data
@@ -57,20 +58,10 @@ export default function AdminReviews() {
   const router = useRouter()
 
   useEffect(() => {
-    if (!user || user.role !== "admin") {
+    if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'reviews')) {
       router.push("/")
-    }
-  }, [user, router])
-
-  const filteredReviews = reviews.filter((review) => {
-    const matchesSearch =
-      review.productName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      review.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      review.title.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = filterStatus === "all" || review.status === filterStatus
-    const matchesRating = filterRating === "all" || review.rating.toString() === filterRating
-    return matchesSearch && matchesStatus && matchesRating
-  })
+      return
+    })
 
   const reviewStats = {
     total: reviews.length,
@@ -90,16 +81,10 @@ export default function AdminReviews() {
     )
   }
 
-  if (!user || user.role !== "admin") {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-spectra mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    )
-  }
+  if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'reviews')) {
+      router.push("/")
+      return
+    }
 
   return (
     <AdminLayout>
