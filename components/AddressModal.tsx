@@ -4,12 +4,7 @@ import { useState, useEffect, useRef, FormEvent } from "react"
 import { X, MapPin, Home, Briefcase, Hotel, MapPinOff, Loader2 } from "lucide-react"
 import toast from "react-hot-toast"
 
-// Extend Window interface for Google Maps
-declare global {
-  interface Window {
-    google: any;
-  }
-}
+
 
 interface Address {
   id: number;

@@ -3,24 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { X, MapPin, Search, Navigation, Loader2, MapPinOff } from "lucide-react";
 
-// Update TypeScript declaration for Google Maps
-declare global {
-  interface Window {
-    google: {
-      maps: {
-        places: {
-          AutocompleteSessionToken: any;
-          AutocompleteService: any;
-          PlacesService: any;
-          Autocomplete: any;
-        };
-        Geocoder: any;
-        Map: any;
-        Marker: any;
-      };
-    };
-  }
-}
+
 
 interface Location {
   id: string;

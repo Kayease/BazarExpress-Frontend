@@ -7,6 +7,9 @@ import { useAppSelector } from '../../../lib/store'
 import { isAdminUser, hasAccessToSection } from '../../../lib/adminAuth';
 import { useRouter } from 'next/navigation';
 import toast from "react-hot-toast";
+import { apiDelete } from '../../../lib/api-client';
+import AdminPagination from '../../../components/ui/AdminPagination';
+import AdminLoader, { AdminTableSkeleton } from '../../../components/ui/AdminLoader';
 
 interface Contact {
   _id: string;
@@ -25,12 +28,14 @@ export default function AdminContacts() {
   const router = useRouter();
 
   const [contacts, setContacts] = useState<Contact[]>([])
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [contactToDelete, setContactToDelete] = useState<Contact | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const CONTACTS_PER_PAGE = 10
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
   useEffect(() => {
@@ -42,8 +47,8 @@ export default function AdminContacts() {
   }, [user]);
 
   const fetchContacts = async () => {
-    setLoading(true);
     try {
+      setLoading(true);
       const res = await fetch(`${API_URL}/contacts`);
       if (!res.ok) throw new Error("Failed to fetch contacts");
       const data = await res.json();
@@ -54,6 +59,13 @@ export default function AdminContacts() {
       setLoading(false);
     }
   };
+
+  // Calculate pagination
+  const totalPages = Math.ceil(contacts.length / CONTACTS_PER_PAGE);
+  const paginatedContacts = contacts.slice(
+    (currentPage - 1) * CONTACTS_PER_PAGE,
+    currentPage * CONTACTS_PER_PAGE
+  );
 
   const handleViewContact = (contact: Contact) => {
     setSelectedContact(contact);
@@ -86,13 +98,7 @@ export default function AdminContacts() {
     if (!contactToDelete) return;
     setDeleteLoading(true);
     try {
-      const res = await fetch(`${API_URL}/contacts/${contactToDelete._id}`, { method: "DELETE" });
-      if (!res.ok) {
-        const err = await res.json();
-        toast.error(err.error || "Failed to delete contact");
-        setDeleteLoading(false);
-        return;
-      }
+      await apiDelete(`${API_URL}/contacts/${contactToDelete._id}`);
       toast.success("Contact deleted successfully");
       setDeleteModalOpen(false);
       setContactToDelete(null);
@@ -136,6 +142,57 @@ export default function AdminContacts() {
     read: contacts.filter(c => c.status === 'read').length,
     replied: contacts.filter(c => c.status === 'replied').length,
   };
+
+  if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'contacts')) {
+    return <AdminLoader message="Checking permissions..." fullScreen />
+  }
+
+  if (loading) {
+    return (
+      <AdminLayout>
+        <div className="space-y-6">
+          <div className="mb-6">
+            <h1 className="text-2xl font-bold text-text-primary">Contact Messages</h1>
+            <p className="text-gray-600">Manage customer contact form submissions</p>
+          </div>
+
+          {/* Stats Skeleton */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 animate-pulse">
+            {Array.from({ length: 4 }).map((_, idx) => (
+              <div key={idx} className="bg-white rounded-lg shadow p-4">
+                <div className="flex items-center">
+                  <div className="h-8 w-8 bg-gray-200 rounded"></div>
+                  <div className="ml-3 space-y-2">
+                    <div className="h-4 bg-gray-200 rounded w-16"></div>
+                    <div className="h-6 bg-gray-200 rounded w-12"></div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Table Skeleton */}
+          <div className="w-full bg-white rounded-2xl shadow-lg p-0 overflow-x-auto">
+            <table className="min-w-[900px] w-full text-left">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th className="py-3.5 px-6 font-semibold text-sm">Name</th>
+                  <th className="py-3.5 px-6 font-semibold text-sm">Email</th>
+                  <th className="py-3.5 px-6 font-semibold text-sm">Subject</th>
+                  <th className="py-3.5 px-6 font-semibold text-sm">Status</th>
+                  <th className="py-3.5 px-6 font-semibold text-sm">Date</th>
+                  <th className="py-3.5 px-6 font-semibold text-sm text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <AdminTableSkeleton rows={10} columns={6} />
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </AdminLayout>
+    )
+  }
 
   return (
     <AdminLayout>
@@ -199,14 +256,7 @@ export default function AdminContacts() {
               </tr>
             </thead>
             <tbody>
-              {loading && (
-                <tr>
-                  <td colSpan={6} className="py-8 text-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-primary mx-auto"></div>
-                  </td>
-                </tr>
-              )}
-              {!loading && contacts.length === 0 && (
+              {paginatedContacts.length === 0 && (
                 <tr>
                   <td colSpan={6}>
                     <div className="flex flex-col items-center justify-center py-16">
@@ -217,7 +267,7 @@ export default function AdminContacts() {
                   </td>
                 </tr>
               )}
-              {contacts.map(contact => (
+              {paginatedContacts.map(contact => (
                 <tr key={contact._id} className="border-b last:border-b-0 hover:bg-gray-50 transition">
                   <td className="py-4 px-6 align-middle text-sm">
                     <span className="font-medium text-gray-900">{contact.name}</span>
@@ -270,6 +320,18 @@ export default function AdminContacts() {
               ))}
             </tbody>
           </table>
+          
+          {/* Pagination */}
+          {contacts.length > CONTACTS_PER_PAGE && (
+            <AdminPagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              itemsPerPage={CONTACTS_PER_PAGE}
+              totalItems={contacts.length}
+              itemName="contacts"
+            />
+          )}
         </div>
 
         {/* Contact Detail Modal */}

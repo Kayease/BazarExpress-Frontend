@@ -1,11 +1,14 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import { BadgeCheck, Edit, Trash2, Plus, X, Loader2, Tag } from "lucide-react";
+import { BadgeCheck, Edit, Trash2, Plus, Tag } from "lucide-react";
 import toast from "react-hot-toast";
 import AdminLayout from "@/components/AdminLayout";
-import { uploadToCloudinary } from "@/lib/uploadToCloudinary";
+
 import ConfirmDeleteModal from '../../../components/ui/ConfirmDeleteModal';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api-client';
+import BrandFormModal from '../../../components/BrandFormModal';
+import AdminPagination from '../../../components/ui/AdminPagination';
+import AdminLoader, { AdminBrandSkeleton } from '../../../components/ui/AdminLoader';
 
 interface Brand {
   _id?: string;
@@ -20,45 +23,18 @@ interface Brand {
   productCount?: number;
 }
 
-const defaultBrand: Brand = {
-  name: "",
-  slug: "",
-  description: "",
-  logo: "",
-  bannerImage: "",
-  isPopular: false,
-  showOnHome: false,
-  status: "active",
-};
 
-function slugify(str: string) {
-  return str
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .replace(/--+/g, "-");
-}
 
 export default function BrandManagementPage() {
   const [brands, setBrands] = useState<Brand[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editingBrand, setEditingBrand] = useState<Brand | null>(null);
-  const [newBrand, setNewBrand] = useState<Brand>(defaultBrand);
-  const [logoPreview, setLogoPreview] = useState<string>("");
-  const [bannerPreview, setBannerPreview] = useState<string>("");
-  const [loading, setLoading] = useState(false);
   const [confirmDeleteBrand, setConfirmDeleteBrand] = useState<Brand | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [logoUploading, setLogoUploading] = useState(false);
-  const [bannerUploading, setBannerUploading] = useState(false);
-  const [logoFile, setLogoFile] = useState<File | null>(null);
-  const [bannerFile, setBannerFile] = useState<File | null>(null);
-  const [logoDeleting, setLogoDeleting] = useState(false);
-  const [bannerDeleting, setBannerDeleting] = useState(false);
-  // --- Add state for images to delete ---
-  const [logoToDelete, setLogoToDelete] = useState<string | null>(null);
-  const [bannerToDelete, setBannerToDelete] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const BRANDS_PER_PAGE = 18;
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -68,14 +44,15 @@ export default function BrandManagementPage() {
   }, []);
 
   async function fetchBrands(showToast = true) {
-    setLoading(true);
     try {
+      setLoading(true);
       const data = await apiGet(`${API_URL}/brands`);
       setBrands(data);
     } catch (e) {
       toast.error("Failed to load brands");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   // Stats
@@ -90,6 +67,18 @@ export default function BrandManagementPage() {
     b.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (b.description || "").toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Calculate pagination
+  const totalPages = Math.ceil(filteredBrands.length / BRANDS_PER_PAGE);
+  const paginatedBrands = filteredBrands.slice(
+    (currentPage - 1) * BRANDS_PER_PAGE,
+    currentPage * BRANDS_PER_PAGE
+  );
+
+  // Reset to first page when search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
 
   // Stats
   const stats = [
@@ -128,166 +117,16 @@ export default function BrandManagementPage() {
   // Modal open/close
   function openAddModal() {
     setEditingBrand(null);
-    setNewBrand(defaultBrand);
-    setLogoPreview("");
-    setBannerPreview("");
-    setLogoFile(null);
-    setBannerFile(null);
     setShowModal(true);
   }
   function openEditModal(brand: Brand) {
     setEditingBrand(brand);
-    setNewBrand({ ...brand });
-    setLogoPreview(brand.logo || "");
-    setBannerPreview(brand.bannerImage || "");
-    setLogoFile(null);
-    setBannerFile(null);
     setShowModal(true);
   }
-  function closeModal() {
-    setShowModal(false);
-    setEditingBrand(null);
-    setNewBrand(defaultBrand);
-    setLogoPreview("");
-    setBannerPreview("");
-    setLogoFile(null);
-    setBannerFile(null);
-  }
 
-  // Handle form changes
-  function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) {
-    const { name, value, type } = e.target;
-    let fieldValue: any = value;
-    if (type === "checkbox") {
-      if (name === "status") {
-        fieldValue = (e.target as HTMLInputElement).checked ? "active" : "inactive";
-      } else {
-        fieldValue = (e.target as HTMLInputElement).checked;
-      }
-    }
-    setNewBrand(prev => ({
-      ...prev,
-      [name]: fieldValue,
-      slug: name === "name" ? slugify(value) : prev.slug,
-    }));
-    if (name === "name") {
-      setNewBrand(prev => ({ ...prev, slug: slugify(value) }));
-    }
-  }
 
-  // Image upload/preview
-  function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (logoPreview && !logoFile) {
-        setLogoToDelete(logoPreview);
-      }
-      setLogoFile(file);
-      setLogoPreview(URL.createObjectURL(file));
-      setNewBrand(prev => ({ ...prev, logo: "" }));
-    }
-  }
-  function handleBannerChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (bannerPreview && !bannerFile) {
-        setBannerToDelete(bannerPreview);
-      }
-      setBannerFile(file);
-      setBannerPreview(URL.createObjectURL(file));
-      setNewBrand(prev => ({ ...prev, bannerImage: "" }));
-    }
-  }
 
-  // Add/Edit Brand
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!newBrand.name || !newBrand.slug) {
-      toast.error("Name and slug are required");
-      return;
-    }
-    // --- Require logo image ---
-    if (!logoPreview && !logoFile) {
-      toast.error("Logo image is required");
-      return;
-    }
-    if (logoDeleting || bannerDeleting) {
-      toast.error("Please wait for image deletion to finish.");
-      return;
-    }
-    setLoading(true);
-    const toastId = toast.loading(editingBrand ? "Updating brand..." : "Adding brand...");
-    let logoUrl = newBrand.logo;
-    let bannerUrl = newBrand.bannerImage;
-    if (logoFile) {
-      try {
-        logoUrl = await uploadToCloudinary(logoFile, "brands");
-      } catch {
-        toast.dismiss(toastId);
-        toast.error("Logo upload failed.");
-        setLoading(false);
-        return;
-      }
-    }
-    if (bannerFile) {
-      try {
-        bannerUrl = await uploadToCloudinary(bannerFile, "brands");
-      } catch {
-        toast.dismiss(toastId);
-        toast.error("Banner upload failed.");
-        setLoading(false);
-        return;
-      }
-    }
-    const payload = {
-      ...newBrand,
-      name: newBrand.name.trim(),
-      slug: newBrand.slug.trim(),
-      logo: logoUrl,
-      bannerImage: bannerUrl,
-      status: newBrand.status, // already 'active' or 'inactive'
-    };
-    try {
-      if (editingBrand && editingBrand._id) {
-        await apiPut(`${API_URL}/brands/${editingBrand._id}`, payload);
-      } else {
-        await apiPost(`${API_URL}/brands`, payload);
-      }
-      
-      toast.success(editingBrand ? "Brand updated" : "Brand added", { id: toastId });
-      closeModal();
-      fetchBrands();
-      setLogoFile(null);
-      setBannerFile(null);
-      // --- On form submit, after DB update, delete all marked images from Cloudinary ---
-      if (logoToDelete) {
-        await deleteImageFromCloudinary(logoToDelete);
-      }
-      if (bannerToDelete) {
-        await deleteImageFromCloudinary(bannerToDelete);
-      }
-      setLogoToDelete(null);
-      setBannerToDelete(null);
-    } catch (err) {
-      toast.dismiss(toastId);
-      toast.error(err.message || "Failed to save brand", { id: toastId });
-      setLoading(false);
-    }
-  }
 
-  // Helper to convert dataURL to File
-  function dataURLtoFile(dataurl: string, filename: string) {
-    const arr = dataurl.split(",");
-    const mimeMatch = arr[0].match(/:(.*?);/);
-    const mime = mimeMatch ? mimeMatch[1] : 'image/png';
-    const bstr = atob(arr[1]);
-    let n = bstr.length;
-    const u8arr = new Uint8Array(n);
-    while (n--) {
-      u8arr[n] = bstr.charCodeAt(n);
-    }
-    return new File([u8arr], filename, { type: mime });
-  }
 
   // Delete Brand
   async function handleDelete(brand: Brand) {
@@ -326,11 +165,60 @@ export default function BrandManagementPage() {
       toast.success("Brand deleted", { id: toastId });
       fetchBrands();
       setConfirmDeleteBrand(null);
-    } catch (err) {
-      toast.error("Failed to delete brand", { id: toastId });
+    } catch (err: any) {
+      // Display specific error message from backend
+      const errorMessage = err?.response?.data?.error || err?.message || "Failed to delete brand";
+      toast.error(errorMessage, { id: toastId });
       setConfirmDeleteBrand(null);
     }
     setDeleting(false);
+  }
+
+  if (loading) {
+    return (
+      <AdminLayout>
+        <div>
+          {/* Header & Stats */}
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-2">
+            <div>
+              <h2 className="text-3xl font-bold text-codGray mb-1">Brands Management</h2>
+              <p className="text-gray-500 text-base mb-2">Manage your store's brands, logos, and homepage highlights</p>
+            </div>
+            <button
+              className="bg-brand-primary hover:bg-brand-primary-dark text-text-inverse px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
+              disabled
+            >
+              <Plus className="h-4 w-4" />
+              <span>Add Brands</span>
+            </button>
+          </div>
+          
+          {/* Stats Cards Skeleton */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5 animate-pulse">
+            {Array.from({ length: 5 }).map((_, idx) => (
+              <div key={idx} className="bg-white rounded-2xl shadow p-6 flex items-center justify-between border border-gray-100">
+                <div className="space-y-2">
+                  <div className="h-4 bg-gray-200 rounded w-20"></div>
+                  <div className="h-8 bg-gray-200 rounded w-12"></div>
+                </div>
+                <div className="h-8 w-8 bg-gray-200 rounded"></div>
+              </div>
+            ))}
+          </div>
+          
+          {/* Search Bar Skeleton */}
+          <div className="bg-white rounded-xl shadow mt-6 p-4 mb-4 border border-gray-100 animate-pulse">
+            <div className="flex items-center gap-3">
+              <div className="h-6 w-6 bg-gray-200 rounded"></div>
+              <div className="flex-1 h-6 bg-gray-200 rounded"></div>
+            </div>
+          </div>
+          
+          {/* Brand Grid Skeleton */}
+          <AdminBrandSkeleton items={18} />
+        </div>
+      </AdminLayout>
+    );
   }
 
   return (
@@ -377,11 +265,7 @@ export default function BrandManagementPage() {
         </div>
         {/* Brand Grid */}
         <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 sm:gap-4">
-          {loading ? (
-            <div className="col-span-full flex justify-center items-center py-12">
-              <Loader2 className="animate-spin h-8 w-8 text-brand-primary" />
-            </div>
-          ) : filteredBrands.length === 0 ? (
+          {paginatedBrands.length === 0 ? (
             <div className="col-span-full flex flex-col items-center justify-center py-16">
               <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-6">
                 <Tag className="h-12 w-12 text-gray-400" />
@@ -406,7 +290,7 @@ export default function BrandManagementPage() {
               )}
             </div>
           ) : (
-            filteredBrands.map(brand => (
+            paginatedBrands.map(brand => (
               <div
                 key={brand._id}
                 className="bg-white rounded-xl shadow-sm p-3 flex flex-col gap-2 border border-gray-100 relative group transition-all duration-200 w-full hover:shadow-md focus-within:shadow-md"
@@ -439,137 +323,35 @@ export default function BrandManagementPage() {
           )}
         </div>
 
-        {/* Add/Edit Modal */}
-        {showModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg sm:max-w-md mx-2 md:mx-0 p-0 relative flex flex-col max-h-[95vh] overflow-y-auto animate-fadeIn">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-brand-primary/90 to-brand-primary/60">
-                <div className="flex items-center gap-2">
-                  <BadgeCheck className="h-6 w-6 text-white/80" />
-                  <span className="text-lg font-bold text-white tracking-wide">{editingBrand ? "Edit Brand" : "Add Brand"}</span>
-                </div>
-                <button onClick={closeModal} className="rounded-full p-2 hover:bg-white/20 transition-colors"><X className="h-6 w-6 text-white" /></button>
-              </div>
-              <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6 space-y-4">
-                <div className="grid grid-cols-1 gap-2">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Brand Name <span className="text-red-500">*</span></label>
-                    <input
-                      type="text"
-                      name="name"
-                      value={newBrand.name}
-                      onChange={handleChange}
-                      className="w-full border-b-2 bg-transparent px-2 py-2 text-base focus:outline-none focus:border-brand-primary transition-all"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Slug <span className="text-red-500">*</span></label>
-                    <input
-                      type="text"
-                      name="slug"
-                      value={newBrand.slug}
-                      onChange={handleChange}
-                      className="w-full border-b-2 bg-transparent px-2 py-2 text-base focus:outline-none focus:border-brand-primary transition-all"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                    <textarea
-                      name="description"
-                      value={newBrand.description}
-                      onChange={handleChange}
-                      className="w-full border-b-2 bg-transparent px-2 py-2 text-base focus:outline-none focus:border-brand-primary transition-all min-h-[60px]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Logo <span className="text-red-500">*</span></label>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleLogoChange}
-                      className="block mt-1 w-full"
-                      disabled={logoUploading || logoDeleting}
-                    />
-                    {logoUploading && <span className="text-xs text-brand-primary ml-2">Uploading...</span>}
-                    {logoPreview && (
-                      <div className="mt-2 flex flex-col sm:flex-row items-start sm:items-center gap-2">
-                        <img src={logoPreview} alt="Logo Preview" className="w-16 h-16 object-cover rounded border" />
-                        <button type="button" className="text-red-500 text-xs" onClick={() => {
-                          if (logoPreview && !logoFile) {
-                            setLogoToDelete(logoPreview);
-                            setLogoPreview("");
-                            setNewBrand(prev => ({ ...prev, logo: "" }));
-                            setLogoFile(null);
-                          } else {
-                            setLogoPreview("");
-                            setNewBrand(prev => ({ ...prev, logo: "" }));
-                            setLogoFile(null);
-                          }
-                        }} disabled={logoDeleting}>Remove</button>
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Banner Image</label>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleBannerChange}
-                      className="block mt-1 w-full"
-                      disabled={bannerUploading || bannerDeleting}
-                    />
-                    {bannerUploading && <span className="text-xs text-brand-primary ml-2">Uploading...</span>}
-                    {bannerPreview && (
-                      <div className="mt-2 flex flex-col sm:flex-row items-start sm:items-center gap-2">
-                        <img src={bannerPreview} alt="Banner Preview" className="w-32 h-16 object-cover rounded border" />
-                        <button type="button" className="text-red-500 text-xs" onClick={() => {
-                          if (bannerPreview && !bannerFile) {
-                            setBannerToDelete(bannerPreview);
-                            setBannerPreview("");
-                            setNewBrand(prev => ({ ...prev, bannerImage: "" }));
-                            setBannerFile(null);
-                          } else {
-                            setBannerPreview("");
-                            setNewBrand(prev => ({ ...prev, bannerImage: "" }));
-                            setBannerFile(null);
-                          }
-                        }} disabled={bannerDeleting}>Remove</button>
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex gap-4 items-center">
-                    <label className="flex items-center gap-2">
-                      <input type="checkbox" name="isPopular" checked={newBrand.isPopular} onChange={handleChange} />
-                      <span>Popular</span>
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input type="checkbox" name="status" checked={newBrand.status === "active"} onChange={handleChange} />
-                      <span>Active</span>
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input type="checkbox" name="showOnHome" checked={newBrand.showOnHome} onChange={handleChange} />
-                      <span>Show on Home Page</span>
-                    </label>
-                  </div>
-                </div>
-                <div className="flex justify-end gap-2 pt-4">
-                  <button type="button" className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2 px-6 rounded-lg transition-colors" onClick={closeModal}>Cancel</button>
-                  <button type="submit" className="bg-brand-primary hover:bg-brand-primary-dark text-white font-semibold py-2 px-6 rounded-lg shadow transition-colors flex items-center justify-center" disabled={loading || logoDeleting || bannerDeleting}>
-                    {(loading || logoDeleting || bannerDeleting) && (
-                      <svg className="animate-spin h-5 w-5 mr-2 text-white" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
-                      </svg>
-                    )}
-                    {logoDeleting || bannerDeleting ? 'Deleting...' : loading ? (editingBrand ? 'Update Brand' : 'Add Brand') : (editingBrand ? 'Update Brand' : 'Add Brand')}
-                  </button>
-                </div>
-              </form>
-            </div>
+        {/* Pagination */}
+        {filteredBrands.length > BRANDS_PER_PAGE && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+            <AdminPagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              itemsPerPage={BRANDS_PER_PAGE}
+              totalItems={filteredBrands.length}
+              itemName="brands"
+            />
           </div>
         )}
+
+        {/* Brand Form Modal */}
+        <BrandFormModal
+          open={showModal}
+          onClose={() => {
+            setShowModal(false);
+            setEditingBrand(null);
+          }}
+          onSuccess={async (brand: Brand) => {
+            setShowModal(false);
+            setEditingBrand(null);
+            // Refetch brands to get updated list
+            await fetchBrands();
+          }}
+          brand={editingBrand}
+        />
 
         {/* Confirm Delete Modal */}
         <ConfirmDeleteModal

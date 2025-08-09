@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import toast from "react-hot-toast";
 import { uploadToCloudinary } from "../../../lib/uploadToCloudinary";
 import { apiPost, apiPut, apiDelete, apiGet } from "../../../lib/api-client";
+import { TableSkeleton, SpecialBannersSkeleton } from "../../../components/admin/AdminSkeletons";
 
 // Banner type
 interface Banner {
@@ -36,6 +37,7 @@ export default function AdminBanner() {
   const [editing, setEditing] = useState<Banner | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [initialLoading, setInitialLoading] = useState(true)
   const [form, setForm] = useState({
     image: "",
     name: "",
@@ -74,7 +76,7 @@ export default function AdminBanner() {
   }, [user]);
 
   const fetchBanners = async (showToast = true) => {
-    setLoading(true);
+    if (!initialLoading) setLoading(true);
     try {
       const res = await fetch(`${API_URL}/banners`);
       if (!res.ok) throw new Error("Failed to fetch banners");
@@ -101,6 +103,7 @@ export default function AdminBanner() {
       toast.error("Could not load banners");
     } finally {
       setLoading(false);
+      setInitialLoading(false);
     }
   };
 
@@ -421,7 +424,13 @@ export default function AdminBanner() {
           </div>
         </div>
 
-        {activeTab === 'regular' ? (
+        {initialLoading ? (
+          activeTab === 'regular' ? (
+            <TableSkeleton rows={5} columns={4} hasActions={true} />
+          ) : (
+            <SpecialBannersSkeleton />
+          )
+        ) : activeTab === 'regular' ? (
           <div className="w-full bg-white rounded-2xl shadow-lg p-0 overflow-x-auto">
             <table className="min-w-[900px] w-full text-left">
               <thead>

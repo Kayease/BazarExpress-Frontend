@@ -5,6 +5,8 @@ import { useRoleAccess } from './RoleBasedAccess';
 import { Edit, Trash2, Eye } from 'lucide-react';
 import toast from 'react-hot-toast';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
 interface Brand {
   _id: string;
   name: string;
@@ -48,7 +50,7 @@ const RoleBasedBrandList: React.FC<RoleBasedBrandListProps> = ({
       if (window.confirm(`Are you sure you want to delete "${brand.name}"?`)) {
         try {
           const token = localStorage.getItem('token');
-          const response = await fetch(`/api/brands/${brand._id}`, {
+          const response = await fetch(`${API_URL}/brands/${brand._id}`, {
             method: 'DELETE',
             headers: {
               'Authorization': `Bearer ${token}`,

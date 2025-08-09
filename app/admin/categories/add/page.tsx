@@ -14,7 +14,6 @@ const AddCategoryPage = () => {
     name: "",
     slug: "",
     description: "",
-    sortOrder: 0,
     parentId: "",
     icon: "Box",
     hide: false,
@@ -32,14 +31,7 @@ const AddCategoryPage = () => {
   // Add state for image to delete
   const [thumbnailToDelete, setThumbnailToDelete] = useState<string | null>(null);
 
-  // Calculate the next available sort order
-  const calculateNextSortOrder = (categories: any[]) => {
-    if (!categories || categories.length === 0) return 0;
-    
-    // Find the highest sort order across all categories
-    const highestSortOrder = Math.max(...categories.map((cat: any) => cat.sortOrder || 0));
-    return highestSortOrder + 1;
-  };
+
   
   // Fetch categories for parent dropdown
   useEffect(() => {
@@ -52,11 +44,6 @@ const AddCategoryPage = () => {
         console.log('Parent categories for dropdown:', parentCategories);
         
         setCategories(parentCategories);
-        
-        // Automatically set the next available sort order using a single continuous sequence
-        const nextSortOrder = calculateNextSortOrder(data);
-        console.log('Setting next sort order:', nextSortOrder);
-        setForm(prev => ({ ...prev, sortOrder: nextSortOrder }));
       } catch (error) {
         console.error("Error fetching categories:", error);
         toast.error("Could not load parent categories");
@@ -107,14 +94,7 @@ const AddCategoryPage = () => {
   };
   const IconComponent = (LucideIcons as any)[sanitizeIconInput(form.icon)] || LucideIcons["Box"];
 
-  const checkSortOrderUnique = async (sortOrder: number) => {
-    try {
-      const categories = await apiGet(`${BackedUrl}/categories?sortOrder=${sortOrder}`);
-      return !categories.some((cat: any) => cat.sortOrder === sortOrder);
-    } catch {
-      return false;
-    }
-  };
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -142,7 +122,6 @@ const AddCategoryPage = () => {
       name: form.name,
       slug: form.slug,
       description: form.description,
-      sortOrder: form.sortOrder,
       parentId: form.parentId,
       icon: sanitizeIconInput(form.icon),
       hide: form.hide,
@@ -155,7 +134,7 @@ const AddCategoryPage = () => {
       toast.dismiss(toastId);
       toast.success("Category added successfully", { id: toastId });
       router.push("/admin/categories");
-    } catch (error) {
+    } catch (error: any) {
       toast.dismiss(toastId);
       toast.error(error.message || "Failed to add category", { id: toastId });
     } finally {
@@ -233,17 +212,7 @@ const AddCategoryPage = () => {
                   placeholder="Category description"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Sort Order <span className="text-gray-500 text-xs">(auto-assigned)</span></label>
-                <input
-                  type="number"
-                  value={typeof form.sortOrder === 'number' ? form.sortOrder : 0}
-                  className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary bg-gray-50"
-                  placeholder="0"
-                  readOnly
-                />
-                <p className="text-xs text-gray-500 mt-1">Sort order is automatically assigned based on existing categories.</p>
-              </div>
+
               <div>
                 <label className="block text-sm font-medium mb-1">Parent Category (optional)</label>
                 <select

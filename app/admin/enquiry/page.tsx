@@ -15,6 +15,7 @@ import { useAppSelector } from '../../../lib/store'
 import { isAdminUser, hasAccessToSection } from '../../../lib/adminAuth'
 import { useRouter } from 'next/navigation'
 import toast from "react-hot-toast"
+import { apiDelete } from '../../../lib/api-client';
 
 interface Contact {
   _id: string;
@@ -130,13 +131,7 @@ export default function AdminEnquiry() {
     if (!contactToDelete) return;
     setDeleteLoading(true);
     try {
-      const res = await fetch(`${API_URL}/contacts/${contactToDelete._id}`, { method: "DELETE" });
-      if (!res.ok) {
-        const err = await res.json();
-        toast.error(err.error || "Failed to delete contact");
-        setDeleteLoading(false);
-        return;
-      }
+      await apiDelete(`${API_URL}/contacts/${contactToDelete._id}`);
       toast.success("Contact deleted successfully");
       setDeleteModalOpen(false);
       setContactToDelete(null);

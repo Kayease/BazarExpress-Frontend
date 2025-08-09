@@ -19,7 +19,6 @@ import {
   RefreshCw,
   Info,
   Calculator,
-  CreditCard,
   IndianRupee
 } from "lucide-react"
 
@@ -33,7 +32,6 @@ interface DeliverySettings {
   minimumDeliveryCharge: number
   maximumDeliveryCharge: number
   perKmCharge: number
-  codExtraCharges: boolean
   isActive?: boolean
   createdAt?: string
   updatedAt?: string
@@ -69,7 +67,6 @@ export default function DeliveryManagementPage() {
     minimumDeliveryCharge: 10,
     maximumDeliveryCharge: 100,
     perKmCharge: 5,
-    codExtraCharges: false,
   })
   const [errors, setErrors] = useState<{ [key: string]: string }>({})
 
@@ -112,11 +109,6 @@ export default function DeliveryManagementPage() {
     const distanceChargeElement = document.getElementById('distanceCharge');
     const totalChargeElement = document.getElementById('totalCharge');
     const freeDeliveryMessage = document.getElementById('freeDeliveryMessage');
-    
-    // If not free delivery and COD extra charges are enabled, add to total
-    if (!isFreeDelivery && formData.codExtraCharges) {
-      totalCharge += 20; // Add COD extra charge to the total
-    }
 
     if (distanceChargeElement) {
       distanceChargeElement.textContent = `₹${distanceCharge.toFixed(2)}`;
@@ -153,7 +145,6 @@ export default function DeliveryManagementPage() {
             minimumDeliveryCharge: 10,
             maximumDeliveryCharge: 100,
             perKmCharge: 5,
-            codExtraCharges: false,
           })
         }
       } else {
@@ -297,7 +288,6 @@ export default function DeliveryManagementPage() {
         minimumDeliveryCharge: 10,
         maximumDeliveryCharge: 100,
         perKmCharge: 5,
-        codExtraCharges: false,
       })
     }
     setErrors({}) // Clear errors when switching tabs
@@ -457,9 +447,6 @@ export default function DeliveryManagementPage() {
                 <Separator className="my-4" />
                 <div className="flex items-center justify-between text-sm text-gray-600">
                   <span>Last updated: {new Date(currentSettings.updatedAt!).toLocaleString()}</span>
-                  <Badge variant={currentSettings.codExtraCharges ? "default" : "secondary"}>
-                    COD Extra Charges {currentSettings.codExtraCharges ? 'Enabled' : 'Disabled'}
-                  </Badge>
                 </div>
               </CardContent>
             </Card>
@@ -563,10 +550,10 @@ export default function DeliveryManagementPage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Calculator className="h-5 w-5" />
-                    Delivery Charge Limits & COD Charges
+                    Delivery Charge Limits
                   </CardTitle>
                   <CardDescription>
-                    Set charge limits and payment methods
+                    Set minimum and maximum delivery charge limits
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -598,26 +585,7 @@ export default function DeliveryManagementPage() {
                     )}
                   </div>
 
-                  <Separator className="my-4" />
 
-                  <div className="flex items-center justify-between p-4 rounded-lg bg-gray-50/50 dark:bg-gray-800/50">
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-full ${formData.codExtraCharges ? 'bg-green-100 dark:bg-green-900/30' : 'bg-gray-100 dark:bg-gray-700'}`}>
-                        <CreditCard className={`h-5 w-5 ${formData.codExtraCharges ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'}`} />
-                      </div>
-                      <div>
-                        <Label className="text-sm font-medium">COD Extra Charges</Label>
-                        <p className={`text-xs ${formData.codExtraCharges ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'}`}>
-                          {formData.codExtraCharges ? 'Extra charges applied' : 'No extra charges'}
-                        </p>
-                      </div>
-                    </div>
-                    <Switch
-                      checked={formData.codExtraCharges}
-                      onCheckedChange={(checked) => handleInputChange('codExtraCharges', checked)}
-                      className={`${formData.codExtraCharges ? 'bg-green-600 dark:bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}
-                    />
-                  </div>
                 </CardContent>
               </Card>
 
@@ -683,7 +651,7 @@ export default function DeliveryManagementPage() {
 
                   <Separator />
 
-                  <div className="space-y-2 p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+                  <div className="space-y-2 p-4 rounded-lg bg-white dark:bg-white">
                     <div className="flex justify-between items-center text-sm">
                       <span className="text-muted-foreground">Base Charge:</span>
                       <span className="font-medium">₹{formData.baseDeliveryCharge}</span>
@@ -692,12 +660,6 @@ export default function DeliveryManagementPage() {
                       <span className="text-muted-foreground">Distance Charge:</span>
                       <span id="distanceCharge" className="font-medium">₹0</span>
                     </div>
-                    {formData.codExtraCharges && (
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="text-muted-foreground">COD Extra Charge:</span>
-                        <span className="font-medium text-orange-600">+₹20</span>
-                      </div>
-                    )}
                     <Separator />
                     <div className="flex justify-between items-center">
                       <span className="font-medium">Total Delivery Charge:</span>

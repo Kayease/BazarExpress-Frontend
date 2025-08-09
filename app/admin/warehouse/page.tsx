@@ -12,6 +12,8 @@ import ConfirmDeleteModal from '../../../components/ui/ConfirmDeleteModal';
 import WarehouseFormModal from '../../../components/WarehouseFormModal';
 import { apiGet, apiPost, apiPut, apiDelete } from '../../../lib/api-client';
 import { Warehouse, defaultWarehouse } from '../../../types/warehouse';
+import AdminPagination from '../../../components/ui/AdminPagination';
+import AdminLoader, { AdminTableSkeleton } from '../../../components/ui/AdminLoader';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL
 
@@ -24,9 +26,11 @@ export default function AdminWarehouse() {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Warehouse | null>(null);
   const [form, setForm] = useState<Warehouse>(defaultWarehouse);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const WAREHOUSES_PER_PAGE = 10;
 
   useEffect(() => {
     if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'warehouse')) {
@@ -72,6 +76,13 @@ export default function AdminWarehouse() {
     });
     setShowModal(true);
   };
+  // Calculate pagination
+  const totalPages = Math.ceil(warehouses.length / WAREHOUSES_PER_PAGE);
+  const paginatedWarehouses = warehouses.slice(
+    (currentPage - 1) * WAREHOUSES_PER_PAGE,
+    currentPage * WAREHOUSES_PER_PAGE
+  );
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
@@ -80,7 +91,6 @@ export default function AdminWarehouse() {
       toast.error('Please select a location on the map and enter a warehouse name.');
       return;
     }
-    setLoading(true);
     try {
       let data: Warehouse;
       if (editing && editing._id) {
@@ -99,8 +109,6 @@ export default function AdminWarehouse() {
       toast.dismiss();
       const errorMessage = err instanceof Error ? err.message : 'Error saving warehouse';
       toast.error(errorMessage);
-    } finally {
-      setLoading(false);
     }
   };
   const handleDelete = async (id: string) => {
@@ -124,13 +132,42 @@ export default function AdminWarehouse() {
 
 
   if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'warehouse')) {
+    return <AdminLoader message="Checking permissions..." fullScreen />
+  }
+
+  if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-primary mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
+      <AdminLayout>
+        <div className="space-y-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="font-semibold text-lg">Warehouses</div>
+            <button
+              className="bg-surface-primary hover:bg-brand-primary hover:text-text-inverse text-text-primary rounded p-2 transition-colors"
+              disabled
+              aria-label="Add Warehouse"
+            >
+              <Plus className="h-6 w-6" />
+            </button>
+          </div>
+          <div className="bg-white rounded-lg shadow p-6 overflow-x-auto">
+            <table className="w-full min-w-[700px] text-left border-separate border-spacing-y-2">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th className="py-2 px-3 font-semibold text-sm">Name</th>
+                  <th className="py-2 px-3 font-semibold text-sm">Address</th>
+                  <th className="py-2 px-3 font-semibold text-sm">Contact Phone</th>
+                  <th className="py-2 px-3 font-semibold text-sm">Delivery Area</th>
+                  <th className="py-2 px-3 font-semibold text-sm">Delivery Status</th>
+                  <th className="py-2 px-3 font-semibold text-sm text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <AdminTableSkeleton rows={5} columns={6} />
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      </AdminLayout>
     )
   }
 
@@ -160,7 +197,7 @@ export default function AdminWarehouse() {
               </tr>
             </thead>
             <tbody>
-              {warehouses.length === 0 && (
+              {paginatedWarehouses.length === 0 && (
                 <tr>
                   <td colSpan={8}>
                     <div className="flex flex-col items-center justify-center py-16">
@@ -179,7 +216,7 @@ export default function AdminWarehouse() {
                   </td>
                 </tr>
               )}
-              {warehouses.map(w => (
+              {paginatedWarehouses.map(w => (
                 <tr key={w._id || `warehouse-${Math.random()}`} className="bg-white border-b hover:bg-gray-50 transition group">
                   <td className="py-2 px-3 align-middle max-w-xs whitespace-nowrap text-sm font-medium text-gray-900 truncate">{w.name}</td>
                   <td className="py-2 px-3 align-middle max-w-xs whitespace-nowrap text-xs text-gray-700 truncate">{w.address}</td>
@@ -230,6 +267,18 @@ export default function AdminWarehouse() {
               ))}
             </tbody>
           </table>
+          
+          {/* Pagination */}
+          {warehouses.length > WAREHOUSES_PER_PAGE && (
+            <AdminPagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              itemsPerPage={WAREHOUSES_PER_PAGE}
+              totalItems={warehouses.length}
+              itemName="warehouses"
+            />
+          )}
         </div>
         {/* Modal */}
         {showModal && (

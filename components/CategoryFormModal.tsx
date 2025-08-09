@@ -3,27 +3,29 @@ import ReactDOM from "react-dom";
 import { X } from "lucide-react";
 import toast from "react-hot-toast";
 import * as LucideIcons from "lucide-react";
+import { uploadToCloudinary } from '../lib/uploadToCloudinary';
+import { apiPost, apiPut } from '../lib/api-client';
 
 interface Category {
   _id?: string;
   name: string;
   slug?: string;
   description?: string;
-  icon?: string;
+  icon: string;
   parentId?: string;
   hide?: boolean;
   popular?: boolean;
   showOnHome?: boolean;
-  sortOrder?: number;
   thumbnail?: string;
 }
 
 interface CategoryFormModalProps {
   open: boolean;
   onClose: () => void;
-  onSuccess: (category: Category) => void;
+  onSuccess: (category: Category) => void | Promise<void>;
   categories: Category[];
   parentId?: string;
+  category?: Category | null;
 }
 
 const defaultCategory: Category = {
@@ -35,7 +37,6 @@ const defaultCategory: Category = {
   hide: false,
   popular: false,
   showOnHome: false,
-  sortOrder: 0,
   thumbnail: undefined,
 };
 
@@ -51,7 +52,7 @@ function sanitizeIconInput(input: string) {
   return input.replace(/<|>|\//g, '').trim();
 }
 
-export default function CategoryFormModal({ open, onClose, onSuccess, categories, parentId }: CategoryFormModalProps) {
+export default function CategoryFormModal({ open, onClose, onSuccess, categories, parentId, category }: CategoryFormModalProps) {
   // All hooks at the top
   const [form, setForm] = useState<Category>({ ...defaultCategory, parentId: parentId || "" });
   const [loading, setLoading] = useState(false);
@@ -59,21 +60,23 @@ export default function CategoryFormModal({ open, onClose, onSuccess, categories
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const thumbnailInputRef = useRef<HTMLInputElement>(null);
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
-  // Calculate next sort order (auto-assigned)
-  const nextSortOrder = React.useMemo(() => {
-    if (!categories || categories.length === 0) return 0;
-    const highest = Math.max(...categories.map(cat => cat.sortOrder || 0));
-    return highest + 1;
-  }, [categories]);
+
 
   React.useEffect(() => {
     if (open) {
-      setForm({ ...defaultCategory, parentId: parentId || "" });
-      setThumbnailPreview("");
+      if (category) {
+        // Editing mode
+        setForm({ ...category });
+        setThumbnailPreview(category.thumbnail || "");
+      } else {
+        // Adding mode
+        setForm({ ...defaultCategory, parentId: parentId || "" });
+        setThumbnailPreview("");
+      }
       setThumbnailFile(null);
       if (thumbnailInputRef.current) thumbnailInputRef.current.value = "";
     }
-  }, [open, parentId]);
+  }, [open, parentId, category]);
 
   if (!open) return null;
 
@@ -104,44 +107,44 @@ export default function CategoryFormModal({ open, onClose, onSuccess, categories
     if (thumbnailInputRef.current) thumbnailInputRef.current.value = "";
   };
 
-  const IconComponent = (LucideIcons as any)[sanitizeIconInput(form.icon || "Box")] || LucideIcons["Box"];
+  const IconComponent = (LucideIcons as any)[sanitizeIconInput(form.icon)] || LucideIcons["Box"];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation(); // Prevent event bubbling to parent forms
+    
+    // Validate required fields
+    if (!form.name.trim()) {
+      toast.error("Category name is required");
+      return;
+    }
+    
+    if (!category && !thumbnailFile && !form.thumbnail) {
+      toast.error("Category image is required");
+      return;
+    }
+    
     setLoading(true);
     let thumbnailUrl = form.thumbnail;
     try {
       if (thumbnailFile) {
-        const formData = new FormData();
-        formData.append("file", thumbnailFile);
-        formData.append("upload_preset", "bazarxpress");
-        const res = await fetch("https://api.cloudinary.com/v1_1/demo/image/upload", {
-          method: "POST",
-          body: formData,
-        });
-        const data = await res.json();
-        thumbnailUrl = data.secure_url;
+        thumbnailUrl = await uploadToCloudinary(thumbnailFile, `categories/${form.slug || form.name || 'category'}`);
       }
       const payload = {
         ...form,
         slug: form.slug || slugify(form.name || ""),
-        sortOrder: nextSortOrder,
-        icon: sanitizeIconInput(form.icon || "Box"),
+        icon: sanitizeIconInput(form.icon),
         thumbnail: thumbnailUrl,
         parentId: parentId || form.parentId || "",
       };
-      const res = await fetch(`${API_URL}/categories`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error("Failed to add category");
-      const data = await res.json();
-      toast.success("Category added");
-      onSuccess(data);
+      const data = category 
+        ? await apiPut(`${API_URL}/categories/${category._id}`, payload)
+        : await apiPost(`${API_URL}/categories`, payload);
+      toast.success(category ? "Category updated" : "Category added");
+      await Promise.resolve(onSuccess(data));
       onClose();
     } catch (err: any) {
-      toast.error(err.message || "Error adding category");
+      toast.error(err.message || (category ? "Error updating category" : "Error adding category"));
     } finally {
       setLoading(false);
     }
@@ -157,7 +160,7 @@ export default function CategoryFormModal({ open, onClose, onSuccess, categories
         >
           <X />
         </button>
-        <div className="text-xl font-semibold mb-4">Add Category</div>
+        <div className="text-xl font-semibold mb-4">{category ? "Edit Category" : "Add Category"}</div>
         <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="flex flex-col gap-4">
             <div>
@@ -192,18 +195,7 @@ export default function CategoryFormModal({ open, onClose, onSuccess, categories
                 placeholder="Category description"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Sort Order <span className="text-gray-500 text-xs">(auto-assigned)</span></label>
-              <input
-                type="number"
-                name="sortOrder"
-                value={nextSortOrder}
-                className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary bg-gray-50"
-                placeholder="0"
-                readOnly
-              />
-              <p className="text-xs text-gray-500 mt-1">Sort order is automatically assigned based on existing categories.</p>
-            </div>
+
             <div>
               <label className="block text-sm font-medium mb-1">Parent Category (optional)</label>
               <select
@@ -346,7 +338,7 @@ export default function CategoryFormModal({ open, onClose, onSuccess, categories
               className="px-4 py-2 rounded bg-brand-primary hover:bg-brand-primary-dark text-white font-semibold flex items-center justify-center"
               disabled={loading}
             >
-              {loading ? 'Saving...' : 'Add Category'}
+              {loading ? 'Saving...' : (category ? 'Update Category' : 'Add Category')}
             </button>
           </div>
         </form>

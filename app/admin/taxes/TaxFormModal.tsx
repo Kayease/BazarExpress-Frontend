@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
-import { useAppSelector, RootState } from '@/lib/store';
+import { apiPost, apiPut } from '@/lib/api-client';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -35,7 +35,6 @@ interface TaxFormModalProps {
 }
 
 export default function TaxFormModal({ open, onClose, tax, onSuccess }: TaxFormModalProps) {
-  const token = useAppSelector((state: RootState) => state.auth.token);
   const [loading, setLoading] = useState(false);
   const formInitialState: Tax = {
     _id: "",
@@ -62,30 +61,20 @@ export default function TaxFormModal({ open, onClose, tax, onSuccess }: TaxFormM
     e.preventDefault();
     setLoading(true);
     try {
-      let method = "POST";
-      let url = `${API_URL}/taxes`;
       let payload = { ...form };
+      let data;
+      
       if (tax) {
         if (!form._id) {
           toast.error("Invalid tax ID for update.");
           setLoading(false);
           return;
         }
-        method = "PUT";
-        url = `${API_URL}/taxes/${form._id}`;
+        data = await apiPut(`${API_URL}/taxes/${form._id}`, payload);
       } else {
         delete payload._id;
+        data = await apiPost(`${API_URL}/taxes`, payload);
       }
-      const res = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error("Failed to save tax");
-      const data = await res.json();
       toast.success(tax ? "Tax updated successfully" : "Tax added successfully");
       onSuccess(data);
     } catch (err) {

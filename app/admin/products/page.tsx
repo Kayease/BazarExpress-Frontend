@@ -8,6 +8,9 @@ import Image from "next/image"
 import { useAppSelector } from '../../../lib/store'
 import { isAdminUser, hasAccessToSection } from '../../../lib/adminAuth'
 import ConfirmDeleteModal from '../../../components/ui/ConfirmDeleteModal';
+import { apiDelete, apiGet } from '../../../lib/api-client';
+import toast from 'react-hot-toast';
+import AdminLoader, { AdminTableSkeleton } from '../../../components/ui/AdminLoader';
 
 // Define Product type to match backend
 interface Product {
@@ -52,7 +55,24 @@ export default function AdminProducts() {
       router.push("/")
       return
     }
-  }, [])
+    
+    // Fetch products data
+    async function fetchProducts() {
+      try {
+        setLoading(true);
+        const products = await apiGet(`${API}/products`);
+        setProductList(products);
+      } catch (error) {
+        console.error('Error fetching products:', error);
+        toast.error('Failed to load products');
+        setProductList([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+    
+    fetchProducts();
+  }, [user, router, API])
 
   // Deduplicate categories and warehouses by ID or value
   const categoryMap = new Map();
@@ -179,10 +199,17 @@ export default function AdminProducts() {
   async function handleConfirmDelete() {
     if (!confirmDeleteId) return;
     setDeleting(true);
-    await fetch(`${API}/products/${confirmDeleteId}`, { method: 'DELETE' });
-    setProductList((prev) => prev.filter((p) => p._id !== confirmDeleteId));
-    setDeleting(false);
-    setConfirmDeleteId(null);
+    try {
+      await apiDelete(`${API}/products/${confirmDeleteId}`);
+      setProductList((prev) => prev.filter((p) => p._id !== confirmDeleteId));
+      toast.success('Product deleted successfully');
+    } catch (error: any) {
+      console.error('Delete error:', error);
+      toast.error(error.message || 'Failed to delete product');
+    } finally {
+      setDeleting(false);
+      setConfirmDeleteId(null);
+    }
   }
 
   // Calculate paginated products
@@ -190,9 +217,77 @@ export default function AdminProducts() {
   const paginatedProducts = filteredProducts.slice((currentPage - 1) * PRODUCTS_PER_PAGE, currentPage * PRODUCTS_PER_PAGE);
 
   if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'products')) {
-      router.push("/")
-      return
-    }
+    return <AdminLoader message="Checking permissions..." fullScreen />
+  }
+
+  if (loading) {
+    return (
+      <AdminLayout>
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold text-codGray">Products Management</h2>
+              <p className="text-gray-600">Manage your product inventory</p>
+            </div>
+            <button
+              className="bg-brand-primary hover:bg-brand-primary-dark text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
+              disabled
+            >
+              <Plus className="h-4 w-4" />
+              <span>Add Product</span>
+            </button>
+          </div>
+
+          {/* Stats Cards Skeleton */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-pulse">
+            {Array.from({ length: 4 }).map((_, idx) => (
+              <div key={idx} className="bg-white rounded-lg p-6 shadow-md">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-2">
+                    <div className="h-4 bg-gray-200 rounded w-24"></div>
+                    <div className="h-8 bg-gray-200 rounded w-16"></div>
+                  </div>
+                  <div className="h-8 w-8 bg-gray-200 rounded"></div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Filters Skeleton */}
+          <div className="bg-white rounded-lg p-6 shadow-md animate-pulse">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="h-10 bg-gray-200 rounded-lg"></div>
+              <div className="h-10 bg-gray-200 rounded-lg"></div>
+              <div className="h-10 bg-gray-200 rounded-lg"></div>
+              <div className="h-10 bg-gray-200 rounded-lg"></div>
+            </div>
+          </div>
+
+          {/* Products Table Skeleton */}
+          <div className="bg-white rounded-lg shadow-md overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[800px] text-left border-separate border-spacing-y-1">
+                <thead>
+                  <tr className="bg-gray-50">
+                    <th className="text-left py-2 px-3 font-medium text-sm">Product</th>
+                    <th className="text-left py-2 px-3 font-medium text-sm">Category</th>
+                    <th className="text-left py-2 px-3 font-medium text-sm">Price</th>
+                    <th className="text-left py-2 px-3 font-medium text-sm">Stock</th>
+                    <th className="text-left py-2 px-3 font-medium text-sm">Status</th>
+                    <th className="text-left py-2 px-3 font-medium text-sm">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <AdminTableSkeleton rows={10} columns={6} />
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </AdminLayout>
+    )
+  }
 
   return (
     <AdminLayout>

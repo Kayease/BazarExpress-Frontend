@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
 interface AdminUser {
   _id: string;
   name: string;
@@ -65,7 +67,7 @@ const AdminUserManagement: React.FC = () => {
   const fetchUsers = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/admin/users', {
+      const response = await fetch(`${API_URL}/admin/users`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -89,7 +91,7 @@ const AdminUserManagement: React.FC = () => {
   const fetchWarehouses = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/warehouses', {
+      const response = await fetch(`${API_URL}/warehouses`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -108,7 +110,7 @@ const AdminUserManagement: React.FC = () => {
   const handleCreateUser = async (userData: any) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/admin/users', {
+      const response = await fetch(`${API_URL}/admin/users`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -133,7 +135,7 @@ const AdminUserManagement: React.FC = () => {
   const handleUpdateUser = async (userId: string, userData: any) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`/api/admin/users/${userId}`, {
+      const response = await fetch(`${API_URL}/admin/users/${userId}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -158,7 +160,7 @@ const AdminUserManagement: React.FC = () => {
   const handleStatusChange = async (userId: string, status: string) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`/api/users/admin/${userId}/status`, {
+      const response = await fetch(`${API_URL}/users/admin/${userId}/status`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,

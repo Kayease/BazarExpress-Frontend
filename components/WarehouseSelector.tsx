@@ -16,6 +16,7 @@ interface WarehouseSelectorProps {
   disabled?: boolean;
   required?: boolean;
   className?: string;
+  refreshTrigger?: number; // Add this prop to force refresh
 }
 
 const WarehouseSelector: React.FC<WarehouseSelectorProps> = ({
@@ -23,7 +24,8 @@ const WarehouseSelector: React.FC<WarehouseSelectorProps> = ({
   onChange,
   disabled = false,
   required = false,
-  className = ''
+  className = '',
+  refreshTrigger = 0
 }) => {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,12 +33,13 @@ const WarehouseSelector: React.FC<WarehouseSelectorProps> = ({
 
   useEffect(() => {
     fetchWarehouses();
-  }, []);
+  }, [refreshTrigger]); // Refresh when refreshTrigger changes
 
   const fetchWarehouses = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/warehouses', {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL;
+      const response = await fetch(`${API_URL}/warehouses`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -86,7 +89,7 @@ const WarehouseSelector: React.FC<WarehouseSelectorProps> = ({
       <option value="">Select Warehouse</option>
       {warehouses.map((warehouse) => (
         <option key={warehouse._id} value={warehouse._id}>
-          {warehouse.name} - {warehouse.address}
+          {warehouse.name}
         </option>
       ))}
     </select>

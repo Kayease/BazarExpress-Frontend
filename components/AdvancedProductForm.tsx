@@ -137,6 +137,9 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
   const [showTaxModal, setShowTaxModal] = useState(false);
   const [showWarehouseModal, setShowWarehouseModal] = useState(false);
 
+  // Add refresh trigger for WarehouseSelector
+  const [warehouseRefreshTrigger, setWarehouseRefreshTrigger] = useState(0);
+
   // Add state for search inputs and focus
   const [categorySearch, setCategorySearch] = useState(() => {
     if (mode === 'edit' && initialProduct && initialProduct.category) {
@@ -596,9 +599,15 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
               <CategoryFormModal
                 open={showCategoryModal}
                 onClose={() => setShowCategoryModal(false)}
-                onSuccess={cat => {
-                  setCategories((prev: any[]) => [...prev, cat]);
-                  setProduct((prev: any) => ({ ...prev, category: cat._id }));
+                onSuccess={async (cat: any) => {
+                  setShowCategoryModal(false);
+                  // Refetch categories and update state
+                  const data = await apiGet(`${API_URL}/categories`);
+                  setCategories(data);
+                  if (cat && cat._id) {
+                    setProduct((prev: any) => ({ ...prev, category: cat._id }));
+                    setCategorySearch(cat.name);
+                  }
                 }}
                 categories={categories}
               />
@@ -655,9 +664,17 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
               <CategoryFormModal
                 open={showSubcategoryModal}
                 onClose={() => setShowSubcategoryModal(false)}
-                onSuccess={subcat => {
-                  setSubcategories((prev: any[]) => [...prev, subcat]);
-                  setProduct((prev: any) => ({ ...prev, subcategory: subcat._id }));
+                onSuccess={async (subcat: any) => {
+                  setShowSubcategoryModal(false);
+                  // Refetch subcategories and update state
+                  if (product.category) {
+                    const data = await apiGet(`${API_URL}/categories/subcategories/${product.category}`);
+                    setSubcategories(data);
+                    if (subcat && subcat._id) {
+                      setProduct((prev: any) => ({ ...prev, subcategory: subcat._id }));
+                      setSubcategorySearch(subcat.name);
+                    }
+                  }
                 }}
                 categories={categories}
                 parentId={product.category}
@@ -716,9 +733,15 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
               <BrandFormModal
                 open={showBrandModal}
                 onClose={() => setShowBrandModal(false)}
-                onSuccess={brand => {
-                  setBrands((prev: any[]) => [...prev, brand]);
-                  setProduct((prev: any) => ({ ...prev, brand: brand._id }));
+                onSuccess={async (brand: any) => {
+                  setShowBrandModal(false);
+                  // Refetch brands and update state
+                  const data = await apiGet(`${API_URL}/brands`);
+                  setBrands(data);
+                  if (brand && brand._id) {
+                    setProduct((prev: any) => ({ ...prev, brand: brand._id }));
+                    setBrandSearch(brand.name);
+                  }
                 }}
               />
               <div>
@@ -821,6 +844,7 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                     onChange={(warehouseId) => setProduct({ ...product, warehouse: warehouseId })}
                     required
                     className="rounded-l-lg"
+                    refreshTrigger={warehouseRefreshTrigger}
                   />
                   {canCreateWarehouse() && (
                     <button
@@ -1392,33 +1416,7 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
             </div>
           </form>
           {/* Move modals here, outside the form to avoid nested form error */}
-          <CategoryFormModal
-            open={showCategoryModal}
-            onClose={() => setShowCategoryModal(false)}
-            onSuccess={cat => {
-              setCategories((prev: any[]) => [...prev, cat]);
-              setProduct((prev: any) => ({ ...prev, category: cat._id }));
-            }}
-            categories={categories}
-          />
-          <CategoryFormModal
-            open={showSubcategoryModal}
-            onClose={() => setShowSubcategoryModal(false)}
-            onSuccess={subcat => {
-              setSubcategories((prev: any[]) => [...prev, subcat]);
-              setProduct((prev: any) => ({ ...prev, subcategory: subcat._id }));
-            }}
-            categories={categories}
-            parentId={product.category}
-          />
-          <BrandFormModal
-            open={showBrandModal}
-            onClose={() => setShowBrandModal(false)}
-            onSuccess={brand => {
-              setBrands((prev: any[]) => [...prev, brand]);
-              setProduct((prev: any) => ({ ...prev, brand: brand._id }));
-            }}
-          />
+
           <TaxFormModal
             open={showTaxModal}
             onClose={() => setShowTaxModal(false)}
@@ -1460,6 +1458,8 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
               // Refetch warehouses and update state
               const data = await apiGet(`${API_URL}/warehouses`);
               setWarehouses(data);
+              // Trigger WarehouseSelector refresh
+              setWarehouseRefreshTrigger(prev => prev + 1);
               if (newWarehouse && newWarehouse._id) {
                 setProduct((prev: any) => ({ ...prev, warehouse: newWarehouse._id }));
                 toast.success('Warehouse created successfully');

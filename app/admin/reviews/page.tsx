@@ -6,6 +6,8 @@ import AdminLayout from "../../../components/AdminLayout"
 import { useAppSelector } from '../../../lib/store'
 import { isAdminUser, hasAccessToSection } from '../../../lib/adminAuth'
 import { Search, Filter, Star, CheckCircle, X, Eye, MoreHorizontal } from "lucide-react"
+import AdminPagination from "../../../components/ui/AdminPagination"
+import AdminLoader from "../../../components/ui/AdminLoader"
 
 // Review type definition
 type Review = {
@@ -65,10 +67,13 @@ const mockReviews: Review[] = [
 
 export default function AdminReviews() {
   const user = useAppSelector((state) => state.auth.user)
-  const [reviews, setReviews] = useState<Review[]>(mockReviews)
+  const [reviews, setReviews] = useState<Review[]>([])
+  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [filterStatus, setFilterStatus] = useState("all")
   const [filterRating, setFilterRating] = useState("all")
+  const [currentPage, setCurrentPage] = useState(1)
+  const REVIEWS_PER_PAGE = 5
   const router = useRouter()
 
   useEffect(() => {
@@ -76,6 +81,11 @@ export default function AdminReviews() {
       router.push("/")
       return
     }
+    // Simulate loading reviews
+    setTimeout(() => {
+      setReviews(mockReviews)
+      setLoading(false)
+    }, 1000)
   }, [user])
 
   const reviewStats = {
@@ -110,10 +120,82 @@ export default function AdminReviews() {
     return matchesSearch && matchesStatus && matchesRating
   })
 
+  // Calculate pagination
+  const totalPages = Math.ceil(filteredReviews.length / REVIEWS_PER_PAGE)
+  const paginatedReviews = filteredReviews.slice(
+    (currentPage - 1) * REVIEWS_PER_PAGE,
+    currentPage * REVIEWS_PER_PAGE
+  )
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, filterStatus, filterRating])
+
   if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'reviews')) {
-      router.push("/")
-      return
-    }
+    return <AdminLoader message="Checking permissions..." fullScreen />
+  }
+
+  if (loading) {
+    return (
+      <AdminLayout>
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold text-codGray">Reviews & Ratings</h2>
+              <p className="text-gray-600">Manage customer reviews and feedback</p>
+            </div>
+          </div>
+
+          {/* Stats Skeleton */}
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-6 animate-pulse">
+            {Array.from({ length: 5 }).map((_, idx) => (
+              <div key={idx} className="bg-white rounded-lg p-6 shadow-md">
+                <div className="text-center space-y-2">
+                  <div className="h-4 bg-gray-200 rounded w-20 mx-auto"></div>
+                  <div className="h-8 bg-gray-200 rounded w-12 mx-auto"></div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Filters Skeleton */}
+          <div className="bg-white rounded-lg p-6 shadow-md animate-pulse">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="h-10 bg-gray-200 rounded-lg"></div>
+              <div className="h-10 bg-gray-200 rounded-lg"></div>
+              <div className="h-10 bg-gray-200 rounded-lg"></div>
+              <div className="h-10 bg-gray-200 rounded-lg"></div>
+            </div>
+          </div>
+
+          {/* Reviews Skeleton */}
+          <div className="space-y-4 animate-pulse">
+            {Array.from({ length: 3 }).map((_, idx) => (
+              <div key={idx} className="bg-white rounded-lg p-6 shadow-md">
+                <div className="space-y-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="h-6 bg-gray-200 rounded w-48"></div>
+                    <div className="h-6 bg-gray-200 rounded w-20"></div>
+                  </div>
+                  <div className="flex items-center space-x-4">
+                    <div className="h-4 bg-gray-200 rounded w-24"></div>
+                    <div className="h-4 bg-gray-200 rounded w-24"></div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <div className="h-4 bg-gray-200 rounded w-20"></div>
+                    <div className="h-4 bg-gray-200 rounded w-32"></div>
+                  </div>
+                  <div className="h-16 bg-gray-200 rounded"></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </AdminLayout>
+    )
+  }
 
   return (
     <AdminLayout>
@@ -200,7 +282,19 @@ export default function AdminReviews() {
 
         {/* Reviews List */}
         <div className="space-y-4">
-          {filteredReviews.map((review) => (
+          {paginatedReviews.length === 0 ? (
+            <div className="bg-white rounded-lg p-12 shadow-md text-center">
+              <Star className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-600 mb-2">No reviews found</h3>
+              <p className="text-gray-500">
+                {searchTerm || filterStatus !== "all" || filterRating !== "all" 
+                  ? "Try adjusting your search or filters." 
+                  : "Customer reviews will appear here once they start reviewing products."
+                }
+              </p>
+            </div>
+          ) : (
+            paginatedReviews.map((review) => (
             <div key={review.id} className="bg-white rounded-lg p-6 shadow-md">
               <div className="flex items-start justify-between mb-4">
                 <div className="flex-1">
@@ -250,27 +344,23 @@ export default function AdminReviews() {
                 </div>
               </div>
             </div>
-          ))}
+            ))
+          )}
         </div>
 
         {/* Pagination */}
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-gray-600">
-            Showing {filteredReviews.length} of {reviews.length} reviews
-          </p>
-          <div className="flex space-x-2">
-            <button className="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-50 transition-colors">
-              Previous
-            </button>
-            <button className="px-3 py-1 bg-brand-primary text-white rounded text-sm">1</button>
-            <button className="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-50 transition-colors">
-              2
-            </button>
-            <button className="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-50 transition-colors">
-              Next
-            </button>
+        {filteredReviews.length > REVIEWS_PER_PAGE && (
+          <div className="bg-white rounded-lg shadow-md">
+            <AdminPagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              itemsPerPage={REVIEWS_PER_PAGE}
+              totalItems={filteredReviews.length}
+              itemName="reviews"
+            />
           </div>
-        </div>
+        )}
       </div>
     </AdminLayout>
   )

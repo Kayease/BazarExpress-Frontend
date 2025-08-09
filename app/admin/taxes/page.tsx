@@ -50,7 +50,7 @@ export default function AdminTaxes() {
   const [taxes, setTaxes] = useState<Tax[]>([]);
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<Tax | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [editingTax, setEditingTax] = useState<Tax | null>(null);
   const [search, setSearch] = useState("");

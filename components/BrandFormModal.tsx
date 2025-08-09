@@ -2,6 +2,8 @@ import React, { useState, useRef } from "react";
 import ReactDOM from "react-dom";
 import { X } from "lucide-react";
 import toast from "react-hot-toast";
+import { uploadToCloudinary } from '../lib/uploadToCloudinary';
+import { apiPost, apiPut } from '../lib/api-client';
 
 interface Brand {
   _id?: string;
@@ -18,7 +20,8 @@ interface Brand {
 interface BrandFormModalProps {
   open: boolean;
   onClose: () => void;
-  onSuccess: (brand: Brand) => void;
+  onSuccess: (brand: Brand) => void | Promise<void>;
+  brand?: Brand | null;
 }
 
 const defaultBrand: Brand = {
@@ -40,7 +43,7 @@ function slugify(str: string) {
     .replace(/--+/g, "-");
 }
 
-export default function BrandFormModal({ open, onClose, onSuccess }: BrandFormModalProps) {
+export default function BrandFormModal({ open, onClose, onSuccess, brand }: BrandFormModalProps) {
   const [form, setForm] = useState<Brand>(defaultBrand);
   const [loading, setLoading] = useState(false);
   const [logoPreview, setLogoPreview] = useState<string>("");
@@ -53,15 +56,23 @@ export default function BrandFormModal({ open, onClose, onSuccess }: BrandFormMo
 
   React.useEffect(() => {
     if (open) {
-      setForm(defaultBrand);
-      setLogoPreview("");
-      setBannerPreview("");
+      if (brand) {
+        // Editing mode
+        setForm({ ...brand });
+        setLogoPreview(brand.logo || "");
+        setBannerPreview(brand.bannerImage || "");
+      } else {
+        // Adding mode
+        setForm(defaultBrand);
+        setLogoPreview("");
+        setBannerPreview("");
+      }
       setLogoFile(null);
       setBannerFile(null);
       if (logoInputRef.current) logoInputRef.current.value = "";
       if (bannerInputRef.current) bannerInputRef.current.value = "";
     }
-  }, [open]);
+  }, [open, brand]);
 
   if (!open) return null;
 
@@ -115,49 +126,50 @@ export default function BrandFormModal({ open, onClose, onSuccess }: BrandFormMo
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation(); // Prevent event bubbling to parent forms
+    
+    console.log("BrandFormModal handleSubmit called");
+    console.log("Form data:", { name: form.name, logo: form.logo, hasLogoFile: !!logoFile });
+    
+    // Validate required fields
+    if (!form.name.trim()) {
+      console.log("Validation failed: name required");
+      toast.error("Brand name is required");
+      return;
+    }
+    
+    if (!brand && !logoFile && !form.logo) {
+      console.log("Validation failed: logo required");
+      toast.error("Logo image is required");
+      return;
+    }
+    
+    console.log("Validation passed, proceeding with submission");
+    
     setLoading(true);
     let logoUrl = form.logo;
     let bannerUrl = form.bannerImage;
     try {
       if (logoFile) {
-        const formData = new FormData();
-        formData.append("file", logoFile);
-        formData.append("upload_preset", "bazarxpress");
-        const res = await fetch("https://api.cloudinary.com/v1_1/demo/image/upload", {
-          method: "POST",
-          body: formData,
-        });
-        const data = await res.json();
-        logoUrl = data.secure_url;
+        logoUrl = await uploadToCloudinary(logoFile, `brands/${form.slug || form.name || 'brand'}/logo`);
       }
       if (bannerFile) {
-        const formData = new FormData();
-        formData.append("file", bannerFile);
-        formData.append("upload_preset", "bazarxpress");
-        const res = await fetch("https://api.cloudinary.com/v1_1/demo/image/upload", {
-          method: "POST",
-          body: formData,
-        });
-        const data = await res.json();
-        bannerUrl = data.secure_url;
+        bannerUrl = await uploadToCloudinary(bannerFile, `brands/${form.slug || form.name || 'brand'}/banner`);
       }
       const payload = {
         ...form,
         logo: logoUrl,
         bannerImage: bannerUrl,
       };
-      const res = await fetch(`${API_URL}/brands`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error("Failed to add brand");
-      const data = await res.json();
-      toast.success("Brand added");
-      onSuccess(data);
+      const data = brand 
+        ? await apiPut(`${API_URL}/brands/${brand._id}`, payload)
+        : await apiPost(`${API_URL}/brands`, payload);
+      toast.success(brand ? "Brand updated" : "Brand added");
+      await Promise.resolve(onSuccess(data));
       onClose();
     } catch (err: any) {
-      toast.error(err.message || "Error adding brand");
+      console.error("BrandFormModal error:", err);
+      toast.error(err.message || (brand ? "Error updating brand" : "Error adding brand"));
     } finally {
       setLoading(false);
     }
@@ -173,7 +185,7 @@ export default function BrandFormModal({ open, onClose, onSuccess }: BrandFormMo
         >
           <X />
         </button>
-        <div className="text-xl font-semibold mb-4">Add Brand</div>
+        <div className="text-xl font-semibold mb-4">{brand ? "Edit Brand" : "Add Brand"}</div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Brand Name</label>
@@ -264,7 +276,7 @@ export default function BrandFormModal({ open, onClose, onSuccess }: BrandFormMo
               type="submit"
               className="bg-brand-primary hover:bg-brand-primary-dark text-white font-semibold py-2 px-6 rounded-lg transition-colors"
               disabled={loading}
-            >{loading ? 'Saving...' : 'Add Brand'}</button>
+            >{loading ? 'Saving...' : (brand ? 'Update Brand' : 'Add Brand')}</button>
           </div>
         </form>
       </div>
