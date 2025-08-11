@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
@@ -134,6 +134,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     }
     return true;
   });
+  const sidebarScrollRef = useRef<HTMLDivElement>(null);
+  const savedScrollPosition = useRef(0);
   const pathname = usePathname()
   const router = useRouter()
   const user = useAppSelector((state: { auth: { user: any } }) => state.auth.user)
@@ -147,6 +149,50 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       localStorage.setItem('adminSidebarOpen', sidebarOpen ? 'true' : 'false');
     }
   }, [sidebarOpen]);
+
+  // Load saved scroll position from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('adminSidebarScrollPosition');
+      if (saved !== null) {
+        savedScrollPosition.current = parseInt(saved, 10);
+      }
+    }
+  }, []);
+
+  // Save scroll position continuously and restore after navigation
+  useEffect(() => {
+    const sidebarElement = sidebarScrollRef.current;
+    if (!sidebarElement) return;
+
+    // Save scroll position continuously
+    const handleScroll = () => {
+      savedScrollPosition.current = sidebarElement.scrollTop;
+      // Also save to localStorage for persistence across page refreshes
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('adminSidebarScrollPosition', savedScrollPosition.current.toString());
+      }
+    };
+
+    // Restore scroll position immediately
+    const restoreScrollPosition = () => {
+      if (savedScrollPosition.current >= 0) {
+        sidebarElement.scrollTop = savedScrollPosition.current;
+      }
+    };
+
+    // Add scroll listener
+    sidebarElement.addEventListener('scroll', handleScroll, { passive: true });
+    
+    // Restore position immediately and after a small delay to handle async rendering
+    restoreScrollPosition();
+    const timeoutId = setTimeout(restoreScrollPosition, 50);
+
+    return () => {
+      sidebarElement.removeEventListener('scroll', handleScroll);
+      clearTimeout(timeoutId);
+    };
+  }, [pathname]); // Re-run on pathname change to restore position after navigation
 
   const handleLogout = () => {
     dispatch(reduxLogout());
@@ -198,7 +244,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         </div>
 
         {/* Navigation */}
-        <div className="flex-1 overflow-y-auto py-4">
+        <div ref={sidebarScrollRef} className="flex-1 overflow-y-auto py-4">
           {menuItems.map((section, sectionIndex) => (
             <div key={sectionIndex} className="mb-7">
               {sidebarOpen && (
@@ -232,12 +278,13 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           ))}
         </div>
 
-        {/* Footer */}
+        {/* Footer - Logout Button (Always Visible for All Admin Roles) */}
         <div className="px-4 py-5 border-t border-purple-900/30 bg-purple-900/20">
           <button
             onClick={handleLogout}
             className="flex items-center w-full px-2 py-2 text-base font-medium text-purple-200 hover:bg-purple-700/40 hover:text-white rounded-lg transition-colors gap-3"
             title={!sidebarOpen ? "Logout" : undefined}
+            type="button"
           >
             <LogOut className="h-5 w-5 flex-shrink-0" />
             {sidebarOpen && <span>Logout</span>}

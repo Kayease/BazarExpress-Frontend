@@ -16,8 +16,9 @@ interface LoginModalProps {
 }
 
 export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
-  const [step, setStep] = useState<'phone' | 'otp'>("phone");
+  const [step, setStep] = useState<'phone' | 'password' | 'otp'>("phone");
   const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
   const [serverOtp, setServerOtp] = useState(""); // For demo, in real app, don't store OTP on frontend
@@ -25,7 +26,10 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
   const [showCompleteProfile, setShowCompleteProfile] = useState(false);
   const [loggedInUser, setLoggedInUser] = useState<any>(null);
   const [seconds, setSeconds] = useState(0);
+  const [requiresPassword, setRequiresPassword] = useState(false);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const dispatch = useAppDispatch();
+  const passwordInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (step === "otp" && seconds > 0) {
@@ -36,9 +40,49 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
     }
   }, [step, seconds]);
 
+  // Reset form when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      // Reset all form fields when modal opens
+      setStep("phone");
+      setPhone("");
+      setPassword("");
+      setOtp("");
+      setSessionId("");
+      setRequiresPassword(false);
+      setUserRole(null);
+      setSeconds(0);
+      setLoading(false);
+    }
+  }, [isOpen]);
+
+  // Auto-focus password field when step changes to password
+  useEffect(() => {
+    if (step === "password" && passwordInputRef.current) {
+      setTimeout(() => {
+        passwordInputRef.current?.focus();
+      }, 100);
+    }
+  }, [step]);
+
   if (!isOpen) return null;
 
   const API_URL = `${process.env.NEXT_PUBLIC_API_URL}/auth`;
+
+  // Handle modal close with form reset
+  const handleClose = () => {
+    // Reset all form fields when closing
+    setStep("phone");
+    setPhone("");
+    setPassword("");
+    setOtp("");
+    setSessionId("");
+    setRequiresPassword(false);
+    setUserRole(null);
+    setSeconds(0);
+    setLoading(false);
+    onClose();
+  };
 
   // Send OTP handler
   const handleSendOtp = async (e?: React.FormEvent) => {
@@ -49,7 +93,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
     }
     setLoading(true);
     try {
-      // Call backend to generate and send OTP
+      // Call backend to check if user requires password and send OTP
       const res = await fetch(`${API_URL}/send-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -57,14 +101,62 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to send OTP");
-      setStep("otp");
-      setOtp(""); // Clear OTP field when resending
+      
       setSessionId(data.sessionId || "");
-      setSeconds(30); // Start 30-second countdown
-      toast.success("OTP sent successfully");
+      setRequiresPassword(data.requiresPassword || false);
+      setUserRole(data.userRole);
+      
+      if (data.requiresPassword) {
+        // User needs to enter password first
+        setStep("password");
+        toast.success("Please enter your password to continue");
+      } else {
+        // Regular user - proceed directly to OTP
+        setStep("otp");
+        setOtp(""); // Clear OTP field when resending
+        setSeconds(30); // Start 30-second countdown
+        toast.success("OTP sent successfully");
+      }
       // For demo: setServerOtp(data.otp) if you want to show OTP for testing
     } catch (err: any) {
       toast.error(err.message || "Failed to send OTP");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Password verification handler
+  const handleVerifyPassword = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    
+    if (!password || password.length < 6) {
+      toast.error("Please enter a valid password (minimum 6 characters)");
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/verify-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Invalid password");
+      
+      // Password verified, OTP sent
+      setSessionId(data.sessionId);
+      setStep("otp");
+      setOtp("");
+      setSeconds(30);
+      toast.success("Password verified. OTP sent successfully!");
+    } catch (err: any) {
+      toast.error(err.message || "Invalid password");
+      setPassword(""); // Clear password field on error
+      // Focus the password field after clearing
+      setTimeout(() => {
+        passwordInputRef.current?.focus();
+      }, 100);
     } finally {
       setLoading(false);
     }
@@ -100,8 +192,11 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
       toast.success("Login successful!");
       setStep("phone");
       setPhone("");
+      setPassword("");
       setOtp("");
       setSessionId("");
+      setRequiresPassword(false);
+      setUserRole(null);
       // Check if user needs to complete profile
       if (!data.user?.name || !data.user?.email) {
         setLoggedInUser(data.user);
@@ -115,7 +210,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
         }
         // Fetch and update user profile in Redux
         dispatch(fetchProfile());
-        onClose();
+        handleClose();
       }
     } catch (err: any) {
       toast.error(err.message || "Invalid OTP");
@@ -130,13 +225,12 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
         role="dialog"
         aria-modal="true"
         className="fixed inset-0 flex items-center justify-center bg-black/20 z-50"
-        onClick={(e) => {
-          if (e.target === e.currentTarget) onClose();
-        }}
       >
-        <div className="bg-white rounded-xl p-6 w-11/12 max-w-md relative shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div 
+          className="bg-white rounded-xl p-6 w-11/12 max-w-md relative shadow-xl"
+        >
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
             aria-label="Close modal"
           >
@@ -153,11 +247,14 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
               className="mx-auto mb-4"
             />
             <h2 className="text-2xl font-bold text-gray-800 mb-2">
-              {step === "phone" ? "India's last minute app" : "OTP Verification"}
+              {step === "phone" ? "India's last minute app" : 
+               step === "password" ? "Enter Password" : "OTP Verification"}
             </h2>
             <p className="text-gray-600">
               {step === "phone" 
                 ? "Log in or Sign up" 
+                : step === "password"
+                ? `Enter your password for +91-${phone}`
                 : `We have sent a verification code to +91-${phone}`}
             </p>
           </div>
@@ -196,6 +293,47 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
               </p>
             </form>
           )}
+          {step === "password" && (
+            <form onSubmit={handleVerifyPassword} className="space-y-4">
+              <div>
+                <input
+                  ref={passwordInputRef}
+                  id="password"
+                  name="password"
+                  type="password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  className="w-full px-4 py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent text-gray-800 text-lg"
+                  placeholder="Enter your password"
+                  minLength={6}
+                  required
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={loading || password.length < 6}
+                className="w-full bg-brand-primary text-white py-4 rounded-lg hover:bg-brand-primary-dark transition duration-200 font-semibold text-lg disabled:opacity-50 disabled:cursor-not-allowed mt-4"
+              >
+                {loading ? "Verifying..." : "Verify Password"}
+              </button>
+              <div className="text-center mt-4">
+                <button
+                  type="button"
+                  className="text-gray-600 hover:text-gray-700 text-sm font-medium flex items-center justify-center w-full"
+                  onClick={() => { 
+                    setStep("phone"); 
+                    setPassword(""); 
+                    setRequiresPassword(false);
+                    setUserRole(null);
+                  }}
+                  disabled={loading}
+                >
+                  <ChevronLeft size={16} className="mr-1" />
+                  Change phone number
+                </button>
+              </div>
+            </form>
+          )}
           {step === "otp" && (
             <form onSubmit={handleVerifyOtp} className="space-y-4">
               <div>
@@ -224,8 +362,11 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                           toast.success("Login successful!");
                           setStep("phone");
                           setPhone("");
+                          setPassword("");
                           setOtp("");
                           setSessionId("");
+                          setRequiresPassword(false);
+                          setUserRole(null);
                           
                           if (!data.user?.name || !data.user?.email) {
                             setLoggedInUser(data.user);
@@ -238,7 +379,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                               localStorage.setItem("token", data.token);
                             }
                             dispatch(fetchProfile());
-                            onClose();
+                            handleClose();
                           }
                         } catch (err: any) {
                           toast.error(err.message || "Invalid OTP");
@@ -259,7 +400,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                   <button
                     type="button"
                     className="text-brand-primary hover:text-brand-primary-dark text-sm font-medium"
-                    onClick={handleSendOtp}
+                    onClick={requiresPassword ? handleVerifyPassword : handleSendOtp}
                     disabled={loading}
                   >
                     Resend Code {seconds > 0 && `(${seconds}s)`}
@@ -269,7 +410,13 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                     <button
                       type="button"
                       className="text-gray-600 hover:text-gray-700 text-sm font-medium flex items-center justify-center w-full"
-                      onClick={() => { setStep("phone"); setOtp(""); }}
+                      onClick={() => { 
+                        setStep("phone"); 
+                        setOtp(""); 
+                        setPassword("");
+                        setRequiresPassword(false);
+                        setUserRole(null);
+                      }}
                       disabled={loading}
                     >
                       <ChevronLeft size={16} className="mr-1" />
@@ -284,14 +431,14 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
       </div>
       <CompleteProfileModal
         isOpen={showCompleteProfile}
-        onClose={() => { setShowCompleteProfile(false); onClose(); }}
+        onClose={() => { setShowCompleteProfile(false); handleClose(); }}
         user={loggedInUser}
         onProfileUpdated={(updated) => {
           setShowCompleteProfile(false);
           setLoggedInUser(null);
           // Fetch and update user profile in Redux
           dispatch(fetchProfile());
-          onClose();
+          handleClose();
         }}
       />
     </>

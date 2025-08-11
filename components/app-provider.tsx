@@ -26,6 +26,7 @@ interface AppContextType {
   isLoggedIn: boolean;
   user: any;
   handleLogout: () => void;
+  login: (user: any, token: string) => void;
   addToCart: (product: any) => void;
 }
 
@@ -746,6 +747,16 @@ function AppProviderInner({ children }: { children: ReactNode }) {
 
 
 
+  const handleLogin = useCallback((user: any, token: string) => {
+    // Store token and user data
+    localStorage.setItem("token", token);
+    localStorage.setItem("user", JSON.stringify(user));
+    
+    // Update Redux state (you might need to dispatch a login action)
+    // For now, we'll just reload the page to trigger auth state update
+    window.location.reload();
+  }, []);
+
   const handleLogout = useCallback(() => {
     dispatch(reduxLogout());
     // Clear any stored tokens
@@ -775,6 +786,7 @@ function AppProviderInner({ children }: { children: ReactNode }) {
               isLoggedIn={isLoggedIn}
               user={reduxUser}
               handleLogout={handleLogout}
+              login={handleLogin}
             >
               {children}
             </AppContextWithCart>
@@ -796,7 +808,8 @@ function AppContextWithCart({
   setSearchQuery,
   isLoggedIn,
   user,
-  handleLogout
+  handleLogout,
+  login
 }: {
   children: ReactNode;
   isCartOpen: boolean;
@@ -808,6 +821,7 @@ function AppContextWithCart({
   isLoggedIn: boolean;
   user: any;
   handleLogout: () => void;
+  login: (user: any, token: string) => void;
 }) {
   const { addToCart } = useCartContext();
 
@@ -823,8 +837,9 @@ function AppContextWithCart({
         isLoggedIn,
         user,
         handleLogout,
+        login,
         addToCart,
-      }), [isCartOpen, setIsCartOpen, isLoginOpen, setIsLoginOpen, searchQuery, setSearchQuery, isLoggedIn, user, handleLogout, addToCart])}
+      }), [isCartOpen, setIsCartOpen, isLoginOpen, setIsLoginOpen, searchQuery, setSearchQuery, isLoggedIn, user, handleLogout, login, addToCart])}
     >
       {children}
     </AppContext.Provider>

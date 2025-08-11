@@ -37,6 +37,8 @@ type EditFormType = {
   phone: string;
   dateOfBirth: string;
   assignedWarehouses: string[];
+  newPassword: string;
+  confirmPassword: string;
 };
 
 type ReduxUser = User & { token?: string };
@@ -95,6 +97,8 @@ export default function AdminUsers() {
     phone: '',
     dateOfBirth: '',
     assignedWarehouses: [],
+    newPassword: '',
+    confirmPassword: '',
   });
   const [editLoading, setEditLoading] = useState(false)
   const router = useRouter()
@@ -111,7 +115,7 @@ export default function AdminUsers() {
     customers: users.filter(u => u.role === 'user').length,
   }
 
-  // Filter users
+  // Filter and sort users
   const filteredUsers = users.filter((u) => {
     const matchesSearch = u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -119,6 +123,27 @@ export default function AdminUsers() {
     const matchesRole = filterRole === "all" || u.role === filterRole;
     const matchesStatus = filterStatus === "all" || u.status === filterStatus;
     return matchesSearch && matchesRole && matchesStatus;
+  }).sort((a, b) => {
+    // Define role priority: admin first, then other roles, then users last
+    const rolePriority: { [key: string]: number } = {
+      'admin': 1,
+      'product_inventory_management': 2,
+      'order_warehouse_management': 3,
+      'marketing_content_manager': 4,
+      'customer_support_executive': 5,
+      'report_finance_analyst': 6,
+      'user': 7
+    };
+    
+    const aPriority = rolePriority[a.role] || 8;
+    const bPriority = rolePriority[b.role] || 8;
+    
+    if (aPriority !== bPriority) {
+      return aPriority - bPriority;
+    }
+    
+    // If same role priority, sort by name
+    return a.name.localeCompare(b.name);
   });
 
   // Pagination
@@ -214,6 +239,8 @@ export default function AdminUsers() {
       phone: u.phone || '',
       dateOfBirth: u.dateOfBirth || '',
       assignedWarehouses: u.assignedWarehouses || [],
+      newPassword: '',
+      confirmPassword: '',
     });
     setEditModalOpen(true);
     
@@ -228,6 +255,56 @@ export default function AdminUsers() {
     setEditUser(null);
   };
 
+  const handleSendPasswordResetEmail = async (user: User) => {
+    if (user.role === 'user') {
+      toast.error("Regular users do not require password reset links");
+      return;
+    }
+
+    if (!user.email) {
+      toast.error("User does not have an email address");
+      return;
+    }
+
+    try {
+      // Generate expiration time (10 minutes from now)
+      const expirationTime = Date.now() + (10 * 60 * 1000); // 10 minutes
+      
+      // Generate a password reset link with expiration
+      const resetLink = `${window.location.origin}/admin/password-reset?userId=${user.id}&role=${user.role}&expires=${expirationTime}`;
+      
+      // Create email template
+      const subject = encodeURIComponent("Password Reset Request - Bazar Admin");
+      const body = encodeURIComponent(`Dear ${user.name || 'User'},
+
+You have requested a password reset for your Bazar admin account.
+
+Please click the link below to reset your password:
+${resetLink}
+
+Important Notes:
+- This link will expire in 10 minutes for security reasons
+- If you did not request this password reset, please ignore this email
+- For security, please do not share this link with anyone
+
+Role: ${getRoleDisplayName(user.role)}
+Account: ${user.email}
+
+If you have any issues, please contact your system administrator.
+
+Best regards,
+Bazar Admin Team`);
+
+      // Open email client with prefilled template
+      const mailtoLink = `mailto:${user.email}?subject=${subject}&body=${body}`;
+      window.open(mailtoLink, '_blank');
+      
+      toast.success(`Email client opened with password reset template for ${user.name || user.phone}`);
+    } catch (err) {
+      toast.error("Failed to open email client");
+    }
+  };
+
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editUser) return;
@@ -236,6 +313,29 @@ export default function AdminUsers() {
     if (currentUser?.role !== 'admin') {
       toast.error("You don't have permission to edit user details");
       return;
+    }
+
+    // Validate phone number (exactly 10 digits)
+    if (editForm.phone && !/^\d{10}$/.test(editForm.phone)) {
+      toast.error("Phone number must be exactly 10 digits");
+      return;
+    }
+
+    // Validate password fields if provided
+    if (editForm.newPassword || editForm.confirmPassword) {
+      if (editForm.newPassword !== editForm.confirmPassword) {
+        toast.error("Passwords do not match");
+        return;
+      }
+      if (editForm.newPassword.length < 6) {
+        toast.error("Password must be at least 6 characters long");
+        return;
+      }
+      // Only allow password setting for non-user roles
+      if (editForm.role === 'user') {
+        toast.error("Regular users do not require passwords");
+        return;
+      }
     }
 
     setEditLoading(true);
@@ -252,11 +352,23 @@ export default function AdminUsers() {
         assignedWarehouses: editForm.assignedWarehouses,
       };
       
+      // Update user details
       await apiPut(`${API_URL}/auth/users/${editUser.id}`, updatedUser);
+      
+      // Update password if provided
+      if (editForm.newPassword && editForm.newPassword.trim() !== '') {
+        await apiPatch(`${API_URL}/auth/users/${editUser.id}/password`, {
+          password: editForm.newPassword
+        });
+      }
       
       // Update users in state
       setUsers(users.map(u => u.id === editUser.id ? { ...u, ...updatedUser } : u));
-      toast.success("User updated successfully");
+      
+      const successMessage = editForm.newPassword 
+        ? "User updated successfully and password set" 
+        : "User updated successfully";
+      toast.success(successMessage);
       closeEditModal();
     } catch (err: any) {
       let errorMsg = "Failed to update user";
@@ -304,14 +416,14 @@ export default function AdminUsers() {
       } else {
         router.push("/");
       }
-    } else {
+    } else if (currentUser) {
+      // Only redirect if currentUser is loaded (not null/undefined)
       router.push("/");
     }
-  }, [currentUser, router]);
+  }, [currentUser, router, token]);
 
   if (!currentUser || !isAdminUser(currentUser.role) || !hasAccessToSection(currentUser.role, 'users')) {
-      router.push("/")
-      return
+      return null;
     }
 
   if (loading) {
@@ -481,61 +593,89 @@ export default function AdminUsers() {
                           </div>
                         </td>
                         <td className="py-3 px-4 align-middle">
-                          <div className="flex items-center justify-center gap-2">
-                            {/* Only Admin can edit user details */}
+                          <div className="flex items-center text-right justify-end gap-1 flex-wrap">
+                            {/* Admin Actions */}
                             {currentUser?.role === 'admin' && (
-                              <button 
-                                onClick={() => openEditModal(user)}
-                                className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-brand-primary hover:bg-brand-primary/90 rounded-lg transition-colors shadow-sm"
-                                title="Edit User"
-                              >
-                                <Edit className="h-3 w-3 mr-1" />
-                                Edit
-                              </button>
+                              <>
+                                {/* Edit Button */}
+                                <button 
+                                  onClick={() => openEditModal(user)}
+                                  className="inline-flex items-center px-2 py-1.5 text-xs font-medium text-white bg-brand-primary hover:bg-brand-primary/90 rounded-lg transition-colors shadow-sm"
+                                  title="Edit User"
+                                >
+                                  <Edit className="h-3 w-3 mr-1" />
+                                  Edit
+                                </button>
+
+                                {/* Password Reset Email - Only for non-user roles */}
+                                {user.role !== 'user' && (
+                                  <button
+                                    onClick={() => handleSendPasswordResetEmail(user)}
+                                    className="inline-flex items-center px-2 py-1.5 text-xs font-medium text-blue-600 bg-blue-100 hover:bg-blue-200 rounded-lg transition-colors shadow-sm"
+                                    title="Send Password Reset Email (10 min expiry)"
+                                  >
+                                    <Mail className="h-3 w-3 mr-1" />
+                                    Reset
+                                  </button>
+                                )}
+
+                                {/* Status Toggle */}
+                                <button
+                                  onClick={() => handleStatusChange(user.id, user.status === 'active' ? 'disabled' : 'active')}
+                                  className={`inline-flex items-center px-2 py-1.5 text-xs font-medium rounded-lg transition-colors shadow-sm ${
+                                    user.status === 'active' 
+                                      ? 'text-red-600 bg-red-100 hover:bg-red-200' 
+                                      : 'text-green-600 bg-green-100 hover:bg-green-200'
+                                  }`}
+                                  title={user.status === 'active' ? 'Disable User' : 'Activate User'}
+                                >
+                                  {user.status === 'active' ? <X className="h-3 w-3" /> : <Check className="h-3 w-3" />}
+                                </button>
+
+                                {/* Delete Button */}
+                                <button
+                                  onClick={() => setConfirmDelete(user.id)}
+                                  className="inline-flex items-center px-2 py-1.5 text-xs font-medium text-red-600 bg-red-100 hover:bg-red-200 rounded-lg transition-colors shadow-sm"
+                                  title="Delete User"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              </>
                             )}
-                            
-                            {/* Status change button with role-based restrictions */}
-                            {(currentUser?.role === 'admin' || 
-                              (currentUser?.role === 'customer_support_executive' && user.role === 'user')) && (
-                              <button
-                                onClick={() => handleStatusChange(user.id, user.status === 'active' ? 'disabled' : 'active')}
-                                className={`inline-flex items-center px-2 py-1.5 text-xs font-medium rounded-lg transition-colors shadow-sm ${
-                                  user.status === 'active' 
-                                    ? 'text-red-600 bg-red-100 hover:bg-red-200' 
-                                    : 'text-green-600 bg-green-100 hover:bg-green-200'
-                                }`}
-                                title={user.status === 'active' ? 'Disable User' : 'Activate User'}
-                              >
-                                {user.status === 'active' ? <X className="h-3 w-3" /> : <Check className="h-3 w-3" />}
-                              </button>
-                            )}
-                            
-                            {/* Show "Cannot modify" indicator for Customer Support Executive viewing admin users */}
-                            {currentUser?.role === 'customer_support_executive' && user.role !== 'user' && (
-                              <span 
-                                className="inline-flex items-center px-2 py-1.5 text-xs font-medium text-gray-500 bg-gray-100 rounded-lg"
-                                title="Customer Support Executive can only change status of regular customers"
-                              >
-                                <Lock className="h-3 w-3" />
-                              </span>
-                            )}
-                            
-                            {/* Only Admin can delete users */}
-                            {currentUser?.role === 'admin' && (
-                              <button
-                                onClick={() => setConfirmDelete(user.id)}
-                                className="inline-flex items-center px-2 py-1.5 text-xs font-medium text-red-600 bg-red-100 hover:bg-red-200 rounded-lg transition-colors shadow-sm"
-                                title="Delete User"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </button>
-                            )}
-                            
-                            {/* Customer Support Executive gets view-only indicator for other actions */}
+
+                            {/* Customer Support Executive Actions */}
                             {currentUser?.role === 'customer_support_executive' && (
-                              <span className="inline-flex items-center px-2 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg" title="Customer Support - Can only change account status">
+                              <>
+                                {/* Can only change status of regular users */}
+                                {user.role === 'user' ? (
+                                  <button
+                                    onClick={() => handleStatusChange(user.id, user.status === 'active' ? 'disabled' : 'active')}
+                                    className={`inline-flex items-center px-2 py-1.5 text-xs font-medium rounded-lg transition-colors shadow-sm ${
+                                      user.status === 'active' 
+                                        ? 'text-red-600 bg-red-100 hover:bg-red-200' 
+                                        : 'text-green-600 bg-green-100 hover:bg-green-200'
+                                    }`}
+                                    title={user.status === 'active' ? 'Disable User' : 'Activate User'}
+                                  >
+                                    {user.status === 'active' ? <X className="h-3 w-3" /> : <Check className="h-3 w-3" />}
+                                  </button>
+                                ) : (
+                                  <span 
+                                    className="inline-flex items-center px-2 py-1.5 text-xs font-medium text-gray-500 bg-gray-100 rounded-lg"
+                                    title="Customer Support Executive can only change status of regular customers"
+                                  >
+                                    <Lock className="h-3 w-3 mr-1" />
+                                    Restricted
+                                  </span>
+                                )}
+                              </>
+                            )}
+
+                            {/* Other roles - view only */}
+                            {currentUser?.role !== 'admin' && currentUser?.role !== 'customer_support_executive' && (
+                              <span className="inline-flex items-center px-2 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg" title="View Only Access">
                                 <Eye className="h-3 w-3 mr-1" />
-                                Status Only
+                                View Only
                               </span>
                             )}
                           </div>
@@ -657,9 +797,19 @@ export default function AdminUsers() {
                   <input
                     type="tel"
                     value={editForm.phone}
-                    onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/[^\d]/g, ''); // Only allow digits
+                      if (value.length <= 10) { // Limit to 10 digits
+                        setEditForm({ ...editForm, phone: value });
+                      }
+                    }}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                    placeholder="Enter 10-digit phone number"
+                    maxLength={10}
                   />
+                  {editForm.phone && editForm.phone.length !== 10 && (
+                    <p className="text-xs text-red-500 mt-1">Phone number must be exactly 10 digits</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
@@ -711,6 +861,42 @@ export default function AdminUsers() {
                   />
                 </div>
               </div>
+              
+              {/* Password Fields - Only show for non-user roles */}
+              {editForm.role !== 'user' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-200">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      New Password
+                      <span className="text-xs text-gray-500 ml-1">(Leave empty to keep current)</span>
+                    </label>
+                    <input
+                      type="password"
+                      value={editForm.newPassword}
+                      onChange={(e) => setEditForm({ ...editForm, newPassword: e.target.value })}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                      placeholder="Enter new password"
+                      minLength={6}
+                    />
+                    {editForm.newPassword && editForm.newPassword.length < 6 && (
+                      <p className="text-xs text-red-500 mt-1">Password must be at least 6 characters</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
+                    <input
+                      type="password"
+                      value={editForm.confirmPassword}
+                      onChange={(e) => setEditForm({ ...editForm, confirmPassword: e.target.value })}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                      placeholder="Confirm new password"
+                    />
+                    {editForm.confirmPassword && editForm.newPassword !== editForm.confirmPassword && (
+                      <p className="text-xs text-red-500 mt-1">Passwords do not match</p>
+                    )}
+                  </div>
+                </div>
+              )}
               
               {/* Warehouse Assignment for specific roles */}
               {(editForm.role === 'product_inventory_management' || editForm.role === 'order_warehouse_management') && (

@@ -76,20 +76,6 @@ export default function Home() {
       <div className="min-h-screen bg-surface-primary">
         <main>
           <HeroSectionWithSuspense />
-          <div className="max-w-7xl mx-auto px-4">
-            {/* Show location detection loading state */}
-            {isLoading && !locationState.isLocationDetected && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                <div className="flex items-center space-x-3">
-                  <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
-                  <div>
-                    <p className="text-sm font-medium text-blue-900">Detecting your location...</p>
-                    <p className="text-xs text-blue-700">Finding products available in your area for faster delivery</p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
           <CategorySectionWithSuspense />
           <ProductSectionWithSuspense onAddToCart={handleAddToCart} searchQuery={searchQuery} />
         </main>

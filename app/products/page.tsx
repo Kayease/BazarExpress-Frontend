@@ -15,21 +15,6 @@ export default function ProductsPage() {
   const contextPincode = locationState?.pincode;
   const isLocationDetected = locationState?.isLocationDetected;
 
-  // Show loading skeleton while fetching location/pincode
-  if (isLoading) {
-    return (
-      <div className="container mx-auto px-4 py-8 flex flex-col items-center">
-        <div className="w-full max-w-md">
-          <div className="animate-pulse space-y-4">
-            <div className="h-8 bg-gray-200 rounded w-1/2 mb-2"></div>
-            <div className="h-6 bg-gray-200 rounded w-full mb-2"></div>
-            <div className="h-40 bg-gray-200 rounded w-full"></div>
-          </div>
-        </div>
-        <p className="mt-4 text-gray-500">Detecting your location and fetching products...</p>
-      </div>
-    );
-  }
 
   // On mount: If context has pincode but URL does not (or is out of sync), update URL for shareability
   useEffect(() => {
