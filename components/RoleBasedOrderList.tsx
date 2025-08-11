@@ -49,6 +49,11 @@ const RoleBasedOrderList: React.FC<RoleBasedOrderListProps> = ({
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState('');
   const { user, isWarehouseRestricted } = useRoleAccess();
+  const [showOtpInput, setShowOtpInput] = useState<string | null>(null);
+  const [otp, setOtp] = useState(["", "", "", ""]);
+  const [otpSessionId, setOtpSessionId] = useState("");
+  const [generatingOtp, setGeneratingOtp] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
 
   useEffect(() => {
     fetchOrders();
@@ -133,6 +138,104 @@ const RoleBasedOrderList: React.FC<RoleBasedOrderListProps> = ({
 
   const canUpdateOrderStatus = () => {
     return user?.role === 'admin' || user?.role === 'order_warehouse_management';
+  };
+
+  const generateDeliveryOtp = async (orderId: string) => {
+    try {
+      setGeneratingOtp(true);
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/admin/delivery-otp/${orderId}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate delivery OTP');
+      }
+
+      const data = await response.json();
+      setOtpSessionId(data.sessionId);
+      setShowOtpInput(orderId);
+      toast.success('Delivery OTP generated successfully');
+      
+      // For testing - show OTP in console (remove in production)
+      if (data.otp) {
+        console.log('Delivery OTP:', data.otp);
+        toast.success(`OTP: ${data.otp} (Check console for testing)`);
+      }
+    } catch (error) {
+      console.error('Error generating delivery OTP:', error);
+      toast.error('Failed to generate delivery OTP');
+    } finally {
+      setGeneratingOtp(false);
+    }
+  };
+
+  const verifyDeliveryOtp = async (orderId: string) => {
+    const otpString = otp.join('');
+    if (otpString.length !== 4) {
+      toast.error('Please enter complete 4-digit OTP');
+      return;
+    }
+
+    try {
+      setUpdatingStatus(true);
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/admin/delivery-verify/${orderId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          otp: otpString,
+          sessionId: otpSessionId,
+          note: 'Order delivered - OTP verified'
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to verify delivery OTP');
+      }
+
+      // Refresh orders list
+      await fetchOrders();
+      
+      setShowOtpInput(null);
+      setOtp(["", "", "", ""]);
+      setOtpSessionId("");
+      toast.success('Order status updated to delivered successfully');
+    } catch (error) {
+      console.error('Error verifying delivery OTP:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to verify delivery OTP');
+    } finally {
+      setUpdatingStatus(false);
+    }
+  };
+
+  const handleOtpChange = (index: number, value: string) => {
+    if (value.length > 1) return; // Only allow single digit
+    
+    const newOtp = [...otp];
+    newOtp[index] = value;
+    setOtp(newOtp);
+    
+    // Auto-focus next input
+    if (value && index < 3) {
+      const nextInput = document.getElementById(`otp-${index + 1}`);
+      nextInput?.focus();
+    }
+  };
+
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
+    if (e.key === 'Backspace' && !otp[index] && index > 0) {
+      const prevInput = document.getElementById(`otp-${index - 1}`);
+      prevInput?.focus();
+    }
   };
 
   if (loading) {
@@ -233,6 +336,62 @@ const RoleBasedOrderList: React.FC<RoleBasedOrderListProps> = ({
                 </div>
               </div>
               
+              {/* OTP Input for Delivery Status */}
+              {showOtpInput === order.orderId && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 space-y-3">
+                  <div className="text-center">
+                    <h5 className="font-medium text-gray-900 mb-2">Enter Delivery OTP</h5>
+                    <p className="text-sm text-gray-600 mb-4">Please enter the 4-digit OTP to confirm delivery</p>
+                  </div>
+                  
+                  <div className="flex justify-center space-x-3">
+                    {otp.map((digit, index) => (
+                      <input
+                        key={index}
+                        id={`otp-${index}`}
+                        type="text"
+                        maxLength={1}
+                        value={digit}
+                        onChange={(e) => handleOtpChange(index, e.target.value)}
+                        onKeyDown={(e) => handleOtpKeyDown(index, e)}
+                        className="w-10 h-10 text-center text-lg font-semibold border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none"
+                        placeholder="0"
+                      />
+                    ))}
+                  </div>
+                  
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => verifyDeliveryOtp(order.orderId)}
+                      disabled={updatingStatus || otp.join('').length !== 4}
+                      className="flex-1 bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                    >
+                      {updatingStatus ? (
+                        <>
+                          <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                          Verifying...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="h-4 w-4 mr-2" />
+                          Verify & Deliver
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowOtpInput(null);
+                        setOtp(["", "", "", ""]);
+                        setOtpSessionId("");
+                      }}
+                      className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+              
               <div className="flex items-center justify-between pt-4 border-t border-gray-200">
                 <div className="text-sm text-gray-500">
                   Last updated: {new Date(order.updatedAt).toLocaleString()}
@@ -249,9 +408,21 @@ const RoleBasedOrderList: React.FC<RoleBasedOrderListProps> = ({
                   
                   {canUpdateOrderStatus() && order.status !== 'delivered' && order.status !== 'cancelled' && (
                     <button
-                      className="px-3 py-1 text-sm text-green-600 hover:bg-green-50 rounded-md transition-colors"
+                      onClick={() => generateDeliveryOtp(order.orderId)}
+                      disabled={generatingOtp || showOtpInput === order.orderId}
+                      className="flex items-center space-x-1 px-3 py-1 text-sm text-green-600 hover:bg-green-50 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Update Status
+                      {generatingOtp ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span>Generating OTP...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Package className="w-4 h-4" />
+                          <span>Mark as Delivered</span>
+                        </>
+                      )}
                     </button>
                   )}
                 </div>

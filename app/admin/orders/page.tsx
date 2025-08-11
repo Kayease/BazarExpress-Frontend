@@ -95,6 +95,10 @@ export default function AdminOrders() {
   const [status, setStatus] = useState("")
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
+  const [showOtpInput, setShowOtpInput] = useState(false)
+  const [otp, setOtp] = useState(["", "", "", ""])
+  const [otpSessionId, setOtpSessionId] = useState("")
+  const [generatingOtp, setGeneratingOtp] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const ORDERS_PER_PAGE = 20
   const [orderStats, setOrderStats] = useState({
@@ -175,10 +179,108 @@ export default function AdminOrders() {
   const openView = (order: Order) => {
     setViewing(order)
     setStatus(order.status)
+    setShowOtpInput(false)
+    setOtp(["", "", "", ""])
+    setOtpSessionId("")
+  }
+
+  const generateDeliveryOtp = async () => {
+    if (!viewing) return
+
+    try {
+      setGeneratingOtp(true)
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/admin/delivery-otp/${viewing.orderId}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to generate delivery OTP')
+      }
+
+      const data = await response.json()
+      setOtpSessionId(data.sessionId)
+      setShowOtpInput(true)
+      toast.success('Delivery OTP generated successfully')
+      
+      // For testing - show OTP in console (remove in production)
+      if (data.otp) {
+        console.log('Delivery OTP:', data.otp)
+        toast.success(`OTP: ${data.otp} (Check console for testing)`)
+      }
+    } catch (err) {
+      console.error('Error generating delivery OTP:', err)
+      toast.error('Failed to generate delivery OTP')
+    } finally {
+      setGeneratingOtp(false)
+    }
+  }
+
+  const verifyDeliveryOtp = async () => {
+    if (!viewing || !otpSessionId) return
+
+    const otpString = otp.join('')
+    if (otpString.length !== 4) {
+      toast.error('Please enter complete 4-digit OTP')
+      return
+    }
+
+    try {
+      setUpdating(true)
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/admin/delivery-verify/${viewing.orderId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          otp: otpString,
+          sessionId: otpSessionId,
+          note: 'Order delivered - OTP verified'
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to verify delivery OTP')
+      }
+
+      const data = await response.json()
+      
+      // Update the orders list
+      setOrders(orders.map(o => 
+        o.orderId === viewing.orderId 
+          ? { ...o, status: 'delivered' as Order['status'] } 
+          : o
+      ))
+      
+      // Update stats
+      await fetchOrders()
+      
+      setViewing(null)
+      setShowOtpInput(false)
+      setOtp(["", "", "", ""])
+      setOtpSessionId("")
+      toast.success('Order status updated to delivered successfully')
+    } catch (err) {
+      console.error('Error verifying delivery OTP:', err)
+      toast.error(err instanceof Error ? err.message : 'Failed to verify delivery OTP')
+    } finally {
+      setUpdating(false)
+    }
   }
 
   const updateStatus = async () => {
     if (!viewing || !status) return
+
+    // If status is being changed to delivered, generate OTP instead
+    if (status === 'delivered') {
+      await generateDeliveryOtp()
+      return
+    }
 
     try {
       setUpdating(true)
@@ -217,6 +319,27 @@ export default function AdminOrders() {
       toast.error('Failed to update order status')
     } finally {
       setUpdating(false)
+    }
+  }
+
+  const handleOtpChange = (index: number, value: string) => {
+    if (value.length > 1) return // Only allow single digit
+    
+    const newOtp = [...otp]
+    newOtp[index] = value
+    setOtp(newOtp)
+    
+    // Auto-focus next input
+    if (value && index < 3) {
+      const nextInput = document.getElementById(`otp-${index + 1}`)
+      nextInput?.focus()
+    }
+  }
+
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
+    if (e.key === 'Backspace' && !otp[index] && index > 0) {
+      const prevInput = document.getElementById(`otp-${index - 1}`)
+      prevInput?.focus()
     }
   }
 
@@ -765,21 +888,75 @@ export default function AdminOrders() {
                       ))}
                     </select>
                     
+                    {/* OTP Input for Delivery Status */}
+                    {showOtpInput && status === 'delivered' && (
+                      <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+                        <div className="text-center">
+                          <h5 className="font-medium text-gray-900 mb-2">Enter Delivery OTP</h5>
+                          <p className="text-sm text-gray-600 mb-4">Please enter the 4-digit OTP to confirm delivery</p>
+                        </div>
+                        
+                        <div className="flex justify-center space-x-3">
+                          {otp.map((digit, index) => (
+                            <input
+                              key={index}
+                              id={`otp-${index}`}
+                              type="text"
+                              maxLength={1}
+                              value={digit}
+                              onChange={(e) => handleOtpChange(index, e.target.value)}
+                              onKeyDown={(e) => handleOtpKeyDown(index, e)}
+                              className="w-12 h-12 text-center text-lg font-semibold border-2 border-gray-300 rounded-lg focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 focus:outline-none"
+                              placeholder="0"
+                            />
+                          ))}
+                        </div>
+                        
+                        <button
+                          onClick={verifyDeliveryOtp}
+                          disabled={updating || otp.join('').length !== 4}
+                          className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                        >
+                          {updating ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                              Verifying OTP...
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle className="h-4 w-4 mr-2" />
+                              Verify OTP & Mark as Delivered
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
+                    
                     {user?.role === 'customer_support_executive' ? (
                       <div className="w-full bg-gray-100 text-gray-600 font-medium py-3 px-4 rounded-lg border-2 border-dashed border-gray-300 text-center">
                         <Eye className="h-4 w-4 inline mr-2" />
                         View Only - Cannot change order status
                       </div>
-                    ) : (
+                    ) : !showOtpInput ? (
                       <button 
                         className="w-full bg-brand-primary hover:bg-brand-primary/90 text-white font-semibold py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center" 
                         onClick={updateStatus}
-                        disabled={updating || status === viewing.status}
+                        disabled={updating || status === viewing.status || generatingOtp}
                       >
-                      {updating ? (
+                      {generatingOtp ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          Generating OTP...
+                        </>
+                      ) : updating ? (
                         <>
                           <Loader2 className="h-4 w-4 animate-spin mr-2" />
                           Updating Status...
+                        </>
+                      ) : status === 'delivered' ? (
+                        <>
+                          <Package className="h-4 w-4 mr-2" />
+                          Generate Delivery OTP
                         </>
                       ) : (
                         <>
@@ -788,7 +965,7 @@ export default function AdminOrders() {
                         </>
                       )}
                       </button>
-                    )}
+                    ) : null}
                   </div>
                 </div>
               </div>
