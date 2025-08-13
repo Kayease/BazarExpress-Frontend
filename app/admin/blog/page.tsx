@@ -395,8 +395,10 @@ export default function AdminBlog() {
           </div>
         )}
 
-        {/* Blog Form Modal */}
-        {showModal && (
+      </div>
+
+      {/* Blog Form Modal */}
+      {showModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
             <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full mx-4 p-8 relative border-4 border-brand-primary max-h-[90vh] overflow-y-auto">
               {loading && (
@@ -598,8 +600,8 @@ export default function AdminBlog() {
           </div>
         )}
 
-        {/* Delete Confirmation Modal - Updated to match banner style */}
-        {showDeleteModal && deletingBlog && (
+      {/* Delete Confirmation Modal - Updated to match banner style */}
+      {showDeleteModal && deletingBlog && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
             <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-8 relative border-4 border-brand-error/20">
               {deleteLoading && (
@@ -633,7 +635,6 @@ export default function AdminBlog() {
             </div>
           </div>
         )}
-      </div>
     </AdminLayout>
   )
 } 

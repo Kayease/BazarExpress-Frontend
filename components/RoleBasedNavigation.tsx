@@ -216,7 +216,44 @@ const RoleBasedNavigation: React.FC = () => {
   const pathname = usePathname();
   const { canAccessSection, user } = useRoleAccess();
 
+  // Delivery agent specific navigation
+  const getDeliveryAgentNavigation = (): NavigationItem[] => {
+    return [
+      {
+        name: 'Dashboard',
+        href: '/admin',
+        icon: LayoutDashboard,
+        section: 'dashboard'
+      },
+      {
+        name: 'Orders',
+        href: '/admin/orders',
+        icon: ShoppingCart,
+        section: 'orders',
+        children: [
+          {
+            name: 'Shipped Orders',
+            href: '/admin/orders/shipped',
+            icon: Truck,
+            section: 'orders'
+          },
+          {
+            name: 'Delivered Orders',
+            href: '/admin/orders/delivered',
+            icon: ShoppingCart,
+            section: 'orders'
+          }
+        ]
+      }
+    ];
+  };
+
   const filterNavigationItems = (items: NavigationItem[]): NavigationItem[] => {
+    // For delivery agents, use specific navigation
+    if (user?.role === 'delivery_boy') {
+      return getDeliveryAgentNavigation();
+    }
+
     return items.filter(item => {
       // Admin can access everything
       if (user?.role === 'admin') return true;
@@ -314,6 +351,23 @@ const RoleBasedNavigation: React.FC = () => {
           <div className="text-xs text-green-600">
             You can manage orders from your assigned warehouse(s) only
           </div>
+        </div>
+      )}
+
+      {/* Logout button for delivery agents */}
+      {user.role === 'delivery_boy' && (
+        <div className="mt-6">
+          <button
+            onClick={() => {
+              // Clear auth data and redirect to home
+              localStorage.removeItem('token');
+              localStorage.removeItem('user');
+              window.location.href = '/';
+            }}
+            className="w-full px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition-colors"
+          >
+            Logout
+          </button>
         </div>
       )}
     </nav>

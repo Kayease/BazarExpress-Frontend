@@ -499,9 +499,10 @@ ${window.location.origin}/newsletter/unsubscribe
             </button>
           </div>
         )}
+      </div>
         
-        {/* Delete Confirmation Modal */}
-        {deleteModalOpen && subscriberToDelete && (
+      {/* Delete Confirmation Modal */}
+      {deleteModalOpen && subscriberToDelete && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
             <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-8 relative border-4 border-brand-error/20">
               {deleteLoading && (
@@ -532,7 +533,6 @@ ${window.location.origin}/newsletter/unsubscribe
             </div>
           </div>
         )}
-      </div>
     </AdminLayout>
   )
 } 

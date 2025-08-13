@@ -31,13 +31,19 @@ interface LocationBasedProductsProps {
   categoryId?: string;
   searchQuery?: string;
   pincode?: string | null;
+  status?: string;
+  selectedWarehouse?: string;
+  sortBy?: string;
 }
 
 
 export function LocationBasedProducts({ 
   categoryId, 
   searchQuery,
-  pincode
+  pincode,
+  status,
+  selectedWarehouse = 'all',
+  sortBy = 'name'
 }: LocationBasedProductsProps) {
   const { 
     selectedLocation, 
@@ -61,10 +67,7 @@ export function LocationBasedProducts({
   const [totalPages, setTotalPages] = useState(0);
   const productsPerPage = 12;
   
-  // Filters
-  const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery || '');
-  const [selectedWarehouse, setSelectedWarehouse] = useState<string>('all');
-  const [sortBy, setSortBy] = useState<string>('name');
+  // No internal filters needed - all handled by parent
 
   // Load products when location or filters change
   useEffect(() => {
@@ -76,7 +79,7 @@ export function LocationBasedProducts({
       setTotalProducts(0);
     }
 
-  }, [pincode, selectedLocation, deliveryAvailable, categoryId, currentPage, selectedWarehouse, sortBy]);
+  }, [pincode, selectedLocation, deliveryAvailable, categoryId, currentPage, selectedWarehouse, sortBy, status]);
 
   // Load products from API
   const loadProducts = async () => {
@@ -95,9 +98,10 @@ export function LocationBasedProducts({
     try {
       const response = await getProductsByLocation(locationArg, {
         category: categoryId,
-        search: localSearchQuery || searchQuery,
+        search: searchQuery,
         page: currentPage,
-        limit: productsPerPage
+        limit: productsPerPage,
+        status: status
       });
 
       if (response.success && response.deliveryAvailable) {
@@ -147,11 +151,7 @@ export function LocationBasedProducts({
 
   };
 
-  // Handle search
-  const handleSearch = () => {
-    setCurrentPage(1);
-    loadProducts();
-  };
+
 
   // Handle add to cart
   const handleAddToCart = (product: ProductWithDelivery) => {
@@ -254,70 +254,7 @@ export function LocationBasedProducts({
         </div>
       </div>
 
-      {/* Search and Filters */}
 
-      <div className="flex flex-col lg:flex-row gap-4">
-        {/* Search */}
-
-        <div className="flex-1">
-          <div className="flex gap-2">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search products..."
-                value={localSearchQuery}
-
-                onChange={(e) => setLocalSearchQuery(e.target.value)}
-
-                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-
-                className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-              />
-            </div>
-            <Button onClick={handleSearch} size="sm">
-              Search
-            </Button>
-          </div>
-        </div>
-
-        {/* Warehouse Filter */}
-
-        <div className="lg:w-48">
-          <select
-            value={selectedWarehouse}
-
-            onChange={(e) => setSelectedWarehouse(e.target.value)}
-
-            className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-          >
-            <option value="all">All Warehouses</option>
-            {availableWarehouses.map((warehouse) => (
-              <option key={warehouse.warehouseId} value={warehouse.warehouseId}>
-                {warehouse.warehouseName} ({formatDistance(warehouse.distance)})
-              </option>
-            ))}
-
-          </select>
-        </div>
-
-        {/* Sort */}
-
-        <div className="lg:w-40">
-          <select
-            value={sortBy}
-
-            onChange={(e) => setSortBy(e.target.value)}
-
-            className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-          >
-            <option value="name">Name</option>
-            <option value="price-low">Price: Low to High</option>
-            <option value="price-high">Price: High to Low</option>
-            <option value="distance">Distance</option>
-          </select>
-        </div>
-      </div>
 
       {/* Results Summary */}
       <div className="flex items-center justify-between">

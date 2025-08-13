@@ -317,7 +317,7 @@ export default function Navbar() {
                             <ShoppingCart size={16} />
                             <span>My Orders</span>
                             </Link>
-                          {user?.role && ['admin', 'product_inventory_management', 'order_warehouse_management', 'marketing_content_manager', 'customer_support_executive', 'report_finance_analyst'].includes(user.role) && (
+                          {user?.role && ['admin', 'product_inventory_management', 'order_warehouse_management', 'marketing_content_manager', 'customer_support_executive', 'report_finance_analyst', 'delivery_boy'].includes(user.role) && (
                               <Link
                               href="/admin"
                               className="flex items-center space-x-3 px-3 py-2 text-indigo-600 hover:bg-indigo-50 rounded-lg font-semibold"
@@ -423,7 +423,7 @@ export default function Navbar() {
                   </div>
 
                   {/* Admin Panel - First if user is admin */}
-                  {user?.role && ['admin', 'product_inventory_management', 'order_warehouse_management', 'marketing_content_manager', 'customer_support_executive', 'report_finance_analyst'].includes(user.role) && (
+                  {user?.role && ['admin', 'product_inventory_management', 'order_warehouse_management', 'marketing_content_manager', 'customer_support_executive', 'report_finance_analyst', 'delivery_boy'].includes(user.role) && (
                     <Link
                       href="/admin"
                       className="w-full flex items-center p-3 bg-indigo-50 border border-indigo-100 rounded-lg text-indigo-600"

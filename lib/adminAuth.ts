@@ -6,7 +6,8 @@ export const ADMIN_ROLES = [
   'order_warehouse_management', 
   'marketing_content_manager',
   'customer_support_executive',
-  'report_finance_analyst'
+  'report_finance_analyst',
+  'delivery_boy'
 ] as const;
 
 export type AdminRole = typeof ADMIN_ROLES[number];
@@ -44,7 +45,10 @@ export const hasAccessToSection = (userRole?: string, section?: string): boolean
     ],
     'product_inventory_management': [
       'products', 'brands', 'categories'
-    ]
+    ],
+    'delivery_boy': [
+      'orders', 'warehouse'
+    ],
   };
   
   const allowedSections = rolePermissions[userRole] || [];
@@ -68,6 +72,8 @@ export const getRoleDisplayName = (role?: string): string => {
       return 'Warehouse Manager';
     case 'product_inventory_management':
       return 'Inventory Manager';
+    case 'delivery_boy':
+      return 'Delivery Boy';
     default:
       return 'User';
   }

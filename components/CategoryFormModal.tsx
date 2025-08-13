@@ -5,6 +5,7 @@ import toast from "react-hot-toast";
 import * as LucideIcons from "lucide-react";
 import { uploadToCloudinary } from '../lib/uploadToCloudinary';
 import { apiPost, apiPut } from '../lib/api-client';
+import ImageCropper from './ImageCropper';
 
 interface Category {
   _id?: string;
@@ -58,6 +59,8 @@ export default function CategoryFormModal({ open, onClose, onSuccess, categories
   const [loading, setLoading] = useState(false);
   const [thumbnailPreview, setThumbnailPreview] = useState<string>("");
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
+  const [showCropper, setShowCropper] = useState(false);
+  const [originalImageSrc, setOriginalImageSrc] = useState<string>("");
   const thumbnailInputRef = useRef<HTMLInputElement>(null);
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -74,6 +77,8 @@ export default function CategoryFormModal({ open, onClose, onSuccess, categories
         setThumbnailPreview("");
       }
       setThumbnailFile(null);
+      setShowCropper(false);
+      setOriginalImageSrc("");
       if (thumbnailInputRef.current) thumbnailInputRef.current.value = "";
     }
   }, [open, parentId, category]);
@@ -94,10 +99,50 @@ export default function CategoryFormModal({ open, onClose, onSuccess, categories
   const handleThumbnailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setThumbnailFile(file);
-      setThumbnailPreview(URL.createObjectURL(file));
-      setForm(f => ({ ...f, thumbnail: undefined }));
+      // Check file size (limit to 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error("Image size should be less than 10MB");
+        return;
+      }
+      
+      // Check file type
+      if (!file.type.startsWith('image/')) {
+        toast.error("Please select a valid image file");
+        return;
+      }
+      
+      const imageUrl = URL.createObjectURL(file);
+      setOriginalImageSrc(imageUrl);
+      setShowCropper(true);
     }
+  };
+
+  const handleCropComplete = (croppedImageBlob: Blob) => {
+    // Convert blob to file
+    const croppedFile = new File([croppedImageBlob], 'cropped-image.jpg', {
+      type: 'image/jpeg',
+    });
+    
+    setThumbnailFile(croppedFile);
+    setThumbnailPreview(URL.createObjectURL(croppedImageBlob));
+    setForm(f => ({ ...f, thumbnail: undefined }));
+    setShowCropper(false);
+    
+    // Clean up the original image URL
+    if (originalImageSrc) {
+      URL.revokeObjectURL(originalImageSrc);
+      setOriginalImageSrc("");
+    }
+  };
+
+  const handleCropCancel = () => {
+    setShowCropper(false);
+    if (originalImageSrc) {
+      URL.revokeObjectURL(originalImageSrc);
+      setOriginalImageSrc("");
+    }
+    // Reset file input
+    if (thumbnailInputRef.current) thumbnailInputRef.current.value = "";
   };
 
   const handleRemoveThumbnail = () => {
@@ -277,7 +322,7 @@ export default function CategoryFormModal({ open, onClose, onSuccess, categories
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mt-1">
                 <label
                   htmlFor="category-thumbnail-upload"
-                  className="relative flex flex-col items-center justify-center w-32 h-32 border-2 border-dashed border-brand-primary rounded-lg bg-brand-primary/5 hover:bg-brand-primary/10 transition-colors cursor-pointer group focus:outline-none"
+                  className="relative flex flex-col items-center justify-center w-48 h-48 flex-shrink-0 border-2 border-dashed border-brand-primary rounded-lg bg-brand-primary/5 hover:bg-brand-primary/10 transition-colors cursor-pointer group focus:outline-none"
                 >
                   {thumbnailPreview ? (
                     <>
@@ -309,7 +354,12 @@ export default function CategoryFormModal({ open, onClose, onSuccess, categories
                   />
                 </label>
                 <div className="flex flex-col gap-1">
-                  <span className="text-xs text-gray-500">Recommended: 256x256px or larger, square image.</span>
+                  <span className="text-xs text-gray-500">
+                    Required: 746x768px dimensions. Image will be automatically cropped to fit.
+                  </span>
+                  <span className="text-xs text-gray-400">
+                    Supported formats: PNG, JPG, JPEG, GIF (max 10MB)
+                  </span>
                   {thumbnailPreview && (
                     <button
                       type="button"
@@ -343,6 +393,20 @@ export default function CategoryFormModal({ open, onClose, onSuccess, categories
           </div>
         </form>
       </div>
+
+      {/* Image Cropper Modal */}
+      {showCropper && originalImageSrc && (
+        <ImageCropper
+          src={originalImageSrc}
+          onCropComplete={handleCropComplete}
+          onCancel={handleCropCancel}
+          aspectRatio={746 / 768}
+          targetWidth={746}
+          targetHeight={768}
+          minWidth={100}
+          minHeight={100}
+        />
+      )}
     </div>,
     typeof window !== 'undefined' ? document.body : (null as any)
   );

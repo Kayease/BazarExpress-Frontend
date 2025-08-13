@@ -288,7 +288,7 @@ const AddCategoryPage = () => {
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mt-1">
                   <label
                     htmlFor="category-thumbnail-upload"
-                    className="relative flex flex-col items-center justify-center w-32 h-32 border-2 border-dashed border-brand-primary rounded-lg bg-brand-primary/5 hover:bg-brand-primary/10 transition-colors cursor-pointer group focus:outline-none"
+                    className="relative flex flex-col items-center justify-center w-48 h-48 flex-shrink-0 border-2 border-dashed border-brand-primary rounded-lg bg-brand-primary/5 hover:bg-brand-primary/10 transition-colors cursor-pointer group focus:outline-none"
                   >
                     {form.thumbnail ? (
                       <>
@@ -320,7 +320,7 @@ const AddCategoryPage = () => {
                     />
                   </label>
                   <div className="flex flex-col gap-1">
-                    <span className="text-xs text-gray-500">Recommended: 256x256px or larger, square image.</span>
+                    <span className="text-xs text-gray-500">Recommended: 746x768px or larger, square image.</span>
                     {form.thumbnail && (
                       <button
                         type="button"

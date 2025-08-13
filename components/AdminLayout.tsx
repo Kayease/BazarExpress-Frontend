@@ -53,7 +53,7 @@ const getRoleBasedMenuItems = (userRole: string) => {
     {
       title: "Admin Dashboard",
       items: [
-        { name: "Home", href: "/admin", icon: Home, roles: ['admin', 'marketing_content_manager', 'customer_support_executive', 'report_finance_analyst', 'order_warehouse_management', 'product_inventory_management'] },
+        { name: "Home", href: "/admin", icon: Home, roles: ['admin', 'marketing_content_manager', 'customer_support_executive', 'report_finance_analyst', 'order_warehouse_management', 'product_inventory_management', 'delivery_boy'] },
         { name: "Users", href: "/admin/users", icon: Users, roles: ['admin', 'customer_support_executive'] },
         { name: "Reports", href: "/admin/reports", icon: BarChart3, roles: ['admin', 'report_finance_analyst'] },
         { name: "Notice", href: "/admin/notices", icon: Bell, roles: ['admin', 'marketing_content_manager'] },
@@ -97,15 +97,16 @@ const getRoleBasedMenuItems = (userRole: string) => {
     {
       title: "ORDERS",
       items: [
-        { name: "All Orders", href: "/admin/orders", icon: ShoppingCart, roles: ['admin', 'customer_support_executive', 'order_warehouse_management'] },
+        { name: "All Orders", href: "/admin/orders", icon: ShoppingCart, roles: ['admin', 'customer_support_executive', 'order_warehouse_management', 'delivery_boy'] },
         { name: "New Orders", href: "/admin/orders/new", icon: ShoppingBag, roles: ['admin', 'customer_support_executive', 'order_warehouse_management'] },
         { name: "Processing Orders", href: "/admin/orders/processing", icon: Package, roles: ['admin', 'customer_support_executive', 'order_warehouse_management'] },
-        { name: "Shipped Orders", href: "/admin/orders/shipped", icon: Truck, roles: ['admin', 'customer_support_executive', 'order_warehouse_management'] },
-        { name: "Delivered Orders", href: "/admin/orders/delivered", icon: CheckCircle, roles: ['admin', 'customer_support_executive', 'order_warehouse_management'] },
+        { name: "Shipped Orders", href: "/admin/orders/shipped", icon: Truck, roles: ['admin', 'customer_support_executive', 'order_warehouse_management', 'delivery_boy'] },
+        { name: "Delivered Orders", href: "/admin/orders/delivered", icon: CheckCircle, roles: ['admin', 'customer_support_executive', 'order_warehouse_management', 'delivery_boy'] },
         { name: "Cancelled Orders", href: "/admin/orders/cancelled", icon: X, roles: ['admin', 'customer_support_executive', 'order_warehouse_management'] },
         { name: "Refunded Orders", href: "/admin/orders/refunded", icon: RefreshCw, roles: ['admin', 'customer_support_executive', 'order_warehouse_management'] },
       ],
     },
+
     {
       title: "OTHER",
       items: [
@@ -237,6 +238,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                  user?.role === 'report_finance_analyst' ? 'Finance Analyst' :
                  user?.role === 'order_warehouse_management' ? 'Warehouse Manager' :
                  user?.role === 'product_inventory_management' ? 'Inventory Manager' :
+                 user?.role === 'delivery_boy' ? 'Delivery Agent' :
                  'User'}
               </div>
             </div>

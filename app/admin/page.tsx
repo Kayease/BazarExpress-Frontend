@@ -9,7 +9,7 @@ import { apiGet } from "../../lib/api-client"
 import { API_URL, CURRENCY } from "../../lib/config"
 import {
   Users, ShoppingCart, Package, IndianRupee, TrendingUp, Eye, Tag, Grid3X3, Building2,
-  Truck, CheckCircle, X, RefreshCw, Mail, BarChart3, Percent, Bell, Image
+  Truck, CheckCircle, X, RefreshCw, Mail, BarChart3, Percent, Bell, Image, Clock, MapPin, Warehouse
 } from "lucide-react"
 
 interface DashboardResponse {
@@ -34,6 +34,9 @@ interface DashboardResponse {
   // Finance
   revenueByDay?: { _id: string; total: number }[]
   ordersByDay?: { _id: string; total: number }[]
+  // Delivery Boy
+  todayDeliveries?: any[]
+  recentDeliveries?: any[]
 }
 
 export default function AdminDashboard() {
@@ -275,6 +278,38 @@ export default function AdminDashboard() {
     </div>
   )
 
+  // Skeleton Loading for Delivery agent Role
+  const renderDeliveryBoySkeleton = () => (
+    <div className="space-y-6">
+      <div className="bg-gradient-to-r from-orange-600 to-red-600 rounded-lg p-6 text-white">
+        <div className="animate-pulse">
+          <div className="h-8 bg-white/20 rounded w-56 mb-2"></div>
+          <div className="h-4 bg-white/10 rounded w-48"></div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <SkeletonStat />
+        <SkeletonStat />
+        <SkeletonStat />
+        <SkeletonStat />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <SkeletonCard title="Assigned Warehouses">
+          <SkeletonChips count={2} />
+        </SkeletonCard>
+        <SkeletonCard title="Today's Performance">
+          <SkeletonList items={3} />
+        </SkeletonCard>
+      </div>
+
+      <SkeletonCard title="Recent Deliveries">
+        <SkeletonTable rows={5} cols={5} />
+      </SkeletonCard>
+    </div>
+  )
+
   // Skeleton Loading for Finance Role
   const renderFinanceSkeleton = () => (
     <div className="space-y-6">
@@ -331,6 +366,8 @@ export default function AdminDashboard() {
         return renderSupportSkeleton()
       case 'report_finance_analyst':
         return renderFinanceSkeleton()
+      case 'delivery_boy':
+        return renderDeliveryBoySkeleton()
       default:
         return renderAdminSkeleton()
     }
@@ -1023,6 +1060,219 @@ export default function AdminDashboard() {
     )
   }
 
+  // Role: Delivery Agent
+  const renderDeliveryBoy = () => (
+    <div className="space-y-6">
+      <div className="bg-gradient-to-r from-orange-500 to-red-500 rounded-lg p-6 text-white">
+        <h2 className="text-2xl font-bold mb-2">Welcome back, {user?.name || 'Delivery Agent'}!</h2>
+        <p className="text-gray-200">Here's your delivery overview for today.</p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <Stat label="Total Assigned" value={numberFmt.format(data?.cards?.assignedOrders || 0)} icon={Package} colorClass="text-blue-600" bg="bg-blue-100" />
+        <Stat label="Pending Orders" value={numberFmt.format(data?.cards?.shippedOrders || 0)} icon={Truck} colorClass="text-purple-600" bg="bg-purple-100" />
+        <Stat label="Delivered Today" value={numberFmt.format(data?.cards?.deliveredToday || 0)} icon={CheckCircle} colorClass="text-green-600" bg="bg-green-100" />
+        <Stat label="Total Delivered" value={numberFmt.format(data?.cards?.deliveredOrders || 0)} icon={CheckCircle} colorClass="text-emerald-600" bg="bg-emerald-100" />
+      </div>
+
+      {/* Cancelled/Refunded after delivery stats - only show if there are any */}
+      {((data?.cards?.cancelledAfterDelivery || 0) + (data?.cards?.refundedAfterDelivery || 0)) > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Stat label="Cancelled After Delivery" value={numberFmt.format(data?.cards?.cancelledAfterDelivery || 0)} icon={X} colorClass="text-red-600" bg="bg-red-100" />
+          <Stat label="Refunded After Delivery" value={numberFmt.format(data?.cards?.refundedAfterDelivery || 0)} icon={RefreshCw} colorClass="text-orange-600" bg="bg-orange-100" />
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <SectionCard title="Assigned Warehouses">
+          <div className="space-y-3">
+            {(data?.assignedWarehouses || []).map((warehouse: any) => (
+              <div key={warehouse._id} className="flex items-center p-3 bg-orange-50 rounded-lg border border-orange-200">
+                <MapPin className="h-5 w-5 text-orange-600 mr-3" />
+                <div>
+                  <p className="font-medium text-orange-800">{warehouse.name}</p>
+                  {warehouse.address && (
+                    <p className="text-sm text-orange-600">{warehouse.address}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+            {(!data?.assignedWarehouses || data.assignedWarehouses.length === 0) && (
+              <div className="text-center py-6">
+                <Warehouse className="h-12 w-12 text-gray-400 mx-auto mb-2" />
+                <p className="text-gray-500 text-sm">No warehouses assigned</p>
+                <p className="text-xs text-gray-400 mt-1">Contact admin to assign warehouses</p>
+              </div>
+            )}
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Delivery Performance Chart">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-sm font-medium text-gray-700">Today's Activity</h4>
+              <div className="flex items-center space-x-2">
+                <div className="flex items-center">
+                  <div className="w-3 h-3 bg-green-500 rounded-full mr-1"></div>
+                  <span className="text-xs text-gray-600">Delivered</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-3 h-3 bg-purple-500 rounded-full mr-1"></div>
+                  <span className="text-xs text-gray-600">Pending</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-3 h-3 bg-blue-500 rounded-full mr-1"></div>
+                  <span className="text-xs text-gray-600">Valid Orders</span>
+                </div>
+              </div>
+            </div>
+            
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-3 bg-gradient-to-r from-green-50 to-green-100 rounded-lg border border-green-200">
+                <div className="flex items-center">
+                  <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
+                  <span className="text-sm font-medium text-green-800">Delivered Today</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-xl font-bold text-green-600">{data?.cards?.deliveredToday || 0}</span>
+                  <div className="text-xs text-green-500">
+                    {data?.cards?.todayAssignedOrdersExcludingCancelledRefunded && data.cards.todayAssignedOrdersExcludingCancelledRefunded > 0 ? 
+                      `${Math.round((data.cards.deliveredToday / data.cards.todayAssignedOrdersExcludingCancelledRefunded) * 100)}% completion` : 
+                      '0% completion'
+                    }
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex items-center justify-between p-3 bg-gradient-to-r from-purple-50 to-purple-100 rounded-lg border border-purple-200">
+                <div className="flex items-center">
+                  <Truck className="h-5 w-5 text-purple-600 mr-2" />
+                  <span className="text-sm font-medium text-purple-800">Pending Delivery</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-xl font-bold text-purple-600">{data?.cards?.shippedOrders || 0}</span>
+                  <div className="text-xs text-purple-500">Shipped orders not delivered yet</div>
+                </div>
+              </div>
+              
+              <div className="flex items-center justify-between p-3 bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg border border-blue-200">
+                <div className="flex items-center">
+                  <Package className="h-5 w-5 text-blue-600 mr-2" />
+                  <span className="text-sm font-medium text-blue-800">Today's Valid Orders</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-xl font-bold text-blue-600">{ ((data?.cards?.shippedOrders)+(data?.cards?.deliveredToday))|| 0}</span>
+                  <div className="text-xs text-blue-500">Assigned today (excluding cancelled/refunded)</div>
+                </div>
+              </div>
+
+              {/* Show cancelled/refunded after delivery info if any exist today */}
+              {((data?.cards?.todayCancelledAfterDelivery || 0) + (data?.cards?.todayRefundedAfterDelivery || 0)) > 0 && (
+                <div className="flex items-center justify-between p-3 bg-gradient-to-r from-red-50 to-orange-50 rounded-lg border border-red-200">
+                  <div className="flex items-center">
+                    <X className="h-5 w-5 text-red-600 mr-2" />
+                    <span className="text-sm font-medium text-red-800">Today's Cancelled/Refunded (After Delivery)</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xl font-bold text-red-600">
+                      {(data?.cards?.todayCancelledAfterDelivery || 0) + (data?.cards?.todayRefundedAfterDelivery || 0)}
+                    </span>
+                    <div className="text-xs text-red-500">
+                      {data?.cards?.todayCancelledAfterDelivery || 0} cancelled, {data?.cards?.todayRefundedAfterDelivery || 0} refunded
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {/* Corrected progress chart */}
+            <div className="mt-4">
+              <div className="flex justify-between text-xs text-gray-600 mb-1">
+                <span>Delivery Progress (Valid Orders Only)</span>
+                <span>{data?.cards?.deliveredToday || 0} / {((data?.cards?.shippedOrders || 0)+(data?.cards?.deliveredToday || 0))}</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div 
+                  className="bg-gradient-to-r from-green-400 to-green-600 h-2 rounded-full transition-all duration-300" 
+                  style={{ 
+                    width: `${((data?.cards?.shippedOrders || 0)+(data?.cards?.deliveredToday || 0)) > 0 ? 
+                      Math.min(100, ((data?.cards?.deliveredToday || 0) / ((data?.cards?.shippedOrders || 0)+(data?.cards?.deliveredToday || 0))) * 100) : 0
+                    }%` 
+                  }}
+                ></div>
+              </div>
+            </div>
+          </div>
+        </SectionCard>
+      </div>
+
+      <SectionCard title="Today's Deliveries" className="col-span-full">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b-2 border-gray-200 bg-gray-50">
+                <th className="text-left py-3 px-4 font-semibold text-gray-700">Order ID</th>
+                <th className="text-left py-3 px-4 font-semibold text-gray-700">Customer</th>
+                <th className="text-center py-3 px-4 font-semibold text-gray-700">Delivery Address</th>
+                <th className="text-center py-3 px-4 font-semibold text-gray-700">Amount</th>
+                <th className="text-center py-3 px-16 font-semibold text-gray-700">Delivered At</th>
+                <th className="text-center py-3 px-4 font-semibold text-gray-700">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(data?.todayDeliveries || []).map((delivery: any) => (
+                <tr key={delivery._id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                  <td className="py-3 px-4 font-medium text-blue-600">
+                  <div>
+                      <p className="font-medium text-gray-900">{delivery.orderId}</p>
+                      <p className="text-sm text-gray-500">{delivery.items.length} items</p>
+                    </div>
+                  </td>
+                  <td className="py-3 px-4">
+                    <div>
+                      <p className="font-medium text-gray-900">{delivery.customerInfo?.name}</p>
+                      <p className="text-sm text-gray-500">{delivery.customerInfo?.phone}</p>
+                    </div>
+                  </td>
+                  <td className="py-3 px-4 text-center">
+                    <div className="max-w-md">
+                      <p className="text-sm text-gray-600">{delivery.deliveryInfo?.address?.area}, {delivery.deliveryInfo?.address?.city}</p>
+                    </div>
+                  </td>
+                  <td className="py-3 px-4 text-center font-medium text-green-600">{currency(delivery.pricing?.total || 0)}</td>
+                  <td className="py-3 px-4 text-center text-sm text-gray-600">
+                    {delivery.actualDeliveryDate ? (
+                      <div>
+                        <p className="font-medium">{new Date(delivery.actualDeliveryDate).toLocaleDateString()}</p>
+                        <p className="text-xs text-gray-500">{new Date(delivery.actualDeliveryDate).toLocaleTimeString()}</p>
+                      </div>
+                    ) : '-'}
+                  </td>
+                  <td className="py-3 px-4 text-center">
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      <CheckCircle className="h-3 w-3 mr-1" />
+                      Delivered
+                    </span>
+                  </td>
+                </tr>
+              ))}
+              {(!data?.todayDeliveries || data?.todayDeliveries.length === 0) && (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center">
+                    <div className="flex flex-col items-center">
+                      <CheckCircle className="h-12 w-12 text-gray-400 mb-2" />
+                      <p className="text-gray-500 text-sm">No deliveries completed today</p>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </SectionCard>
+    </div>
+  )
+
   // Render content based on role
   const renderContent = () => {
     if (!data) return null
@@ -1039,6 +1289,8 @@ export default function AdminDashboard() {
         return renderSupport()
       case 'report_finance_analyst':
         return renderFinance()
+      case 'delivery_boy':
+        return renderDeliveryBoy()
       default:
         return renderAdmin()
     }

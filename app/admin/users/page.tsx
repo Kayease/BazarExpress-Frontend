@@ -5,26 +5,28 @@ import { useRouter } from "next/navigation"
 import AdminLayout from "../../../components/AdminLayout"
 import { useAppSelector } from '../../../lib/store'
 import { isAdminUser, hasAccessToSection } from '../../../lib/adminAuth'
-import { Search, Edit, Trash2, Eye, Loader2, Check, X, User, Shield, Users, UserCheck, UserX, Mail, Phone, Calendar, MapPin, Lock } from "lucide-react"
+import { Search, Edit, Trash2, Eye, Loader2, Check, X, User, Shield, Users, UserCheck, UserX, Mail, Phone, Calendar, MapPin, Lock, Truck, RefreshCw } from "lucide-react"
 import toast from 'react-hot-toast'
 import { apiGet, apiDelete, apiPut, apiPost, apiPatch } from "../../../lib/api-client"
 
 type User = {
-  id: string;
+  id?: string;
+  _id?: string;
   name: string;
   email: string;
-  role: 'admin' | 'user' | 'product_inventory_management' | 'order_warehouse_management' | 'marketing_content_manager' | 'customer_support_executive' | 'report_finance_analyst';
+  role: 'admin' | 'user' | 'product_inventory_management' | 'order_warehouse_management' | 'marketing_content_manager' | 'customer_support_executive' | 'report_finance_analyst' | 'delivery_boy';
   status?: 'active' | 'disabled';
   phone?: string;
   dateOfBirth?: string;
   address?: any;
-  assignedWarehouses?: string[];
+  assignedWarehouses?: Array<string | {id?: string, _id?: string, name: string, address: string}>;
   createdAt?: string;
   lastLogin?: string;
 };
 
 type Warehouse = {
-  id: string;
+  id?: string;
+  _id?: string;
   name: string;
   address: string;
 };
@@ -32,7 +34,7 @@ type Warehouse = {
 type EditFormType = {
   name: string;
   email: string;
-  role: 'admin' | 'user' | 'product_inventory_management' | 'order_warehouse_management' | 'marketing_content_manager' | 'customer_support_executive' | 'report_finance_analyst';
+  role: 'admin' | 'user' | 'product_inventory_management' | 'order_warehouse_management' | 'marketing_content_manager' | 'customer_support_executive' | 'report_finance_analyst' | 'delivery_boy';
   status: 'active' | 'disabled';
   phone: string;
   dateOfBirth: string;
@@ -45,6 +47,16 @@ type ReduxUser = User & { token?: string };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
+// Helper function to get warehouse ID (handles both 'id' and '_id')
+const getWarehouseId = (warehouse: any): string => {
+  return warehouse.id || warehouse._id || '';
+};
+
+// Helper function to get user ID (handles both 'id' and '_id')
+const getUserId = (user: any): string => {
+  return user.id || user._id || '';
+};
+
 const getRoleDisplayName = (role: string) => {
   const roleMap: { [key: string]: string } = {
     'user': 'User',
@@ -53,19 +65,21 @@ const getRoleDisplayName = (role: string) => {
     'order_warehouse_management': 'Order & Warehouse Management',
     'marketing_content_manager': 'Marketing & Content Manager',
     'customer_support_executive': 'Customer Support Executive',
-    'report_finance_analyst': 'Report & Finance Analyst'
+    'report_finance_analyst': 'Report & Finance Analyst',
+    'delivery_boy': 'Delivery Agent'
   };
   return roleMap[role] || role;
 };
 
 const roleConfig = {
   admin: { icon: Shield, color: "text-red-600", bg: "bg-red-100" },
-  user: { icon: User, color: "text-blue-600", bg: "bg-blue-100" },
+  user: { icon: User, color: "text-blue-600", bg: "bg-blue-100", isCustomer: true },
   product_inventory_management: { icon: Users, color: "text-green-600", bg: "bg-green-100" },
   order_warehouse_management: { icon: Users, color: "text-purple-600", bg: "bg-purple-100" },
   marketing_content_manager: { icon: Users, color: "text-yellow-600", bg: "bg-yellow-100" },
   customer_support_executive: { icon: Users, color: "text-indigo-600", bg: "bg-indigo-100" },
   report_finance_analyst: { icon: Users, color: "text-pink-600", bg: "bg-pink-100" },
+  delivery_boy: { icon: Truck, color: "text-orange-600", bg: "bg-orange-100" },
 }
 
 const statusConfig = {
@@ -105,18 +119,19 @@ export default function AdminUsers() {
   const [currentPage, setCurrentPage] = useState(1);
   const USERS_PER_PAGE = 20
 
-  // Calculate user stats
+  // Calculate user stats - ensure users is always an array
+  const safeUsers = Array.isArray(users) ? users : [];
   const userStats = {
-    total: users.length,
-    active: users.filter(u => u.status === 'active').length,
-    disabled: users.filter(u => u.status === 'disabled').length,
-    admin: users.filter(u => u.role === 'admin').length,
-    staff: users.filter(u => u.role !== 'admin' && u.role !== 'user').length,
-    customers: users.filter(u => u.role === 'user').length,
+    total: safeUsers.length,
+    active: safeUsers.filter(u => u.status === 'active').length,
+    disabled: safeUsers.filter(u => u.status === 'disabled').length,
+    admin: safeUsers.filter(u => u.role === 'admin').length,
+    staff: safeUsers.filter(u => u.role !== 'admin' && u.role !== 'user').length,
+    customers: safeUsers.filter(u => u.role === 'user').length,
   }
 
-  // Filter and sort users
-  const filteredUsers = users.filter((u) => {
+  // Filter and sort users - use safeUsers to ensure it's always an array
+  const filteredUsers = safeUsers.filter((u) => {
     const matchesSearch = u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (u.phone && u.phone.includes(searchTerm));
@@ -132,7 +147,8 @@ export default function AdminUsers() {
       'marketing_content_manager': 4,
       'customer_support_executive': 5,
       'report_finance_analyst': 6,
-      'user': 7
+      'delivery_boy': 7,
+      'user': 8
     };
     
     const aPriority = rolePriority[a.role] || 8;
@@ -155,11 +171,28 @@ export default function AdminUsers() {
     setLoading(true);
     setError("");
     try {
-      const data = await apiGet(`${API_URL}/auth/users`);
-      setUsers(data);
+      
+      const data = await apiGet(`${API_URL}/admin/users?includeAll=true`);
+      
+      // Handle different API response structures
+      if (data && Array.isArray(data.users)) {
+        // New format: { users: Array, pagination: {...} }
+        console.log("Using new format, found users:", data.users.length);
+        setUsers(data.users);
+      } else if (Array.isArray(data)) {
+        // Old format: direct array response
+        setUsers(data);
+      } else {
+        console.error("API returned invalid data structure:", data);
+        setUsers([]);
+        setError("Invalid data format received from server");
+        toast.error("Invalid data format received from server");
+      }
     } catch (err: any) {
+      console.error("Error fetching users:", err);
       setError(err.message || "Could not load users.");
       toast.error(err.message || "Could not load users.");
+      setUsers([]); // Ensure users is always an array even on error
     } finally {
       setLoading(false);
     }
@@ -172,9 +205,18 @@ export default function AdminUsers() {
     setWarehousesLoading(true);
     try {
       const data = await apiGet(`${API_URL}/auth/warehouses`);
-      setWarehouses(data);
+      const warehouseData = Array.isArray(data) ? data : [];
+      
+      // Log warehouse data for debugging
+      console.log("Fetched warehouses:", warehouseData);
+      if (editUser && editUser.assignedWarehouses) {
+        console.log("User's assigned warehouses:", editUser.assignedWarehouses);
+      }
+      
+      setWarehouses(warehouseData);
     } catch (err) {
       console.error("Could not load warehouses:", err);
+      setWarehouses([]);
     } finally {
       setWarehousesLoading(false);
     }
@@ -189,8 +231,8 @@ export default function AdminUsers() {
     
     setDeletingId(id);
     try {
-      await apiDelete(`${API_URL}/auth/users/${id}`);
-      setUsers(users.filter(u => u.id !== id));
+      await apiDelete(`${API_URL}/admin/users/${id}`);
+      setUsers((prevUsers) => Array.isArray(prevUsers) ? prevUsers.filter(u => getUserId(u) !== id) : []);
       toast.success("User deleted successfully");
     } catch (err: any) {
       toast.error(err.message || "Failed to delete user");
@@ -209,8 +251,8 @@ export default function AdminUsers() {
     
     setChangingRoleId(id);
     try {
-      await apiPatch(`${API_URL}/auth/users/${id}/role`, { role: newRole });
-      setUsers(users.map(u => u.id === id ? { ...u, role: newRole } : u));
+      await apiPut(`${API_URL}/admin/users/${id}`, { role: newRole });
+      setUsers((prevUsers) => Array.isArray(prevUsers) ? prevUsers.map(u => getUserId(u) === id ? { ...u, role: newRole } : u) : []);
       toast.success("User role updated successfully");
     } catch (err: any) {
       toast.error(err.message || "Failed to update user role");
@@ -221,8 +263,8 @@ export default function AdminUsers() {
 
   const handleStatusChange = async (id: string, newStatus: 'active' | 'disabled') => {
     try {
-      await apiPatch(`${API_URL}/auth/users/${id}/status`, { status: newStatus });
-      setUsers(users.map(u => u.id === id ? { ...u, status: newStatus } : u));
+      await apiPut(`${API_URL}/admin/users/${id}`, { status: newStatus });
+      setUsers((prevUsers) => Array.isArray(prevUsers) ? prevUsers.map(u => getUserId(u) === id ? { ...u, status: newStatus } : u) : []);
       toast.success(`User ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully`);
     } catch (err: any) {
       toast.error(err.message || "Failed to update user status");
@@ -230,6 +272,25 @@ export default function AdminUsers() {
   };
 
   const openEditModal = (u: User) => {
+    console.log("Opening edit modal for user:", u);
+    
+    // Ensure assignedWarehouses is always an array
+    const rawAssignedWarehouses = Array.isArray(u.assignedWarehouses) ? u.assignedWarehouses : [];
+    console.log("User's assigned warehouses:", rawAssignedWarehouses);
+    
+    // Extract warehouse IDs from assignedWarehouses (which might be objects or IDs)
+    const assignedWarehouseIds = rawAssignedWarehouses.map(warehouse => {
+      if (typeof warehouse === 'string') {
+        return warehouse; // Already an ID
+      } else if (warehouse && typeof warehouse === 'object') {
+        // Extract ID from warehouse object
+        return warehouse._id || warehouse.id || '';
+      }
+      return '';
+    }).filter(id => id !== ''); // Remove any empty IDs
+    
+    console.log("Extracted warehouse IDs:", assignedWarehouseIds);
+    
     setEditUser(u);
     setEditForm({
       name: u.name,
@@ -238,14 +299,14 @@ export default function AdminUsers() {
       status: u.status || 'active',
       phone: u.phone || '',
       dateOfBirth: u.dateOfBirth || '',
-      assignedWarehouses: u.assignedWarehouses || [],
+      assignedWarehouses: assignedWarehouseIds,
       newPassword: '',
       confirmPassword: '',
     });
     setEditModalOpen(true);
     
     // Load warehouses when opening the modal for roles that need it
-    if (u.role === 'product_inventory_management' || u.role === 'order_warehouse_management') {
+    if (u.role === 'product_inventory_management' || u.role === 'order_warehouse_management' || u.role === 'delivery_boy') {
       fetchWarehouses();
     }
   };
@@ -271,7 +332,7 @@ export default function AdminUsers() {
       const expirationTime = Date.now() + (10 * 60 * 1000); // 10 minutes
       
       // Generate a password reset link with expiration
-      const resetLink = `${window.location.origin}/admin/password-reset?userId=${user.id}&role=${user.role}&expires=${expirationTime}`;
+      const resetLink = `${window.location.origin}/admin/password-reset?userId=${getUserId(user)}&role=${user.role}&expires=${expirationTime}`;
       
       // Create email template
       const subject = encodeURIComponent("Password Reset Request - Bazar Admin");
@@ -309,6 +370,15 @@ Bazar Admin Team`);
     e.preventDefault();
     if (!editUser) return;
 
+    const userId = getUserId(editUser);
+    console.log("Submitting edit for user ID:", userId);
+    console.log("Edit form data:", editForm);
+    
+    if (!userId) {
+      toast.error("User ID is missing. Cannot update user.");
+      return;
+    }
+
     // Only admin can edit user details
     if (currentUser?.role !== 'admin') {
       toast.error("You don't have permission to edit user details");
@@ -338,11 +408,18 @@ Bazar Admin Team`);
       }
     }
 
+    // Validate warehouse assignment for roles that require it
+    if (editForm.role === 'product_inventory_management' || editForm.role === 'order_warehouse_management' || editForm.role === 'delivery_boy') {
+      if (!editForm.assignedWarehouses || editForm.assignedWarehouses.length === 0) {
+        toast.error("Please select at least one warehouse for this role");
+        return;
+      }
+    }
+
     setEditLoading(true);
     try {
-      // Merge updated fields with the existing user object to preserve all other fields
-      const updatedUser = {
-        ...editUser,
+      // Create a clean update payload with only the necessary fields
+      const updatePayload = {
         name: editForm.name,
         email: editForm.email,
         phone: editForm.phone,
@@ -350,20 +427,16 @@ Bazar Admin Team`);
         role: editForm.role,
         status: editForm.status,
         assignedWarehouses: editForm.assignedWarehouses,
+        ...(editForm.newPassword && editForm.newPassword.trim() !== '' && { password: editForm.newPassword })
       };
       
       // Update user details
-      await apiPut(`${API_URL}/auth/users/${editUser.id}`, updatedUser);
+      await apiPut(`${API_URL}/admin/users/${userId}`, updatePayload);
       
-      // Update password if provided
-      if (editForm.newPassword && editForm.newPassword.trim() !== '') {
-        await apiPatch(`${API_URL}/auth/users/${editUser.id}/password`, {
-          password: editForm.newPassword
-        });
-      }
+      // Password is already included in the updatePayload object if provided
       
       // Update users in state
-      setUsers(users.map(u => u.id === editUser.id ? { ...u, ...updatedUser } : u));
+      setUsers((prevUsers) => Array.isArray(prevUsers) ? prevUsers.map(u => getUserId(u) === userId ? { ...u, ...updatePayload } : u) : []);
       
       const successMessage = editForm.newPassword 
         ? "User updated successfully and password set" 
@@ -392,8 +465,8 @@ Bazar Admin Team`);
     if (!token) return;
     const newStatus = u.status === 'active' ? 'disabled' : 'active';
     try {
-      const res = await fetch(`${API_URL}/auth/users/${u.id}/status`, {
-        method: 'PATCH',
+      const res = await fetch(`${API_URL}/admin/users/${getUserId(u)}`, {
+        method: 'PUT',
         headers: { 
           'Content-Type': 'application/json', 
           Authorization: `Bearer ${token}` 
@@ -401,7 +474,7 @@ Bazar Admin Team`);
         body: JSON.stringify({ status: newStatus })
       });
       if (!res.ok) throw new Error('Failed to update status');
-      setUsers(users.map(user => user.id === u.id ? { ...user, status: newStatus } : user));
+      setUsers((prevUsers) => Array.isArray(prevUsers) ? prevUsers.map(user => getUserId(user) === getUserId(u) ? { ...user, status: newStatus } : user) : []);
       toast.success(`User ${newStatus === 'active' ? 'activated' : 'disabled'} successfully`);
     } catch (err) {
       toast.error('Failed to update user status');
@@ -445,8 +518,18 @@ Bazar Admin Team`);
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-codGray">Users Management</h2>
-            <p className="text-gray-600">Manage all system users and their roles</p>
+            <h2 className="text-2xl font-bold text-codGray">Users & Customers Management</h2>
+            <p className="text-gray-600">Manage all system users, staff, and customers</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={fetchUsers}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+              title="Refresh user list"
+            >
+              <RefreshCw className="h-4 w-4" />
+              <span>Refresh</span>
+            </button>
           </div>
         </div>
 
@@ -508,23 +591,24 @@ Bazar Admin Team`);
               onChange={(e) => setFilterRole(e.target.value)}
               className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
             >
-              <option value="all">All Roles</option>
-              <option value="admin">Admin</option>
-              <option value="user">Customer</option>
-              <option value="product_inventory_management">Product & Inventory</option>
-              <option value="order_warehouse_management">Order & Warehouse</option>
-              <option value="marketing_content_manager">Marketing & Content</option>
-              <option value="customer_support_executive">Customer Support</option>
-              <option value="report_finance_analyst">Report & Finance</option>
+              <option key="all" value="all">All Roles</option>
+              <option key="admin" value="admin">Admin</option>
+              <option key="user" value="user">Customer</option>
+              <option key="product_inventory_management" value="product_inventory_management">Product & Inventory</option>
+              <option key="order_warehouse_management" value="order_warehouse_management">Order & Warehouse</option>
+              <option key="marketing_content_manager" value="marketing_content_manager">Marketing & Content</option>
+              <option key="customer_support_executive" value="customer_support_executive">Customer Support</option>
+              <option key="report_finance_analyst" value="report_finance_analyst">Report & Finance</option>
+              <option key="delivery_boy" value="delivery_boy">Delivery Agent</option>
             </select>
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
               className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
             >
-              <option value="all">All Status</option>
-              <option value="active">Active</option>
-              <option value="disabled">Disabled</option>
+              <option key="all-status" value="all">All Status</option>
+              <option key="active-status" value="active">Active</option>
+              <option key="disabled-status" value="disabled">Disabled</option>
             </select>
           </div>
         </div>
@@ -550,16 +634,18 @@ Bazar Admin Team`);
                     </td>
                   </tr>
                 ) : (
-                  paginatedUsers.map((user) => {
-                    const RoleIcon = roleConfig[user.role as keyof typeof roleConfig].icon
-                    const roleColor = roleConfig[user.role as keyof typeof roleConfig].color
-                    const roleBg = roleConfig[user.role as keyof typeof roleConfig].bg
+                  paginatedUsers.map((user, index) => {
+                    // Default to User icon if role is not found in roleConfig
+                    const roleData = roleConfig[user.role as keyof typeof roleConfig] || roleConfig.user
+                    const RoleIcon = roleData.icon
+                    const roleColor = roleData.color
+                    const roleBg = roleData.bg
                     const StatusIcon = statusConfig[user.status as keyof typeof statusConfig]?.icon || UserCheck
                     const statusColor = statusConfig[user.status as keyof typeof statusConfig]?.color || "text-green-600"
                     const statusBg = statusConfig[user.status as keyof typeof statusConfig]?.bg || "bg-green-100"
 
                     return (
-                      <tr key={user.id} className="border-b border-gray-200 hover:bg-gray-50 transition group">
+                      <tr key={`user-${getUserId(user)}-${index}`} className={`border-b border-gray-200 hover:bg-gray-50 transition group ${user.role === 'user' ? 'bg-blue-50/30' : ''}`}>
                         <td className="py-3 px-4 align-middle">
                           <div>
                             <p className="font-medium text-sm text-codGray">{user.name}</p>
@@ -618,10 +704,18 @@ Bazar Admin Team`);
                                     Reset
                                   </button>
                                 )}
+                                
+                                {/* Customer indicator for regular users */}
+                                {user.role === 'user' && (
+                                  <span className="inline-flex items-center px-2 py-1.5 text-xs font-medium text-blue-600 bg-blue-100 rounded-lg">
+                                    <User className="h-3 w-3 mr-1" />
+                                    Customer
+                                  </span>
+                                )}
 
                                 {/* Status Toggle */}
                                 <button
-                                  onClick={() => handleStatusChange(user.id, user.status === 'active' ? 'disabled' : 'active')}
+                                  onClick={() => handleStatusChange(getUserId(user), user.status === 'active' ? 'disabled' : 'active')}
                                   className={`inline-flex items-center px-2 py-1.5 text-xs font-medium rounded-lg transition-colors shadow-sm ${
                                     user.status === 'active' 
                                       ? 'text-red-600 bg-red-100 hover:bg-red-200' 
@@ -634,7 +728,7 @@ Bazar Admin Team`);
 
                                 {/* Delete Button */}
                                 <button
-                                  onClick={() => setConfirmDelete(user.id)}
+                                  onClick={() => setConfirmDelete(getUserId(user))}
                                   className="inline-flex items-center px-2 py-1.5 text-xs font-medium text-red-600 bg-red-100 hover:bg-red-200 rounded-lg transition-colors shadow-sm"
                                   title="Delete User"
                                 >
@@ -649,7 +743,7 @@ Bazar Admin Team`);
                                 {/* Can only change status of regular users */}
                                 {user.role === 'user' ? (
                                   <button
-                                    onClick={() => handleStatusChange(user.id, user.status === 'active' ? 'disabled' : 'active')}
+                                    onClick={() => handleStatusChange(getUserId(user), user.status === 'active' ? 'disabled' : 'active')}
                                     className={`inline-flex items-center px-2 py-1.5 text-xs font-medium rounded-lg transition-colors shadow-sm ${
                                       user.status === 'active' 
                                         ? 'text-red-600 bg-red-100 hover:bg-red-200' 
@@ -812,7 +906,12 @@ Bazar Admin Team`);
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Role
+                    {editUser && currentUser && getUserId(editUser) === getUserId(currentUser) && (
+                      <span className="text-xs text-amber-600 ml-2">(You cannot change your own role)</span>
+                    )}
+                  </label>
                   <select
                     value={editForm.role}
                     onChange={(e) => {
@@ -825,19 +924,25 @@ Bazar Admin Team`);
                       });
                       
                       // Fetch warehouses if switching to a warehouse-dependent role
-                      if (newRole === 'product_inventory_management' || newRole === 'order_warehouse_management') {
+                      if (newRole === 'product_inventory_management' || newRole === 'order_warehouse_management' || newRole === 'delivery_boy') {
                         fetchWarehouses();
                       }
                     }}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                    disabled={
+                      editUser && currentUser && getUserId(editUser) === getUserId(currentUser)
+                        ? true
+                        : undefined
+                    }
                   >
-                    <option value="user">Customer</option>
-                    <option value="admin">Admin</option>
-                    <option value="product_inventory_management">Product & Inventory Management</option>
-                    <option value="order_warehouse_management">Order & Warehouse Management</option>
-                    <option value="marketing_content_manager">Marketing & Content Manager</option>
-                    <option value="customer_support_executive">Customer Support Executive</option>
-                    <option value="report_finance_analyst">Report & Finance Analyst</option>
+                    <option key="user" value="user">Customer</option>
+                    <option key="admin" value="admin">Admin</option>
+                    <option key="product_inventory_management" value="product_inventory_management">Product & Inventory Management</option>
+                    <option key="order_warehouse_management" value="order_warehouse_management">Order & Warehouse Management</option>
+                    <option key="marketing_content_manager" value="marketing_content_manager">Marketing & Content Manager</option>
+                    <option key="customer_support_executive" value="customer_support_executive">Customer Support Executive</option>
+                    <option key="report_finance_analyst" value="report_finance_analyst">Report & Finance Analyst</option>
+                    <option key="delivery_boy" value="delivery_boy">Delivery Agent</option>
                   </select>
                 </div>
                 <div>
@@ -847,8 +952,8 @@ Bazar Admin Team`);
                     onChange={(e) => setEditForm({ ...editForm, status: e.target.value as any })}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
                   >
-                    <option value="active">Active</option>
-                    <option value="disabled">Disabled</option>
+                    <option key="active" value="active">Active</option>
+                    <option key="disabled" value="disabled">Disabled</option>
                   </select>
                 </div>
                 <div>
@@ -899,7 +1004,7 @@ Bazar Admin Team`);
               )}
               
               {/* Warehouse Assignment for specific roles */}
-              {(editForm.role === 'product_inventory_management' || editForm.role === 'order_warehouse_management') && (
+              {(editForm.role === 'product_inventory_management' || editForm.role === 'order_warehouse_management' || editForm.role === 'delivery_boy') && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Assigned Warehouses
@@ -911,42 +1016,74 @@ Bazar Admin Team`);
                       Loading warehouses...
                     </div>
                   ) : (
-                    <div className="border border-gray-300 rounded-lg p-3 max-h-40 overflow-y-auto">
+                    <div className={`border rounded-lg p-3 max-h-40 overflow-y-auto ${
+                      editForm.assignedWarehouses.length === 0 
+                        ? 'border-red-300 bg-red-50' 
+                        : 'border-gray-300'
+                    }`}>
                       {warehouses.length === 0 ? (
                         <p className="text-gray-500 text-sm">No warehouses available</p>
                       ) : (
-                        warehouses.map((warehouse) => (
-                          <label key={warehouse.id} className="flex items-center space-x-3 py-2 hover:bg-gray-50 px-2 rounded cursor-pointer">
+                        warehouses.map((warehouse, index) => {
+                          const warehouseId = getWarehouseId(warehouse);
+                          return (
+                          <label key={`warehouse-${warehouseId}-${index}`} className="flex items-center space-x-3 py-2 hover:bg-gray-50 px-2 rounded cursor-pointer">
                             <input
                               type="checkbox"
-                              checked={editForm.assignedWarehouses.includes(warehouse.id)}
+                              id={`warehouse-${warehouseId}`}
+                              checked={editForm.assignedWarehouses.some(id => 
+                                id === warehouseId || 
+                                id === warehouse._id || 
+                                id === warehouse.id
+                              )}
                               onChange={(e) => {
-                                if (e.target.checked) {
-                                  setEditForm({
-                                    ...editForm,
-                                    assignedWarehouses: [...editForm.assignedWarehouses, warehouse.id]
-                                  });
-                                } else {
-                                  setEditForm({
-                                    ...editForm,
-                                    assignedWarehouses: editForm.assignedWarehouses.filter(id => id !== warehouse.id)
-                                  });
-                                }
+                                e.stopPropagation();
+                                setEditForm(prev => {
+                                  if (e.target.checked) {
+                                    // Add warehouse if not already present
+                                    const alreadyAssigned = prev.assignedWarehouses.some(
+                                      id => id === warehouseId || id === warehouse._id || id === warehouse.id
+                                    );
+                                    if (!alreadyAssigned) {
+                                      return {
+                                        ...prev,
+                                        assignedWarehouses: [...prev.assignedWarehouses, warehouseId]
+                                      };
+                                    }
+                                    return prev;
+                                  } else {
+                                    // Remove warehouse - filter out any ID that might match this warehouse
+                                    return {
+                                      ...prev,
+                                      assignedWarehouses: prev.assignedWarehouses.filter(
+                                        id => id !== warehouseId && id !== warehouse._id && id !== warehouse.id
+                                      )
+                                    };
+                                  }
+                                });
                               }}
                               className="h-4 w-4 text-brand-primary focus:ring-brand-primary border-gray-300 rounded"
                             />
                             <span className="text-sm text-gray-700 font-medium">{warehouse.name}</span>
                           </label>
-                        ))
+                          );
+                        })
                       )}
                     </div>
                   )}
                   <p className="text-xs text-gray-500 mt-1">
                     {editForm.role === 'product_inventory_management' 
                       ? 'User will only see products from selected warehouses'
+                      : editForm.role === 'delivery_boy'
+                      ? 'User will only see orders assigned from selected warehouses'
                       : 'User will only see orders from selected warehouses'
                     }
                   </p>
+                  {editForm.assignedWarehouses.length === 0 && (
+                    <p className="text-xs text-red-500 mt-1">
+                      At least one warehouse must be selected for this role
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -960,7 +1097,11 @@ Bazar Admin Team`);
                 </button>
                 <button
                   type="submit"
-                  disabled={editLoading}
+                  disabled={
+                    editLoading || 
+                    ((editForm.role === 'product_inventory_management' || editForm.role === 'order_warehouse_management' || editForm.role === 'delivery_boy') && 
+                     editForm.assignedWarehouses.length === 0)
+                  }
                   className="px-4 py-2 text-sm font-medium text-white bg-brand-primary hover:bg-brand-primary/90 rounded-lg transition-colors disabled:opacity-50"
                 >
                   {editLoading ? 'Updating...' : 'Update User'}

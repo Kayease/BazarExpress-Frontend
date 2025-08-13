@@ -140,6 +140,7 @@ export async function getProductsByLocation(
     search?: string;
     page?: number;
     limit?: number;
+    status?: string;
   } = {}
 ): Promise<LocationProductsResponse> {
   try {
@@ -156,6 +157,10 @@ export async function getProductsByLocation(
 
     if (options.search) {
       queryParams.append('search', options.search);
+    }
+
+    if (options.status) {
+      queryParams.append('status', options.status);
     }
 
     const response = await fetch(`${API_BASE_URL}/location/products?${queryParams}`);

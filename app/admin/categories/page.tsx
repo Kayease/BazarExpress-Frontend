@@ -45,7 +45,7 @@ export default function AdminCategories() {
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
   const [confirmDeleteCategory, setConfirmDeleteCategory] = useState<Category | null>(null)
   const [deleting, setDeleting] = useState(false)
-  const [categoryFilter, setCategoryFilter] = useState<'all' | 'parent' | 'sub'>('all')
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'parent' | 'sub' | 'popular' | 'showOnHome' | 'hidden' | 'unhidden'>('all')
   const [currentPage, setCurrentPage] = useState(1)
   const CATEGORIES_PER_PAGE = 12
   const router = useRouter()
@@ -89,6 +89,14 @@ export default function AdminCategories() {
         return !category.parentId;
       } else if (categoryFilter === 'sub') {
         return !!category.parentId;
+      } else if (categoryFilter === 'popular') {
+        return !!category.popular;
+      } else if (categoryFilter === 'showOnHome') {
+        return !!category.showOnHome;
+      } else if (categoryFilter === 'hidden') {
+        return !!category.hide;
+      } else if (categoryFilter === 'unhidden') {
+        return !category.hide && !category.parentId;
       } else {
         return true; // 'all' filter
       }
@@ -241,8 +249,8 @@ export default function AdminCategories() {
               iconClass: "text-brand-success",
             },
             {
-              label: "Inactive Categories",
-              value: categories.filter((c) => c.hide).length,
+              label: "Popular Categories",
+              value: categories.filter((c) => c.popular).length,
               valueClass: "text-brand-error",
               iconClass: "text-brand-error",
             },
@@ -320,6 +328,46 @@ export default function AdminCategories() {
                   >
                     Sub
                   </button>
+                  <button
+                    onClick={() => setCategoryFilter('popular')}
+                    className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                      categoryFilter === 'popular'
+                        ? 'bg-brand-primary text-white shadow-sm'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    Popular
+                  </button>
+                  <button
+                    onClick={() => setCategoryFilter('showOnHome')}
+                    className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                      categoryFilter === 'showOnHome'
+                        ? 'bg-brand-primary text-white shadow-sm'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    Show on Home
+                  </button>
+                  <button
+                    onClick={() => setCategoryFilter('hidden')}
+                    className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                      categoryFilter === 'hidden'
+                        ? 'bg-brand-primary text-white shadow-sm'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    Hidden
+                  </button>
+                  <button
+                    onClick={() => setCategoryFilter('unhidden')}
+                    className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                      categoryFilter === 'unhidden'
+                        ? 'bg-brand-primary text-white shadow-sm'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    Unhidden
+                  </button>
                 </div>
               </div>
             </div>
@@ -330,7 +378,14 @@ export default function AdminCategories() {
             <p className="text-xs text-text-secondary">
               Showing {paginatedCategories.length} of {sortedCategories.length} categories
               {searchTerm && ` matching "${searchTerm}"`}
-              {categoryFilter !== 'all' && ` (${categoryFilter === 'parent' ? 'Parent' : 'Sub'} categories only)`}
+              {categoryFilter !== 'all' && ` (${
+                categoryFilter === 'parent' ? 'Parent' :
+                categoryFilter === 'sub' ? 'Sub' :
+                categoryFilter === 'popular' ? 'Popular' :
+                categoryFilter === 'showOnHome' ? 'Show on Home' :
+                categoryFilter === 'hidden' ? 'Hidden' :
+                categoryFilter === 'unhidden' ? 'Unhidden Parent Categories' : ''
+              } categories only)`}
             </p>
           </div>
         </div>

@@ -334,8 +334,10 @@ export default function AdminContacts() {
           )}
         </div>
 
-        {/* Contact Detail Modal */}
-        {showModal && selectedContact && (
+      </div>
+
+      {/* Contact Detail Modal */}
+      {showModal && selectedContact && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
             <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full mx-4 p-8 relative">
               <div className="text-2xl font-bold mb-6 text-brand-primary">Contact Details</div>
@@ -395,8 +397,8 @@ export default function AdminContacts() {
           </div>
         )}
 
-        {/* Delete Confirmation Modal */}
-        {deleteModalOpen && contactToDelete && (
+      {/* Delete Confirmation Modal */}
+      {deleteModalOpen && contactToDelete && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
             <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-8 relative border-4 border-brand-error/20">
               {deleteLoading && (
@@ -427,7 +429,6 @@ export default function AdminContacts() {
             </div>
           </div>
         )}
-      </div>
     </AdminLayout>
   )
 } 

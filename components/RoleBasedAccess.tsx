@@ -63,7 +63,7 @@ export const useRoleAccess = () => {
       'delivery': ['admin', 'report_finance_analyst'],
 
       // Orders
-      'orders': ['admin', 'customer_support_executive', 'order_warehouse_management'],
+      'orders': ['admin', 'customer_support_executive', 'order_warehouse_management', 'delivery_boy'],
 
       // Other
       'banners': ['admin', 'marketing_content_manager'],

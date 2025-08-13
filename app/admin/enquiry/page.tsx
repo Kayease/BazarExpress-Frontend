@@ -361,9 +361,10 @@ export default function AdminEnquiry() {
             </button>
           </div>
         )}
+      </div>
 
-        {/* View Modal */}
-        {viewing && (
+      {/* View Modal */}
+      {viewing && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
             <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full mx-4 p-8 relative border-4 border-brand-primary">
               <div className="text-2xl font-bold mb-4 text-brand-primary">Enquiry Details</div>
@@ -400,8 +401,8 @@ export default function AdminEnquiry() {
           </div>
         )}
 
-        {/* Delete Confirmation Modal */}
-        {deleteModalOpen && contactToDelete && (
+      {/* Delete Confirmation Modal */}
+      {deleteModalOpen && contactToDelete && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
             <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-8 relative border-4 border-brand-error/20">
               {deleteLoading && (
@@ -432,7 +433,6 @@ export default function AdminEnquiry() {
             </div>
           </div>
         )}
-      </div>
     </AdminLayout>
   )
 } 

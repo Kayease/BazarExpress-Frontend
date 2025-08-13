@@ -366,8 +366,10 @@ export default function AdminNotices() {
             </div>
           )}
         </div>
-        {/* Notice Form Modal */}
-        {showForm && editing && (
+      </div>
+
+      {/* Notice Form Modal */}
+      {showForm && editing && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
             <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full mx-4 p-8 relative">
               <div className="text-xl font-semibold mb-4">{editing._id ? "Edit notice" : "Create notice"}</div>
@@ -437,7 +439,6 @@ export default function AdminNotices() {
             </div>
           </div>
         )}
-      </div>
     </AdminLayout>
   );
 } 

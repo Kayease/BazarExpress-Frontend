@@ -107,7 +107,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
       setUserRole(data.userRole);
       
       if (data.requiresPassword) {
-        // User needs to enter password first
+        // User needs to enter password first - no OTP sent yet
         setStep("password");
         toast.success("Please enter your password to continue");
       } else {
@@ -403,7 +403,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                     onClick={requiresPassword ? handleVerifyPassword : handleSendOtp}
                     disabled={loading}
                   >
-                    Resend Code {seconds > 0 && `(${seconds}s)`}
+                    {requiresPassword ? "Resend Password Verification" : `Resend Code ${seconds > 0 ? `(${seconds}s)` : ""}`}
                   </button>
                   
                   <div>

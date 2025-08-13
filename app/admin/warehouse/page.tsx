@@ -1,8 +1,8 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useMemo } from "react"
 import AdminLayout from "../../../components/AdminLayout"
-import { Plus, Pencil, Trash2, Eye } from "lucide-react"
+import { Plus, Pencil, Trash2, Eye, Building2, Clock, AlertCircle, MapPin } from "lucide-react"
 import { useAppSelector } from '../../../lib/store'
 import { isAdminUser, hasAccessToSection } from '../../../lib/adminAuth';
 import { useRouter } from 'next/navigation';
@@ -14,6 +14,7 @@ import { apiGet, apiPost, apiPut, apiDelete } from '../../../lib/api-client';
 import { Warehouse, defaultWarehouse } from '../../../types/warehouse';
 import AdminPagination from '../../../components/ui/AdminPagination';
 import AdminLoader, { AdminTableSkeleton } from '../../../components/ui/AdminLoader';
+import { StatsCardsSkeleton } from '../../../components/admin/AdminSkeletons';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL
 
@@ -135,6 +136,82 @@ export default function AdminWarehouse() {
     return <AdminLoader message="Checking permissions..." fullScreen />
   }
 
+  // Calculate warehouse stats
+  const warehouseStats = useMemo(() => {
+    if (!warehouses.length) return {
+      total: 0,
+      twentyFourSeven: 0,
+      customHours: 0,
+      disabled: 0,
+      deliveryAreas: 0
+    };
+
+    const stats = {
+      total: warehouses.length,
+      twentyFourSeven: 0,
+      customHours: 0,
+      disabled: 0,
+      deliveryAreas: 0
+    };
+
+    // Count unique pincodes across all warehouses
+    const uniquePincodes = new Set();
+
+    warehouses.forEach(warehouse => {
+      // Count 24/7 warehouses
+      if (warehouse.deliverySettings?.isDeliveryEnabled && warehouse.deliverySettings?.is24x7Delivery) {
+        stats.twentyFourSeven++;
+      }
+      // Count custom hours warehouses
+      else if (warehouse.deliverySettings?.isDeliveryEnabled && !warehouse.deliverySettings?.is24x7Delivery) {
+        stats.customHours++;
+      }
+      // Count disabled warehouses
+      else if (!warehouse.deliverySettings?.isDeliveryEnabled) {
+        stats.disabled++;
+      }
+
+      // Add pincodes to unique set
+      if (warehouse.deliverySettings?.deliveryPincodes?.length) {
+        warehouse.deliverySettings.deliveryPincodes.forEach(pincode => {
+          uniquePincodes.add(pincode);
+        });
+      }
+    });
+
+    stats.deliveryAreas = uniquePincodes.size;
+    return stats;
+  }, [warehouses]);
+
+  // Stat Card Component
+  interface StatCardProps {
+    label: string;
+    value: number;
+    icon: React.ElementType;
+    colorClass?: string;
+    bg?: string;
+  }
+  
+  const StatCard = ({ 
+    label, 
+    value, 
+    icon: Icon, 
+    colorClass = "text-codGray", 
+    bg = "bg-gray-100" 
+  }: StatCardProps) => (
+    <div className="bg-white rounded-lg p-6 shadow-md">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium text-gray-600">{label}</p>
+          <p className={`text-2xl font-bold ${colorClass}`}>{value}</p>
+        </div>
+        <div className={`w-12 h-12 ${bg} rounded-lg flex items-center justify-center`}>
+          <Icon className={`h-6 w-6 ${colorClass}`} />
+        </div>
+      </div>
+    </div>
+  );
+
   if (loading) {
     return (
       <AdminLayout>
@@ -149,6 +226,17 @@ export default function AdminWarehouse() {
               <Plus className="h-6 w-6" />
             </button>
           </div>
+
+          {/* Stats Cards Skeleton - First row */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <StatsCardsSkeleton count={3} className="!grid-cols-1" />
+          </div>
+          
+          {/* Stats Cards Skeleton - Second row */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <StatsCardsSkeleton count={2} className="!grid-cols-1" />
+          </div>
+          
           <div className="bg-white rounded-lg shadow p-6 overflow-x-auto">
             <table className="w-full min-w-[700px] text-left border-separate border-spacing-y-2">
               <thead>
@@ -183,6 +271,49 @@ export default function AdminWarehouse() {
           >
             <Plus className="h-6 w-6" />
           </button>
+        </div>
+
+        {/* Stats Cards - First row with 3 stats */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <StatCard 
+            label="Total Warehouses" 
+            value={warehouseStats.total} 
+            icon={Building2} 
+            colorClass="text-blue-600" 
+            bg="bg-blue-100" 
+          />
+          <StatCard 
+            label="Global Warehouses" 
+            value={warehouseStats.twentyFourSeven} 
+            icon={Clock} 
+            colorClass="text-green-600" 
+            bg="bg-green-100" 
+          />
+          <StatCard 
+            label="Custom Hours" 
+            value={warehouseStats.customHours} 
+            icon={Clock} 
+            colorClass="text-purple-600" 
+            bg="bg-purple-100" 
+          />
+        </div>
+        
+        {/* Stats Cards - Second row with 2 stats */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <StatCard 
+            label="Disabled Warehouses" 
+            value={warehouseStats.disabled} 
+            icon={AlertCircle} 
+            colorClass="text-red-600" 
+            bg="bg-red-100" 
+          />
+          <StatCard 
+            label="Delivery Areas" 
+            value={warehouseStats.deliveryAreas} 
+            icon={MapPin} 
+            colorClass="text-yellow-600" 
+            bg="bg-yellow-100" 
+          />
         </div>
         <div className="bg-white rounded-lg shadow p-6 overflow-x-auto">
           <table className="w-full min-w-[700px] text-left border-separate border-spacing-y-2">

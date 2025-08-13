@@ -1,6 +1,9 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* React Image Crop styles */
+@import 'react-image-crop/dist/ReactCrop.css';
 body {
     font-family: Arial, Helvetica, sans-serif;
 }
