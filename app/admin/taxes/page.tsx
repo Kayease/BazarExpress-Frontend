@@ -14,12 +14,15 @@ import {
   Search,
   Filter,
   BadgePercent,
+  CheckCircle,
+  XCircle,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Button } from "@/components/ui/button";
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 import ConfirmDeleteModal from '../../../components/ui/ConfirmDeleteModal';
 import TaxFormModal from './TaxFormModal';
+import StatsCards from "../../../components/StatsCards";
 
 // Types
 interface Tax {
@@ -57,6 +60,14 @@ export default function AdminTaxes() {
   const [currentPage, setCurrentPage] = useState(1);
   const TAXES_PER_PAGE = 10;
 
+  // Stats state
+  const [taxStats, setTaxStats] = useState({
+    total: 0,
+    active: 0,
+    inactive: 0
+  });
+  const [statsLoading, setStatsLoading] = useState(true);
+
   // Helper functions
   const modalOpen = showModal;
   const setModalOpen = setShowModal;
@@ -70,6 +81,7 @@ export default function AdminTaxes() {
       return
     }
     fetchTaxes();
+    fetchTaxStats();
   }, [user]);
 
   const fetchTaxes = async () => {
@@ -91,6 +103,30 @@ export default function AdminTaxes() {
     }
   };
 
+  const fetchTaxStats = async () => {
+    setStatsLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/taxes/stats`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      if (!response.ok) throw new Error('Failed to fetch tax stats');
+      const data = await response.json();
+      setTaxStats(data.stats || {
+        total: 0,
+        active: 0,
+        inactive: 0
+      });
+    } catch (error) {
+      console.error('Error fetching tax stats:', error);
+      // Don't show error toast for stats as it's not critical
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
   const handleDelete = async (id: string) => {
     setDeletingId(id);
     try {
@@ -104,7 +140,8 @@ export default function AdminTaxes() {
       if (!response.ok) throw new Error('Failed to delete tax');
       toast.success("Tax deleted successfully");
       setConfirmDelete(null);
-      fetchTaxes();
+      await fetchTaxes();
+      await fetchTaxStats();
     } catch (err) {
       toast.error("Failed to delete tax");
     } finally {
@@ -170,6 +207,35 @@ export default function AdminTaxes() {
             <span>Add Tax</span>
           </Button>
         </div>
+        {/* Stats Cards */}
+        <StatsCards
+          stats={[
+            {
+              title: "Total Taxes",
+              value: taxStats.total,
+              icon: <BadgePercent className="h-6 w-6" />,
+              color: "text-blue-600",
+              bgColor: "bg-blue-100"
+            },
+            {
+              title: "Active",
+              value: taxStats.active,
+              icon: <CheckCircle className="h-6 w-6" />,
+              color: "text-green-600",
+              bgColor: "bg-green-100"
+            },
+            {
+              title: "Inactive",
+              value: taxStats.inactive,
+              icon: <XCircle className="h-6 w-6" />,
+              color: "text-gray-600",
+              bgColor: "bg-gray-100"
+            }
+          ]}
+          loading={statsLoading}
+          gridCols="grid-cols-1 md:grid-cols-3"
+        />
+
         {/* Search & Filter Bar */}
         <div className="bg-white rounded-xl shadow p-4 mb-4 border border-gray-100">
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
@@ -291,7 +357,11 @@ export default function AdminTaxes() {
           open={modalOpen}
           onClose={() => setModalOpen(false)}
           tax={editTax ? { ...editTax, _id: editTax._id } : null}
-          onSuccess={() => { setModalOpen(false); fetchTaxes(); }}
+          onSuccess={async () => { 
+            setModalOpen(false); 
+            await fetchTaxes(); 
+            await fetchTaxStats(); 
+          }}
         />
       </div>
     </AdminLayout>

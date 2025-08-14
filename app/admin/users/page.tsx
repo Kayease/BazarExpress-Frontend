@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import AdminLayout from "../../../components/AdminLayout"
 import { useAppSelector } from '../../../lib/store'
@@ -8,6 +8,7 @@ import { isAdminUser, hasAccessToSection } from '../../../lib/adminAuth'
 import { Search, Edit, Trash2, Eye, Loader2, Check, X, User, Shield, Users, UserCheck, UserX, Mail, Phone, Calendar, MapPin, Lock, Truck, RefreshCw } from "lucide-react"
 import toast from 'react-hot-toast'
 import { apiGet, apiDelete, apiPut, apiPost, apiPatch } from "../../../lib/api-client"
+import { useAdminStatsRefresh } from "../../../lib/hooks/useAdminStatsRefresh"
 
 type User = {
   id?: string;
@@ -119,16 +120,20 @@ export default function AdminUsers() {
   const [currentPage, setCurrentPage] = useState(1);
   const USERS_PER_PAGE = 20
 
-  // Calculate user stats - ensure users is always an array
+  // Calculate user stats - ensure users is always an array and force recalculation
   const safeUsers = Array.isArray(users) ? users : [];
-  const userStats = {
-    total: safeUsers.length,
-    active: safeUsers.filter(u => u.status === 'active').length,
-    disabled: safeUsers.filter(u => u.status === 'disabled').length,
-    admin: safeUsers.filter(u => u.role === 'admin').length,
-    staff: safeUsers.filter(u => u.role !== 'admin' && u.role !== 'user').length,
-    customers: safeUsers.filter(u => u.role === 'user').length,
-  }
+  const userStats = useMemo(() => {
+    const stats = {
+      total: safeUsers.length,
+      active: safeUsers.filter(u => u.status === 'active').length,
+      disabled: safeUsers.filter(u => u.status === 'disabled').length,
+      admin: safeUsers.filter(u => u.role === 'admin').length,
+      staff: safeUsers.filter(u => u.role !== 'admin' && u.role !== 'user').length,
+      customers: safeUsers.filter(u => u.role === 'user').length,
+    };
+    return stats;
+  }, [safeUsers]);
+
 
   // Filter and sort users - use safeUsers to ensure it's always an array
   const filteredUsers = safeUsers.filter((u) => {
@@ -198,6 +203,13 @@ export default function AdminUsers() {
     }
   };
 
+  // Use global stats refresh system
+  const { isRefreshing } = useAdminStatsRefresh({
+    onRefresh: fetchUsers,
+    debounceMs: 300,
+    enabled: true
+  });
+
   const fetchWarehouses = async () => {
     // Only fetch warehouses if user has admin access
     if (currentUser?.role !== 'admin') return;
@@ -232,7 +244,10 @@ export default function AdminUsers() {
     setDeletingId(id);
     try {
       await apiDelete(`${API_URL}/admin/users/${id}`);
-      setUsers((prevUsers) => Array.isArray(prevUsers) ? prevUsers.filter(u => getUserId(u) !== id) : []);
+      setUsers((prevUsers) => {
+        if (!Array.isArray(prevUsers)) return [];
+        return prevUsers.filter(u => getUserId(u) !== id);
+      });
       toast.success("User deleted successfully");
     } catch (err: any) {
       toast.error(err.message || "Failed to delete user");
@@ -252,7 +267,10 @@ export default function AdminUsers() {
     setChangingRoleId(id);
     try {
       await apiPut(`${API_URL}/admin/users/${id}`, { role: newRole });
-      setUsers((prevUsers) => Array.isArray(prevUsers) ? prevUsers.map(u => getUserId(u) === id ? { ...u, role: newRole } : u) : []);
+      setUsers((prevUsers) => {
+        if (!Array.isArray(prevUsers)) return [];
+        return prevUsers.map(u => getUserId(u) === id ? { ...u, role: newRole } : u);
+      });
       toast.success("User role updated successfully");
     } catch (err: any) {
       toast.error(err.message || "Failed to update user role");
@@ -263,8 +281,12 @@ export default function AdminUsers() {
 
   const handleStatusChange = async (id: string, newStatus: 'active' | 'disabled') => {
     try {
-      await apiPut(`${API_URL}/admin/users/${id}`, { status: newStatus });
-      setUsers((prevUsers) => Array.isArray(prevUsers) ? prevUsers.map(u => getUserId(u) === id ? { ...u, status: newStatus } : u) : []);
+      // Use the correct endpoint for status changes that allows customer support executive
+      await apiPatch(`${API_URL}/auth/users/${id}/status`, { status: newStatus });
+      setUsers((prevUsers) => {
+        if (!Array.isArray(prevUsers)) return [];
+        return prevUsers.map(u => getUserId(u) === id ? { ...u, status: newStatus } : u);
+      });
       toast.success(`User ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully`);
     } catch (err: any) {
       toast.error(err.message || "Failed to update user status");
@@ -435,8 +457,23 @@ Bazar Admin Team`);
       
       // Password is already included in the updatePayload object if provided
       
-      // Update users in state
-      setUsers((prevUsers) => Array.isArray(prevUsers) ? prevUsers.map(u => getUserId(u) === userId ? { ...u, ...updatePayload } : u) : []);
+      // Update users in state - ensure the updated user maintains its ID
+      setUsers((prevUsers) => {
+        if (!Array.isArray(prevUsers)) return [];
+        return prevUsers.map(u => {
+          if (getUserId(u) === userId) {
+            // Preserve the original ID fields and merge with update payload
+            return { 
+              ...u, 
+              ...updatePayload,
+              // Ensure ID fields are preserved
+              id: u.id,
+              _id: u._id
+            };
+          }
+          return u;
+        });
+      });
       
       const successMessage = editForm.newPassword 
         ? "User updated successfully and password set" 
@@ -474,7 +511,10 @@ Bazar Admin Team`);
         body: JSON.stringify({ status: newStatus })
       });
       if (!res.ok) throw new Error('Failed to update status');
-      setUsers((prevUsers) => Array.isArray(prevUsers) ? prevUsers.map(user => getUserId(user) === getUserId(u) ? { ...user, status: newStatus } : user) : []);
+      setUsers((prevUsers) => {
+        if (!Array.isArray(prevUsers)) return [];
+        return prevUsers.map(user => getUserId(user) === getUserId(u) ? { ...user, status: newStatus } : user);
+      });
       toast.success(`User ${newStatus === 'active' ? 'activated' : 'disabled'} successfully`);
     } catch (err) {
       toast.error('Failed to update user status');
@@ -509,7 +549,7 @@ Bazar Admin Team`);
           </div>
         </div>
       </AdminLayout>
-    )
+    );
   }
 
   return (
@@ -534,41 +574,50 @@ Bazar Admin Team`);
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-          <div className="bg-white rounded-lg p-4 shadow-md">
-            <div className="text-center">
-              <p className="text-sm font-medium text-gray-600">Total Users</p>
-              <p className="text-2xl font-bold text-codGray">{userStats.total}</p>
+        <div className="relative">
+          {isRefreshing && (
+            <div className="absolute top-2 right-2 z-10">
+              <div className="flex items-center gap-2 bg-blue-500 text-white px-3 py-1 rounded-full text-sm">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Updating stats...</span>
+              </div>
             </div>
-          </div>
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-4" data-testid="stats-cards">
+            <div className="bg-white rounded-lg p-4 shadow-md">
+              <div className="text-center">
+                <p className="text-sm font-medium text-gray-600">Total Users</p>
+                <p className="text-2xl font-bold text-codGray" data-testid="total-count">{userStats.total}</p>
+              </div>
+            </div>
           <div className="bg-white rounded-lg p-4 shadow-md">
             <div className="text-center">
               <p className="text-sm font-medium text-gray-600">Active</p>
-              <p className="text-2xl font-bold text-green-600">{userStats.active}</p>
+              <p className="text-2xl font-bold text-green-600" data-testid="active-count">{userStats.active}</p>
             </div>
           </div>
           <div className="bg-white rounded-lg p-4 shadow-md">
             <div className="text-center">
               <p className="text-sm font-medium text-gray-600">Disabled</p>
-              <p className="text-2xl font-bold text-red-600">{userStats.disabled}</p>
+              <p className="text-2xl font-bold text-red-600" data-testid="disabled-count">{userStats.disabled}</p>
             </div>
           </div>
           <div className="bg-white rounded-lg p-4 shadow-md">
             <div className="text-center">
               <p className="text-sm font-medium text-gray-600">Admins</p>
-              <p className="text-2xl font-bold text-red-600">{userStats.admin}</p>
+              <p className="text-2xl font-bold text-red-600" data-testid="admin-count">{userStats.admin}</p>
             </div>
           </div>
           <div className="bg-white rounded-lg p-4 shadow-md">
             <div className="text-center">
               <p className="text-sm font-medium text-gray-600">Staff</p>
-              <p className="text-2xl font-bold text-blue-600">{userStats.staff}</p>
+              <p className="text-2xl font-bold text-blue-600" data-testid="staff-count">{userStats.staff}</p>
             </div>
           </div>
           <div className="bg-white rounded-lg p-4 shadow-md">
             <div className="text-center">
               <p className="text-sm font-medium text-gray-600">Customers</p>
-              <p className="text-2xl font-bold text-purple-600">{userStats.customers}</p>
+              <p className="text-2xl font-bold text-purple-600" data-testid="customers-count">{userStats.customers}</p>
             </div>
           </div>
         </div>
@@ -703,14 +752,6 @@ Bazar Admin Team`);
                                     <Mail className="h-3 w-3 mr-1" />
                                     Reset
                                   </button>
-                                )}
-                                
-                                {/* Customer indicator for regular users */}
-                                {user.role === 'user' && (
-                                  <span className="inline-flex items-center px-2 py-1.5 text-xs font-medium text-blue-600 bg-blue-100 rounded-lg">
-                                    <User className="h-3 w-3 mr-1" />
-                                    Customer
-                                  </span>
                                 )}
 
                                 {/* Status Toggle */}
@@ -856,7 +897,7 @@ Bazar Admin Team`);
           )}
         </div>
       </div>
-
+</div>
       {/* Edit Modal */}
       {editModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -1139,5 +1180,5 @@ Bazar Admin Team`);
         </div>
       )}
     </AdminLayout>
-  )
+  );
 }

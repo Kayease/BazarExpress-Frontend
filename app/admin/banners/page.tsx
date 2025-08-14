@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import AdminLayout from "../../../components/AdminLayout"
-import { Plus, Pencil, Trash2, ShoppingBag, Cat, Baby } from "lucide-react"
+import { Plus, Pencil, Trash2, ShoppingBag, Cat, Baby, Image, CheckCircle, XCircle, Layers } from "lucide-react"
 import { useAppSelector } from '../../../lib/store'
 import { isAdminUser, hasAccessToSection } from '../../../lib/adminAuth';
 import { useRouter } from 'next/navigation';
@@ -10,6 +10,7 @@ import toast from "react-hot-toast";
 import { uploadToCloudinary } from "../../../lib/uploadToCloudinary";
 import { apiPost, apiPut, apiDelete, apiGet } from "../../../lib/api-client";
 import { TableSkeleton, SpecialBannersSkeleton } from "../../../components/admin/AdminSkeletons";
+import StatsCards from "../../../components/StatsCards";
 
 // Banner type
 interface Banner {
@@ -29,6 +30,7 @@ interface Category {
 
 export default function AdminBanner() {
   const user = useAppSelector((state) => state.auth.user);
+  const token = useAppSelector((state) => state.auth.token);
   const router = useRouter();
 
   const [banners, setBanners] = useState<Banner[]>([])
@@ -66,6 +68,19 @@ export default function AdminBanner() {
   const totalPages = Math.ceil(banners.length / BANNERS_PER_PAGE);
   const paginatedBanners = banners.slice((currentPage - 1) * BANNERS_PER_PAGE, currentPage * BANNERS_PER_PAGE);
 
+  // Stats state
+  const [bannerStats, setBannerStats] = useState({
+    total: 0,
+    active: 0,
+    inactive: 0,
+    regular: 0,
+    special: 0,
+    banner1: 0,
+    banner2: 0,
+    banner3: 0
+  });
+  const [statsLoading, setStatsLoading] = useState(true);
+
   useEffect(() => {
     if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'banners')) {
       router.push("/")
@@ -73,7 +88,35 @@ export default function AdminBanner() {
     }
     fetchBanners();
     fetchCategories();
-  }, [user]);
+    fetchBannerStats();
+  }, [user, token]);
+
+  const fetchBannerStats = async () => {
+    setStatsLoading(true);
+    try {
+      if (!token) throw new Error('Missing auth token');
+      const res = await fetch(`${API_URL}/banners/stats`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to fetch banner stats");
+      const data = await res.json();
+      setBannerStats(data.stats || {
+        total: 0,
+        active: 0,
+        inactive: 0,
+        regular: 0,
+        special: 0,
+        banner1: 0,
+        banner2: 0,
+        banner3: 0
+      });
+    } catch (err) {
+      console.error('Error fetching banner stats:', err);
+      // Don't show error toast for stats as it's not critical
+    } finally {
+      setStatsLoading(false);
+    }
+  };
 
   const fetchBanners = async (showToast = true) => {
     if (!initialLoading) setLoading(true);
@@ -261,6 +304,7 @@ export default function AdminBanner() {
       setImageFile(null);
       setImagePreview(null);
       await fetchBanners(false);
+      await fetchBannerStats(); // Refresh stats after successful operation
       // On form submit, after DB update, delete the marked image from Cloudinary
       if (imageToDelete) {
         await deleteImageFromCloudinary(imageToDelete);
@@ -291,6 +335,7 @@ export default function AdminBanner() {
       setDeleteModalOpen(false);
       setBannerToDelete(null);
       await fetchBanners(false);
+      await fetchBannerStats(); // Refresh stats after successful deletion
     } catch (err: any) {
       toast.error(err.message || "Could not delete banner.", { id: toastId });
     } finally {
@@ -424,6 +469,41 @@ export default function AdminBanner() {
           </div>
         </div>
 
+        {/* Stats Cards */}
+        <StatsCards
+          stats={[
+            {
+              title: "Total Banners",
+              value: bannerStats.total,
+              icon: <Image className="h-6 w-6" />,
+              color: "text-blue-600",
+              bgColor: "bg-blue-100"
+            },
+            {
+              title: "Active",
+              value: bannerStats.active,
+              icon: <CheckCircle className="h-6 w-6" />,
+              color: "text-green-600",
+              bgColor: "bg-green-100"
+            },
+            {
+              title: "Inactive",
+              value: bannerStats.inactive,
+              icon: <XCircle className="h-6 w-6" />,
+              color: "text-gray-600",
+              bgColor: "bg-gray-100"
+            },
+            {
+              title: "Regular",
+              value: bannerStats.regular,
+              icon: <Layers className="h-6 w-6" />,
+              color: "text-purple-600",
+              bgColor: "bg-purple-100"
+            }
+          ]}
+          loading={statsLoading}
+        />
+
         {initialLoading ? (
           activeTab === 'regular' ? (
             <TableSkeleton rows={5} columns={4} hasActions={true} />
@@ -431,7 +511,7 @@ export default function AdminBanner() {
             <SpecialBannersSkeleton />
           )
         ) : activeTab === 'regular' ? (
-          <div className="w-full bg-white rounded-2xl shadow-lg p-0 overflow-x-auto">
+          <div className="w-full bg-white rounded-2xl shadow-lg p-0 overflow-x-auto mt-6">
             <table className="min-w-[900px] w-full text-left">
               <thead>
                 <tr className="bg-gray-50">
@@ -526,7 +606,7 @@ export default function AdminBanner() {
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
             {renderSpecialBannerCard(
               'banner1',
               'Banner 1',

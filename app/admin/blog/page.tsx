@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import AdminLayout from "../../../components/AdminLayout"
-import { Plus, Pencil, Trash2, Loader2, AlertTriangle } from "lucide-react"
+import { Plus, Pencil, Trash2, Loader2, FileText, CheckCircle, Clock, Star } from "lucide-react"
 import { useAppSelector } from '../../../lib/store'
 import { isAdminUser, hasAccessToSection } from '../../../lib/adminAuth'
 import { useRouter } from 'next/navigation'
@@ -11,6 +11,7 @@ import { uploadToCloudinary } from "../../../lib/uploadToCloudinary"
 import dynamic from 'next/dynamic'
 import { Editor } from '@tinymce/tinymce-react';
 import { apiPost, apiPut, apiDelete, apiGet } from "../../../lib/api-client";
+import StatsCards from "../../../components/StatsCards";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL
 
@@ -67,13 +68,45 @@ export default function AdminBlog() {
   const totalPages = Math.ceil(blogs.length / BLOGS_PER_PAGE);
   const paginatedBlogs = blogs.slice((currentPage - 1) * BLOGS_PER_PAGE, currentPage * BLOGS_PER_PAGE);
 
+  // Stats state
+  const [blogStats, setBlogStats] = useState({
+    total: 0,
+    published: 0,
+    drafts: 0,
+    featured: 0,
+    categoryStats: [],
+    mostViewed: []
+  });
+  const [statsLoading, setStatsLoading] = useState(true);
+
   useEffect(() => {
     if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'blog')) {
       router.push("/")
       return
     }
     fetchBlogs();
+    fetchBlogStats();
   }, [user]);
+
+  const fetchBlogStats = async () => {
+    setStatsLoading(true);
+    try {
+      const data = await apiGet(`${process.env.NEXT_PUBLIC_API_URL}/blogs/stats`);
+      setBlogStats(data || {
+        total: 0,
+        published: 0,
+        drafts: 0,
+        featured: 0,
+        categoryStats: [],
+        mostViewed: []
+      });
+    } catch (error) {
+      console.error('Error fetching blog stats:', error);
+      // Don't show error toast for stats as it's not critical
+    } finally {
+      setStatsLoading(false);
+    }
+  };
 
   const fetchBlogs = async () => {
     setLoading(true);
@@ -195,6 +228,7 @@ export default function AdminBlog() {
       setImageFile(null)
       setImagePreview(null)
       await fetchBlogs()
+      await fetchBlogStats() // Refresh stats after successful operation
       // --- On form submit, after DB update, delete the marked image from Cloudinary ---
       if (imageToDelete) {
         await deleteImageFromCloudinary(imageToDelete);
@@ -221,7 +255,8 @@ export default function AdminBlog() {
       toast.success("Blog deleted successfully!", { id: toastId })
       setShowDeleteModal(false)
       setDeletingBlog(null)
-      fetchBlogs()
+      await fetchBlogs()
+      await fetchBlogStats() // Refresh stats after successful deletion
     } catch (error) {
       console.error("Error deleting blog:", error)
       toast.error(error instanceof Error ? error.message : "Failed to delete blog", { id: toastId })
@@ -267,6 +302,41 @@ export default function AdminBlog() {
             <Plus className="h-6 w-6" />
           </button>
         </div>
+
+        {/* Stats Cards */}
+        <StatsCards
+          stats={[
+            {
+              title: "Total Blogs",
+              value: blogStats.total,
+              icon: <FileText className="h-6 w-6" />,
+              color: "text-blue-600",
+              bgColor: "bg-blue-100"
+            },
+            {
+              title: "Published",
+              value: blogStats.published,
+              icon: <CheckCircle className="h-6 w-6" />,
+              color: "text-green-600",
+              bgColor: "bg-green-100"
+            },
+            {
+              title: "Drafts",
+              value: blogStats.drafts,
+              icon: <Clock className="h-6 w-6" />,
+              color: "text-yellow-600",
+              bgColor: "bg-yellow-100"
+            },
+            {
+              title: "Featured",
+              value: blogStats.featured,
+              icon: <Star className="h-6 w-6" />,
+              color: "text-purple-600",
+              bgColor: "bg-purple-100"
+            },
+          ]}
+          loading={statsLoading}
+        />
         
         {loading ? (
           <div className="flex items-center justify-center py-12">

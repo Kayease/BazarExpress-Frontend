@@ -49,12 +49,14 @@ const AdminUserManagement: React.FC = () => {
   const { user: currentUser, hasRole } = useRoleAccess();
 
   const roleOptions = [
+    { value: 'user', label: 'Customer' },
     { value: 'admin', label: 'Super Admin' },
     { value: 'product_inventory_management', label: 'Product & Inventory Management' },
     { value: 'order_warehouse_management', label: 'Order & Warehouse Management' },
     { value: 'marketing_content_manager', label: 'Marketing & Content Manager' },
     { value: 'customer_support_executive', label: 'Customer Support Executive' },
-    { value: 'report_finance_analyst', label: 'Report & Finance Analyst' }
+    { value: 'report_finance_analyst', label: 'Report & Finance Analyst' },
+    { value: 'delivery_boy', label: 'Delivery Agent' }
   ];
 
   useEffect(() => {

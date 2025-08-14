@@ -42,6 +42,7 @@ import { useRouter } from "next/navigation"
 import { useAppSelector, useAppDispatch } from '../lib/store'
 import { logout as reduxLogout } from '../lib/slices/authSlice'
 import Image from "next/image"
+import { initializeGlobalToastInterceptor } from '../lib/utils/globalToastInterceptor'
 
 interface AdminLayoutProps {
   children: React.ReactNode
@@ -144,6 +145,11 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
   // Get role-based menu items
   const menuItems = getRoleBasedMenuItems(user?.role || 'admin');
+
+  // Initialize global toast interceptor on mount
+  useEffect(() => {
+    initializeGlobalToastInterceptor();
+  }, []);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {

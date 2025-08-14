@@ -5,6 +5,7 @@ import { Search, Eye, Package, Truck, CheckCircle, X, RefreshCw, Loader2, Calend
 import { useAppSelector } from '../lib/store'
 import toast from 'react-hot-toast'
 import { useDebounce } from '../hooks/use-debounce'
+import { useAdminStatsRefresh } from '../lib/hooks/useAdminStatsRefresh'
 
 interface OrderItem {
   productId: string
@@ -158,6 +159,19 @@ export default function OrdersTable({
     refunded: 0,
   })
   const ORDERS_PER_PAGE = 20
+
+  // Global stats refresh system integration
+  const { isRefreshing } = useAdminStatsRefresh({
+    onRefresh: async () => {
+      // Refresh both orders and stats when global refresh is triggered
+      await Promise.all([
+        fetchOrders(currentPage),
+        shouldShowStatsCards ? fetchOrderStats() : Promise.resolve()
+      ]);
+    },
+    debounceMs: 300,
+    enabled: true
+  });
 
   // Debounce search term to prevent excessive API calls
   const debouncedSearchTerm = useDebounce(searchTerm, 500)
@@ -783,6 +797,13 @@ export default function OrdersTable({
               <h1 className="text-3xl font-bold text-gray-900">{title}</h1>
               <p className="text-gray-600 mt-1">Manage and track customer orders</p>
             </div>
+            {/* Global refresh indicator */}
+            {isRefreshing && (
+              <div className="flex items-center gap-2 bg-blue-500 text-white px-3 py-1 rounded-full text-sm">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Updating stats...</span>
+              </div>
+            )}
           </div>
         )}
 

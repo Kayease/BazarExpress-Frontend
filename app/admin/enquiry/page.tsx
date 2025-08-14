@@ -9,13 +9,18 @@ import {
   Clock, 
   MessageCircle, 
   Filter, 
-  RefreshCw 
+  RefreshCw,
+  Mail,
+  CheckCircle,
+  XCircle,
+  AlertCircle
 } from "lucide-react"
 import { useAppSelector } from '../../../lib/store'
 import { isAdminUser, hasAccessToSection } from '../../../lib/adminAuth'
 import { useRouter } from 'next/navigation'
 import toast from "react-hot-toast"
 import { apiDelete } from '../../../lib/api-client';
+import StatsCards from '../../../components/StatsCards';
 
 interface Contact {
   _id: string;
@@ -54,6 +59,7 @@ export default function AdminEnquiry() {
       return
     }
     fetchContacts();
+    fetchEnquiryStats();
   }, [user]);
   const [searchTerm, setSearchTerm] = useState<string>("");
 
@@ -61,6 +67,35 @@ export default function AdminEnquiry() {
   const ENQUIRIES_PER_PAGE = 10;
   const totalPages = Math.ceil(filteredContacts.length / ENQUIRIES_PER_PAGE);
   const paginatedContacts = filteredContacts.slice((currentPage - 1) * ENQUIRIES_PER_PAGE, currentPage * ENQUIRIES_PER_PAGE);
+
+  // Stats state
+  const [enquiryStats, setEnquiryStats] = useState({
+    total: 0,
+    new: 0,
+    read: 0,
+    replied: 0
+  });
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  const fetchEnquiryStats = async () => {
+    setStatsLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/contacts/stats`);
+      if (!res.ok) throw new Error("Failed to fetch enquiry stats");
+      const data = await res.json();
+      setEnquiryStats(data || {
+        total: 0,
+        new: 0,
+        read: 0,
+        replied: 0
+      });
+    } catch (err) {
+      console.error('Error fetching enquiry stats:', err);
+      // Don't show error toast for stats as it's not critical
+    } finally {
+      setStatsLoading(false);
+    }
+  };
 
   const fetchContacts = async () => {
     setLoading(true);
@@ -117,6 +152,7 @@ export default function AdminEnquiry() {
       
       toast.success("Status updated successfully");
       fetchContacts();
+      fetchEnquiryStats();
     } catch (err) {
       toast.error("Failed to update status");
     }
@@ -136,6 +172,7 @@ export default function AdminEnquiry() {
       setDeleteModalOpen(false);
       setContactToDelete(null);
       await fetchContacts();
+      await fetchEnquiryStats();
     } catch (err: any) {
       toast.error(err.message || "Could not delete contact.");
     } finally {
@@ -245,6 +282,41 @@ export default function AdminEnquiry() {
             </button>
           </div>
         </div>
+
+        {/* Stats Cards */}
+        <StatsCards
+          stats={[
+            {
+              title: "Total Enquiries",
+              value: enquiryStats.total,
+              icon: <Mail className="h-6 w-6" />,
+              color: "text-blue-600",
+              bgColor: "bg-blue-100"
+            },
+            {
+              title: "New",
+              value: enquiryStats.new,
+              icon: <Clock className="h-6 w-6" />,
+              color: "text-yellow-600",
+              bgColor: "bg-yellow-100"
+            },
+            {
+              title: "Read",
+              value: enquiryStats.read,
+              icon: <Eye className="h-6 w-6" />,
+              color: "text-indigo-600",
+              bgColor: "bg-indigo-100"
+            },
+            {
+              title: "Replied",
+              value: enquiryStats.replied,
+              icon: <CheckCircle className="h-6 w-6" />,
+              color: "text-green-600",
+              bgColor: "bg-green-100"
+            }
+          ]}
+          loading={statsLoading}
+        />
         
         <div className="bg-white rounded-lg shadow p-6">
           <table className="w-full text-left border-separate border-spacing-y-2">

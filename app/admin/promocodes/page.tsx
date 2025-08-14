@@ -38,6 +38,13 @@ import {
   Trash2,
   Calendar as CalendarIcon,
   BadgePercent,
+  Tag,
+  CheckCircle,
+  XCircle,
+  Clock,
+  AlertTriangle,
+  Percent,
+  DollarSign,
 } from "lucide-react"
 import { format, parseISO } from "date-fns"
 import { useRouter } from "next/navigation"
@@ -45,6 +52,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils"
 import ConfirmDeleteModal from "@/components/ui/ConfirmDeleteModal"
 import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api-client"
+import StatsCards from "@/components/StatsCards"
 
 // --- Types ---
 type PromoType = "percentage" | "fixed"
@@ -119,6 +127,16 @@ export default function PromoCodesPage() {
   const totalPages = Math.ceil(promos.length / PROMOS_PER_PAGE);
   const paginatedPromos = promos.slice((currentPage - 1) * PROMOS_PER_PAGE, currentPage * PROMOS_PER_PAGE);
 
+  // Stats state
+  const [promoStats, setPromoStats] = useState({
+    total: 0,
+    active: 0,
+    inactive: 0,
+    scheduled: 0,
+    expired: 0
+  });
+  const [statsLoading, setStatsLoading] = useState(true);
+
   // --- Fetch Promos ---
   useEffect(() => {
     const fetchPromos = async () => {
@@ -139,6 +157,29 @@ export default function PromoCodesPage() {
       }
     }
     fetchPromos()
+  }, [])
+
+  // --- Fetch Promo Stats ---
+  useEffect(() => {
+    const fetchPromoStats = async () => {
+      setStatsLoading(true)
+      try {
+        const data = await apiGet(`${API}/stats`)
+        setPromoStats(data.stats || {
+          total: 0,
+          active: 0,
+          inactive: 0,
+          scheduled: 0,
+          expired: 0
+        })
+      } catch (error: any) {
+        console.error('Error fetching promo stats:', error)
+        // Don't show error toast for stats as it's not critical
+      } finally {
+        setStatsLoading(false)
+      }
+    }
+    fetchPromoStats()
   }, [])
 
   // --- Fetch Categories/Products for Multiselect ---
@@ -275,7 +316,7 @@ export default function PromoCodesPage() {
       setShowForm(false)
       setEditPromo(null)
       setForm(initialForm)
-      // Refresh list
+      // Refresh list and stats
       setLoading(true)
       try {
         const data = await apiGet(API)
@@ -285,6 +326,15 @@ export default function PromoCodesPage() {
           setPromos([])
           toast.error(data?.error || "Failed to load promocodes")
         }
+        // Refresh stats
+        const statsData = await apiGet(`${API}/stats`)
+        setPromoStats(statsData.stats || {
+          total: 0,
+          active: 0,
+          inactive: 0,
+          scheduled: 0,
+          expired: 0
+        })
       } catch (error) {
         setPromos([])
         toast.error("Failed to load promocodes")
@@ -307,7 +357,7 @@ export default function PromoCodesPage() {
       toast.success("Promocode deleted")
       setShowDelete(null)
       setPromos((prev) => prev.filter((p) => p._id !== showDelete._id))
-      // Refresh list
+      // Refresh list and stats
       setLoading(true)
       try {
         const data = await apiGet(API)
@@ -317,6 +367,15 @@ export default function PromoCodesPage() {
           setPromos([])
           toast.error(data?.error || "Failed to load promocodes")
         }
+        // Refresh stats
+        const statsData = await apiGet(`${API}/stats`)
+        setPromoStats(statsData.stats || {
+          total: 0,
+          active: 0,
+          inactive: 0,
+          scheduled: 0,
+          expired: 0
+        })
       } catch (error) {
         setPromos([])
         toast.error("Failed to load promocodes")
@@ -441,6 +500,92 @@ export default function PromoCodesPage() {
             <span>Add Promo</span>
           </button>
         </div>
+
+        {/* Stats Cards */}
+        <div className="space-y-4">
+          {/* First row - 3 cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+              <div className="flex items-center">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <div className="text-blue-600">
+                    <Tag className="h-6 w-6" />
+                  </div>
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600">Total Promocodes</p>
+                  <p className="text-2xl font-bold text-blue-600">
+                    {statsLoading ? "..." : promoStats.total}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+              <div className="flex items-center">
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <div className="text-green-600">
+                    <CheckCircle className="h-6 w-6" />
+                  </div>
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600">Active</p>
+                  <p className="text-2xl font-bold text-green-600">
+                    {statsLoading ? "..." : promoStats.active}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+              <div className="flex items-center">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <div className="text-purple-600">
+                    <Clock className="h-6 w-6" />
+                  </div>
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600">Scheduled</p>
+                  <p className="text-2xl font-bold text-purple-600">
+                    {statsLoading ? "..." : promoStats.scheduled}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Second row - 2 cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+              <div className="flex items-center">
+                <div className="p-2 bg-gray-100 rounded-lg">
+                  <div className="text-gray-600">
+                    <XCircle className="h-6 w-6" />
+                  </div>
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600">Inactive</p>
+                  <p className="text-2xl font-bold text-gray-600">
+                    {statsLoading ? "..." : promoStats.inactive}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+              <div className="flex items-center">
+                <div className="p-2 bg-red-100 rounded-lg">
+                  <div className="text-red-600">
+                    <CalendarIcon className="h-6 w-6" />
+                  </div>
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600">Expired</p>
+                  <p className="text-2xl font-bold text-red-600">
+                    {statsLoading ? "..." : promoStats.expired}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
           {loading ? (
             <div className="space-y-2">
               {[...Array(5)].map((_, i) => (
@@ -468,7 +613,7 @@ export default function PromoCodesPage() {
                   return (
                     <div
                       key={promo._id}
-                      className="bg-white rounded-xl shadow-md p-2 flex flex-col sm:flex-row sm:items-center gap-2 border border-gray-100 relative group hover:shadow-lg transition-all"
+                      className="bg-white rounded-xl shadow-md p-2 flex flex-col sm:flex-row sm:items-center gap-2 border border-gray-100 relative group hover:shadow-lg transition-all mt-6"
                     >
                       <div className="flex items-center gap-2 flex-1 min-w-0">
                         <div className="w-8 h-8 rounded-full bg-gray-50 border flex items-center justify-center overflow-hidden">

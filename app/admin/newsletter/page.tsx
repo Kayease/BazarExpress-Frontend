@@ -325,14 +325,14 @@ ${window.location.origin}/newsletter/unsubscribe
         
         {/* Filters */}
         <div className="bg-white rounded-lg shadow p-4 mb-6">
-          <div className="flex flex-col md:flex-row gap-3 items-start md:items-center">
-            <div className="flex items-center">
+          <div className="flex flex-col md:flex-row gap-3 items-stretch">
+            <div className="flex items-center flex-1">
               <input
                 type="text"
                 placeholder="Search by email..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-1 focus:ring-brand-primary"
               />
               <button 
                 onClick={() => setSearchTerm("")}
@@ -343,11 +343,11 @@ ${window.location.origin}/newsletter/unsubscribe
               </button>
             </div>
             
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center flex-1">
               <select 
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-brand-primary"
               >
                 <option value="all">All Status</option>
                 <option value="active">Active</option>
@@ -355,11 +355,11 @@ ${window.location.origin}/newsletter/unsubscribe
               </select>
             </div>
             
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center flex-1">
               <select 
                 value={sourceFilter}
                 onChange={(e) => setSourceFilter(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-brand-primary"
               >
                 <option value="all">All Sources</option>
                 <option value="footer">Website Footer</option>
@@ -369,28 +369,32 @@ ${window.location.origin}/newsletter/unsubscribe
               </select>
             </div>
             
-            <button 
-              onClick={() => {
-                fetchSubscribers();
-                fetchStats();
-              }}
-              className="inline-flex items-center justify-center px-4 py-2 bg-brand-primary hover:bg-brand-primary-dark text-white rounded-md"
-            >
-              <RefreshCw className="h-4 w-4 mr-1" />
-              Refresh
-            </button>
+            <div className="flex items-center flex-1">
+              <button 
+                onClick={() => {
+                  fetchSubscribers();
+                  fetchStats();
+                }}
+                className="w-full inline-flex items-center justify-center px-4 py-2 bg-brand-primary hover:bg-brand-primary-dark text-white rounded-md"
+              >
+                <RefreshCw className="h-4 w-4 mr-1" />
+                Refresh
+              </button>
+            </div>
             
             {(statusFilter !== "all" || sourceFilter !== "all" || searchTerm) && (
-              <button
-                onClick={() => {
-                  setStatusFilter("all");
-                  setSourceFilter("all");
-                  setSearchTerm("");
-                }}
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-md text-sm"
-              >
-                Clear Filters
-              </button>
+              <div className="flex items-center flex-1">
+                <button
+                  onClick={() => {
+                    setStatusFilter("all");
+                    setSourceFilter("all");
+                    setSearchTerm("");
+                  }}
+                  className="w-full px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-md text-sm"
+                >
+                  Clear Filters
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -401,10 +405,10 @@ ${window.location.origin}/newsletter/unsubscribe
             <thead>
               <tr className="bg-gray-50">
                 <th className="py-3 px-4 font-semibold">Email</th>
-                <th className="py-3 px-4 font-semibold hidden md:table-cell">Source</th>
-                <th className="py-3 px-4 font-semibold">Status</th>
-                <th className="py-3 px-4 font-semibold hidden md:table-cell">Subscribed Date</th>
-                <th className="py-3 px-4 font-semibold text-center">Actions</th>
+                <th className="text-center py-3 px-4 font-semibold hidden md:table-cell">Source</th>
+                <th className="text-center py-3 px-4 font-semibold">Status</th>
+                <th className="text-center py-3 px-4 font-semibold hidden md:table-cell">Subscribed Date</th>
+                <th className="text-center py-3 px-4 font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -437,12 +441,12 @@ ${window.location.origin}/newsletter/unsubscribe
                   <td className="py-2 px-4 align-middle font-medium">
                     {subscriber.email}
                   </td>
-                  <td className="py-2 px-4 align-middle hidden md:table-cell">
+                  <td className="text-center py-2 px-4 align-middle hidden md:table-cell">
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getSourceColor(subscriber.source)}`}>
                       {getSourceLabel(subscriber.source)}
                     </span>
                   </td>
-                  <td className="py-2 px-4 align-middle">
+                  <td className="text-center py-2 px-4 align-middle">
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                       subscriber.isSubscribed ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                     }`}>
@@ -453,7 +457,7 @@ ${window.location.origin}/newsletter/unsubscribe
                       )}
                     </span>
                   </td>
-                  <td className="py-2 px-4 align-middle hidden md:table-cell">
+                  <td className="text-center py-2 px-4 align-middle hidden md:table-cell">
                     {new Date(subscriber.subscribedAt).toLocaleDateString()}
                   </td>
                   <td className="py-2 px-4 align-middle text-center">

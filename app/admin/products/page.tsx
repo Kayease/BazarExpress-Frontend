@@ -427,100 +427,105 @@ export default function AdminProducts() {
           </div>
         </div>
 
-        {/* Filters */}
-        <div className="bg-white rounded-lg p-6 shadow-md">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="relative" ref={searchRef}>
-              <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search products..."
-                value={searchTerm}
-                onChange={(e) => {
-                  setSearchTerm(e.target.value)
-                  setShowSuggestions(true)
-                }}
-                onFocus={() => setShowSuggestions(true)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary"
-              />
-              {showSuggestions && searchTerm && searchSuggestions.length > 0 && (
-                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-80 overflow-y-auto">
-                  {searchSuggestions.map((product) => (
-                    <button
-                      key={product._id}
-                      onClick={() => {
-                        setSearchTerm(product.name)
-                        setShowSuggestions(false)
-                      }}
-                      className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center space-x-3 border-b border-gray-100 last:border-b-0"
-                    >
-                      <div className="relative w-10 h-10 rounded overflow-hidden flex-shrink-0">
-                        <Image
-                          src={product.image || "/placeholder.svg"}
-                          alt={product.name}
-                          fill
-                          className="object-cover"
-                        />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-codGray truncate">{product.name}</p>
-                        <p className="text-sm text-gray-500 truncate">{product.brand && typeof product.brand === 'object' && product.brand !== null && 'name' in product.brand ? product.brand.name : product.brand}</p>
-                      </div>
-                      <div className="text-sm text-brand-primary font-medium flex items-center gap-1">
-                        <IndianRupee className="inline h-4 w-4" />{product.price}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <select
-              value={filterCategory}
-              onChange={(e) => {
-                setFilterCategory(e.target.value);
-                setFilterSubcategory("all"); // Reset subcategory on category change
-              }}
-              className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-            >
-              {categories.map((category) => (
-                <option key={typeof category === 'object' && category !== null && '_id' in category ? category._id : category} value={typeof category === 'object' && category !== null && '_id' in category ? category._id : category}>
-                  {category === "all" ? "All Categories" : category && typeof category === 'object' && category !== null && 'name' in category ? category.name : category}
-                </option>
-              ))}
-            </select>
-            <select
-              value={filterSubcategory}
-              onChange={(e) => setFilterSubcategory(e.target.value)}
-              className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-            >
-              {subcategories.map((subcategory) => (
-                <option key={typeof subcategory === 'object' && subcategory !== null && '_id' in subcategory ? subcategory._id : subcategory} value={typeof subcategory === 'object' && subcategory !== null && '_id' in subcategory ? subcategory._id : subcategory}>
-                  {subcategory === "all" ? "All Subcategories" : subcategory && typeof subcategory === 'object' && subcategory !== null && 'name' in subcategory ? subcategory.name : subcategory}
-                </option>
-              ))}
-            </select>
-            <select
-              value={filterWarehouse}
-              onChange={(e) => setFilterWarehouse(e.target.value)}
-              className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-            >
-              {allWarehouses.map((warehouse) => (
-                <option key={warehouse} value={warehouse}>
-                  {warehouse === "all" ? "All Warehouses" : warehouse}
-                </option>
-              ))}
-            </select>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-            >
-              <option value="all">All Status</option>
-              <option value="in-stock">In Stock</option>
-              <option value="out-of-stock">Out of Stock</option>
-            </select>
-          </div>
-        </div>
+                 {/* Filters */}
+         <div className="bg-white rounded-lg p-6 shadow-md space-y-4">
+           {/* First Row: Search (spans 2 columns) and Status Filter */}
+           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+             <div className="relative md:col-span-2" ref={searchRef}>
+               <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+               <input
+                 type="text"
+                 placeholder="Search products..."
+                 value={searchTerm}
+                 onChange={(e) => {
+                   setSearchTerm(e.target.value)
+                   setShowSuggestions(true)
+                 }}
+                 onFocus={() => setShowSuggestions(true)}
+                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary"
+               />
+               {showSuggestions && searchTerm && searchSuggestions.length > 0 && (
+                 <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-80 overflow-y-auto">
+                   {searchSuggestions.map((product) => (
+                     <button
+                       key={product._id}
+                       onClick={() => {
+                         setSearchTerm(product.name)
+                         setShowSuggestions(false)
+                       }}
+                       className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center space-x-3 border-b border-gray-100 last:border-b-0"
+                     >
+                       <div className="relative w-10 h-10 rounded overflow-hidden flex-shrink-0">
+                         <Image
+                           src={product.image || "/placeholder.svg"}
+                           alt={product.name}
+                           fill
+                           className="object-cover"
+                         />
+                       </div>
+                       <div className="flex-1 min-w-0">
+                         <p className="font-medium text-codGray truncate">{product.name}</p>
+                         <p className="text-sm text-gray-500 truncate">{product.brand && typeof product.brand === 'object' && product.brand !== null && 'name' in product.brand ? product.brand.name : product.brand}</p>
+                       </div>
+                       <div className="text-sm text-brand-primary font-medium flex items-center gap-1">
+                         <IndianRupee className="inline h-4 w-4" />{product.price}
+                       </div>
+                     </button>
+                   ))}
+                 </div>
+               )}
+             </div>
+             <select
+               value={filterStatus}
+               onChange={(e) => setFilterStatus(e.target.value)}
+               className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+             >
+               <option value="all">All Status</option>
+               <option value="in-stock">In Stock</option>
+               <option value="out-of-stock">Out of Stock</option>
+             </select>
+           </div>
+
+           {/* Second Row: Category, Subcategory, and Warehouse Filters */}
+           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+             <select
+               value={filterCategory}
+               onChange={(e) => {
+                 setFilterCategory(e.target.value);
+                 setFilterSubcategory("all"); // Reset subcategory on category change
+               }}
+               className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+             >
+               {categories.map((category) => (
+                 <option key={typeof category === 'object' && category !== null && '_id' in category ? category._id : category} value={typeof category === 'object' && category !== null && '_id' in category ? category._id : category}>
+                   {category === "all" ? "All Categories" : category && typeof category === 'object' && category !== null && 'name' in category ? category.name : category}
+                 </option>
+               ))}
+             </select>
+             <select
+               value={filterSubcategory}
+               onChange={(e) => setFilterSubcategory(e.target.value)}
+               className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+             >
+               {subcategories.map((subcategory) => (
+                 <option key={typeof subcategory === 'object' && subcategory !== null && '_id' in subcategory ? subcategory._id : subcategory} value={typeof subcategory === 'object' && subcategory !== null && '_id' in subcategory ? subcategory._id : subcategory}>
+                   {subcategory === "all" ? "All Subcategories" : subcategory && typeof subcategory === 'object' && subcategory !== null && 'name' in subcategory ? subcategory.name : subcategory}
+                 </option>
+               ))}
+             </select>
+             <select
+               value={filterWarehouse}
+               onChange={(e) => setFilterWarehouse(e.target.value)}
+               className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+             >
+               {allWarehouses.map((warehouse) => (
+                 <option key={warehouse} value={warehouse}>
+                   {warehouse === "all" ? "All Warehouses" : warehouse}
+                 </option>
+               ))}
+             </select>
+           </div>
+         </div>
 
         {/* Products Table or Empty State */}
         {filteredProducts.length === 0 ? (

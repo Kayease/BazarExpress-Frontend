@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from "react"
 import AdminLayout from "../../../components/AdminLayout"
-import { Pencil, Trash2, Plus } from "lucide-react"
+import { Pencil, Trash2, Plus, Bell, CheckCircle, XCircle, Clock, AlertTriangle, Calendar } from "lucide-react"
 import toast from 'react-hot-toast';
 import { useAppSelector } from '../../../lib/store'
 import { isAdminUser, hasAccessToSection } from '../../../lib/adminAuth';
 import { useRouter } from 'next/navigation';
+import StatsCards from "../../../components/StatsCards";
 
 interface Notice {
   _id?: string;
@@ -47,12 +48,26 @@ export default function AdminNotices() {
   const totalPages = Math.ceil(notices.length / NOTICES_PER_PAGE);
   const paginatedNotices = notices.slice((currentPage - 1) * NOTICES_PER_PAGE, currentPage * NOTICES_PER_PAGE);
 
+  // Stats state
+  const [noticeStats, setNoticeStats] = useState({
+    total: 0,
+    active: 0,
+    inactive: 0,
+    currentlyActive: 0,
+    scheduled: 0,
+    expired: 0
+  });
+  const [statsLoading, setStatsLoading] = useState(true);
+
   useEffect(() => {
     if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'notices')) {
       router.push("/")
       return
     }
-    if (token) fetchNotices();
+    if (token) {
+      fetchNotices();
+      fetchNoticeStats();
+    }
   }, [user, token]);
 
   const fetchNotices = async () => {
@@ -68,6 +83,30 @@ export default function AdminNotices() {
       setNotices([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchNoticeStats = async () => {
+    setStatsLoading(true);
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/notices/stats`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to fetch notice stats");
+      const data = await res.json();
+      setNoticeStats(data.stats || {
+        total: 0,
+        active: 0,
+        inactive: 0,
+        currentlyActive: 0,
+        scheduled: 0,
+        expired: 0
+      });
+    } catch (err) {
+      console.error('Error fetching notice stats:', err);
+      // Don't show error toast for stats as it's not critical
+    } finally {
+      setStatsLoading(false);
     }
   };
 
@@ -89,6 +128,7 @@ export default function AdminNotices() {
       if (!res.ok) throw new Error("Delete failed");
       toast.success("Notice deleted.");
       fetchNotices();
+      fetchNoticeStats();
     } catch {
       toast.error("Failed to delete notice.");
     } finally {
@@ -125,6 +165,7 @@ export default function AdminNotices() {
       setEditing(null);
       setShowForm(false);
       fetchNotices();
+      fetchNoticeStats();
     } catch {
       toast.error("Failed to save notice.");
     } finally {
@@ -152,6 +193,7 @@ export default function AdminNotices() {
       if (!res.ok) throw new Error("Activation failed");
       toast.success("Notice activated!");
       fetchNotices();
+      fetchNoticeStats();
     } catch {
       toast.error("Failed to activate notice.");
     } finally {
@@ -180,6 +222,7 @@ export default function AdminNotices() {
       if (!res.ok) throw new Error('Status update failed');
       toast.success(`Notice ${newStatus === 'active' ? 'activated' : 'deactivated'}!`);
       fetchNotices();
+      fetchNoticeStats();
     } catch {
       toast.error('Failed to update status.');
     } finally {
@@ -199,6 +242,7 @@ export default function AdminNotices() {
       if (!res.ok) throw new Error('Auto-activation failed');
       toast.success('Auto-activation completed!');
       fetchNotices();
+      fetchNoticeStats();
     } catch {
       toast.error('Auto-activation failed.');
     } finally {
@@ -267,6 +311,56 @@ export default function AdminNotices() {
             </button>
           </div>
         </div>
+
+        {/* Stats Cards */}
+        <StatsCards
+          stats={[
+            {
+              title: "Total Notices",
+              value: noticeStats.total,
+              icon: <Bell className="h-6 w-6" />,
+              color: "text-blue-600",
+              bgColor: "bg-blue-100"
+            },
+            {
+              title: "Active",
+              value: noticeStats.active,
+              icon: <CheckCircle className="h-6 w-6" />,
+              color: "text-green-600",
+              bgColor: "bg-green-100"
+            },
+            {
+              title: "Currently Live",
+              value: noticeStats.currentlyActive,
+              icon: <AlertTriangle className="h-6 w-6" />,
+              color: "text-orange-600",
+              bgColor: "bg-orange-100"
+            },
+            {
+              title: "Scheduled",
+              value: noticeStats.scheduled,
+              icon: <Clock className="h-6 w-6" />,
+              color: "text-purple-600",
+              bgColor: "bg-purple-100"
+            },
+            {
+              title: "Inactive",
+              value: noticeStats.inactive,
+              icon: <XCircle className="h-6 w-6" />,
+              color: "text-gray-600",
+              bgColor: "bg-gray-100"
+            },
+            {
+              title: "Expired",
+              value: noticeStats.expired,
+              icon: <Calendar className="h-6 w-6" />,
+              color: "text-red-600",
+              bgColor: "bg-red-100"
+            }
+          ]}
+          loading={statsLoading}
+          gridCols="grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+        />
         <div className="bg-white rounded-lg shadow p-6">
           <table className="w-full min-w-[600px] text-left border-separate border-spacing-y-2">
             <thead className="bg-gray-50">

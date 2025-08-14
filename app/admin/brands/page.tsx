@@ -9,6 +9,7 @@ import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api-client';
 import BrandFormModal from '../../../components/BrandFormModal';
 import AdminPagination from '../../../components/ui/AdminPagination';
 import AdminLoader, { AdminBrandSkeleton } from '../../../components/ui/AdminLoader';
+import { useAdminStatsRefresh } from '../../../lib/hooks/useAdminStatsRefresh';
 
 interface Brand {
   _id?: string;
@@ -37,6 +38,13 @@ export default function BrandManagementPage() {
   const BRANDS_PER_PAGE = 18;
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+  // Use global stats refresh system
+  const { isRefreshing } = useAdminStatsRefresh({
+    onRefresh: () => fetchBrands(false),
+    debounceMs: 300,
+    enabled: true
+  });
 
   // Fetch brands
   useEffect(() => {

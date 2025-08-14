@@ -7,6 +7,7 @@ import { useAppSelector } from '../../lib/store'
 import { isAdminUser } from '../../lib/adminAuth'
 import { apiGet } from "../../lib/api-client"
 import { API_URL, CURRENCY } from "../../lib/config"
+import { useAdminStatsRefresh } from '../../lib/hooks/useAdminStatsRefresh'
 import {
   Users, ShoppingCart, Package, IndianRupee, TrendingUp, Eye, Tag, Grid3X3, Building2,
   Truck, CheckCircle, X, RefreshCw, Mail, BarChart3, Percent, Bell, Image, Clock, MapPin, Warehouse
@@ -45,6 +46,28 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<DashboardResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  // Dashboard data fetching function
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true)
+      const res = await apiGet(`${API_URL}/dashboard`)
+      setData(res)
+      setError(null)
+    } catch (e: any) {
+      console.error('Dashboard load failed', e)
+      setError(e?.message || 'Failed to load dashboard')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Global stats refresh system integration
+  const { isRefreshing } = useAdminStatsRefresh({
+    onRefresh: fetchDashboardData,
+    debounceMs: 300,
+    enabled: true
+  })
 
   // Localized currency and numbers with Intl - moved before early returns
   const numberFmt = useMemo(() => new Intl.NumberFormat(undefined), [])
@@ -378,19 +401,7 @@ export default function AdminDashboard() {
       router.push("/")
       return
     }
-    const fetchData = async () => {
-      try {
-        setLoading(true)
-        const res = await apiGet(`${API_URL}/dashboard`)
-        setData(res)
-      } catch (e: any) {
-        console.error('Dashboard load failed', e)
-        setError(e?.message || 'Failed to load dashboard')
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetchData()
+    fetchDashboardData()
   }, [user, router])
 
   if (!user || !isAdminUser(user.role)) {
