@@ -36,7 +36,7 @@ import {
   Warehouse,
   FileText,
   Settings,
-  Receipt,
+  Receipt
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useAppSelector, useAppDispatch } from '../lib/store'
@@ -67,6 +67,7 @@ const getRoleBasedMenuItems = (userRole: string) => {
         { name: "Warehouses", href: "/admin/warehouse", icon: Building2, roles: ['admin', 'order_warehouse_management'] },
         { name: "Categories", href: "/admin/categories", icon: Grid3X3, roles: ['admin', 'product_inventory_management'] },
         { name: "Products", href: "/admin/products", icon: Package, roles: ['admin', 'product_inventory_management'] },
+        { name: "Search Gaps", href: "/admin/search-gaps", icon: HelpCircle, roles: ['admin', 'product_inventory_management'] },
         { name: "Promocodes", href: "/admin/promocodes", icon: Percent, roles: ['admin', 'marketing_content_manager'] },
         { name: "Taxes", href: "/admin/taxes", icon: function TaxesIcon(props: any) {
             // Custom icon: a document with a percent sign
@@ -105,6 +106,7 @@ const getRoleBasedMenuItems = (userRole: string) => {
         { name: "Delivered Orders", href: "/admin/orders/delivered", icon: CheckCircle, roles: ['admin', 'customer_support_executive', 'order_warehouse_management', 'delivery_boy'] },
         { name: "Cancelled Orders", href: "/admin/orders/cancelled", icon: X, roles: ['admin', 'customer_support_executive', 'order_warehouse_management'] },
         { name: "Refunded Orders", href: "/admin/orders/refunded", icon: RefreshCw, roles: ['admin', 'customer_support_executive', 'order_warehouse_management'] },
+        { name: "Stock Transfer", href: "/admin/stock-transfer", icon: Building2, roles: ['admin', 'order_warehouse_management'] },
       ],
     },
 
@@ -117,6 +119,7 @@ const getRoleBasedMenuItems = (userRole: string) => {
         { name: "Enquiry", href: "/admin/enquiry", icon: Mail, roles: ['admin', 'customer_support_executive'] },
         { name: "Rating & Reviews", href: "/admin/reviews", icon: Star, roles: ['admin', 'customer_support_executive'] },
         { name: "Invoice Settings", href: "/admin/invoice-settings", icon: Receipt, roles: ['admin', 'report_finance_analyst'] },
+        { name: "Abandoned Cart", href: "/admin/abandoned-cart", icon: ShoppingCart, roles: ['admin'] },
       ],
     },
   ];

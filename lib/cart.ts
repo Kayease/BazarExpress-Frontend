@@ -1,3 +1,5 @@
+import cartTracker from './cartTracker';
+
 // This file is now deprecated. Use cartSlice and Redux for all cart operations.
 
 export interface CartItem {
@@ -10,6 +12,17 @@ export interface CartItem {
   brand?: string;
   weight?: string;
   [key: string]: any;
+}
+
+// Helper function to convert cart items to the format expected by cartTracker
+function mapCartItemsForTracking(items: CartItem[]) {
+  return items.map(item => ({
+    productId: item.id,
+    productName: item.name,
+    productImage: item.image,
+    price: item.price,
+    quantity: item.quantity
+  }));
 }
 
 const CART_KEY = 'cart';
@@ -34,11 +47,27 @@ export function addToCart(product: CartItem) {
     items.push({ ...product, quantity: 1 });
   }
   setCartItems(items);
+  
+  // Track cart for unregistered users
+  try {
+    const mappedItems = mapCartItemsForTracking(items);
+    cartTracker.trackCartUpdate(mappedItems);
+  } catch (error) {
+    console.error('Failed to track cart for unregistered user:', error);
+  }
 }
 
 export function removeFromCart(productId: string) {
   const items = getCartItems().filter((item) => item.id !== productId);
   setCartItems(items);
+  
+  // Track cart for unregistered users
+  try {
+    const mappedItems = mapCartItemsForTracking(items);
+    cartTracker.trackCartUpdate(mappedItems);
+  } catch (error) {
+    console.error('Failed to track cart for unregistered user:', error);
+  }
 }
 
 export function updateCartQuantity(productId: string, quantity: number) {
@@ -50,11 +79,26 @@ export function updateCartQuantity(productId: string, quantity: number) {
       return removeFromCart(productId);
     }
     setCartItems(items);
+    
+    // Track cart for unregistered users
+    try {
+      const mappedItems = mapCartItemsForTracking(items);
+      cartTracker.trackCartUpdate(mappedItems);
+    } catch (error) {
+      console.error('Failed to track cart for unregistered user:', error);
+    }
   }
 }
 
 export function clearCart() {
   setCartItems([]);
+  
+  // Track cart clear for unregistered users
+  try {
+    cartTracker.trackCartClear();
+  } catch (error) {
+    console.error('Failed to track cart clear for unregistered user:', error);
+  }
 }
 
 export function getCartTotals() {

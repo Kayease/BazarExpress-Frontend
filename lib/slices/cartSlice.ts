@@ -1,4 +1,5 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import AbandonedCartTracker from '../abandonedCartTracker';
 
 export interface CartItem {
   id: string;
@@ -47,10 +48,14 @@ const cartSlice = createSlice({
     clearCart(state) {
       state.items = [];
     },
+    // New action to handle cart tracking
+    updateCartTracking(state, action: PayloadAction<{ user?: any; sessionId?: string }>) {
+      // This action doesn't modify state but triggers side effects via middleware
+    },
   },
 });
 
-export const { addToCart, removeFromCart, updateCartQuantity, clearCart } = cartSlice.actions;
+export const { addToCart, removeFromCart, updateCartQuantity, clearCart, updateCartTracking } = cartSlice.actions;
 export default cartSlice.reducer;
 
 // Selectors

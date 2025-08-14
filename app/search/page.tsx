@@ -16,6 +16,8 @@ import { useCategories, useBrands, useProductsByLocation } from "@/hooks/use-api
 import { canAddToCart } from "@/lib/warehouse-validation";
 import { useWarehouseConflict } from "@/hooks/use-warehouse-conflict";
 import WarehouseConflictModal from "@/components/warehouse-conflict-modal";
+import { trackSearchGap, shouldTrackSearchGap } from "@/lib/search-gap-tracker";
+import { useAppSelector } from "@/lib/store";
 
 const DIETARY_OPTIONS = [
   "Organic",
@@ -59,6 +61,7 @@ function SearchPage() {
   const [loading, setLoading] = useState(false); // Used for UI spinner and navigation
 // Remove or rename any other 'loading' variables below
   const params = useSearchParams();
+  const user = useAppSelector((state: any) => state.auth.user);
   const q = params.get("q") || "";
   const router = useRouter();
   const [minPrice, setMinPrice] = useState(0);
@@ -176,6 +179,17 @@ function SearchPage() {
     }
     return null;
   }, [productsError, activePincode, locationState.isLocationDetected]);
+
+  // Track search gaps when no products found
+  useEffect(() => {
+    if (!productsLoading && q && shouldTrackSearchGap(q, sortedProducts)) {
+      trackSearchGap({
+        searchTerm: q,
+        userId: user?._id,
+        pincode: activePincode
+      });
+    }
+  }, [q, sortedProducts, productsLoading, user?._id, activePincode]);
 
   // Handle add to cart with warehouse validation
   const handleAddToCart = (product: any) => {

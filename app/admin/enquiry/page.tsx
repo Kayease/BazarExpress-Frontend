@@ -226,61 +226,6 @@ export default function AdminEnquiry() {
       <div className="space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
           <div className="font-semibold text-lg">Enquiries</div>
-          
-          {/* Filters */}
-          <div className="flex flex-col md:flex-row gap-3 items-start md:items-center">
-            <div className="flex items-center">
-              <input
-                type="text"
-                placeholder="Search enquiries..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-1 focus:ring-brand-primary"
-              />
-              <button 
-                onClick={() => setSearchTerm("")}
-                className={`px-2 py-2 bg-gray-100 border-y border-r border-gray-300 rounded-r-md ${searchTerm ? 'text-gray-700' : 'text-gray-400'}`}
-                disabled={!searchTerm}
-              >
-                ✕
-              </button>
-            </div>
-            
-            <div className="flex items-center space-x-2">
-              <select 
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-brand-primary"
-              >
-                <option value="all">All Status</option>
-                <option value="new">New</option>
-                <option value="read">Read</option>
-                <option value="replied">Replied</option>
-              </select>
-            </div>
-            
-            <div className="flex items-center space-x-2">
-              <select 
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-brand-primary"
-              >
-                <option value="all">All Categories</option>
-                <option value="general">General Inquiry</option>
-                <option value="order">Order Support</option>
-                <option value="technical">Technical Issue</option>
-                <option value="feedback">Feedback</option>
-              </select>
-            </div>
-            
-            <button 
-              onClick={fetchContacts}
-              className="inline-flex items-center justify-center px-4 py-2 bg-brand-primary hover:bg-brand-primary-dark text-white rounded-md"
-            >
-              <RefreshCw className="h-4 w-4 mr-1" />
-              Refresh
-            </button>
-          </div>
         </div>
 
         {/* Stats Cards */}
@@ -317,7 +262,65 @@ export default function AdminEnquiry() {
           ]}
           loading={statsLoading}
         />
-        
+
+
+          {/* Filters */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-start md:items-center">
+            
+            <div className="flex items-center">
+              <input
+                type="text"
+                placeholder="Search enquiries..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-1 focus:ring-brand-primary"
+              />
+              <button 
+                onClick={() => setSearchTerm("")}
+                className={`px-2 py-2 bg-gray-100 border-y border-r border-gray-300 rounded-r-md ${searchTerm ? 'text-gray-700' : 'text-gray-400'}`}
+                disabled={!searchTerm}
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="flex items-center">
+              <select 
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-brand-primary"
+              >
+                <option value="all">All Status</option>
+                <option value="new">New</option>
+                <option value="read">Read</option>
+                <option value="replied">Replied</option>
+              </select>
+            </div>
+            
+            <div className="flex items-center">
+              <select 
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-brand-primary"
+              >
+                <option value="all">All Categories</option>
+                <option value="general">General Inquiry</option>
+                <option value="order">Order Support</option>
+                <option value="technical">Technical Issue</option>
+                <option value="feedback">Feedback</option>
+              </select>
+            </div>
+            
+            <button 
+              onClick={fetchContacts}
+              className="w-full inline-flex items-center justify-center px-4 py-2 bg-brand-primary hover:bg-brand-primary-dark text-white rounded-md"
+            >
+              <RefreshCw className="h-4 w-4 mr-1" />
+              Refresh
+            </button>
+          </div>
+
+
         <div className="bg-white rounded-lg shadow p-6">
           <table className="w-full text-left border-separate border-spacing-y-2">
             <thead>

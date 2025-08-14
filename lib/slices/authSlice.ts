@@ -42,6 +42,25 @@ export const login = createAsyncThunk(
     try {
       // Correct endpoint: /api/auth/login
       const res = await axios.post(`${API}/auth/login`, data);
+      
+      // Clean up unregistered carts when user logs in
+      if (res.data.user && res.data.user.id) {
+        try {
+          // Get session ID from localStorage
+          const sessionId = localStorage.getItem('cart_session_id');
+          if (sessionId) {
+            await axios.post(`${API}/abandoned-carts/cleanup-on-login`, {
+              userId: res.data.user.id,
+              sessionId
+            });
+            console.log('Cleaned up unregistered carts on login');
+          }
+        } catch (cleanupError) {
+          console.error('Failed to cleanup unregistered carts on login:', cleanupError);
+          // Don't fail login if cleanup fails
+        }
+      }
+      
       return res.data;
     } catch (err: any) {
       const errorMsg = err.response?.data?.message || err.response?.data?.error || 'Login failed';

@@ -10,6 +10,7 @@ import { getCartFromDB, addToCartDB, updateCartItemDB, removeFromCartDB, syncCar
 import { getWishlistFromDB, addToWishlistDB, removeFromWishlistDB, syncWishlistDB } from "../lib/api/wishlist";
 import { calculateProductTax, ProductTaxInfo } from "@/lib/tax-calculation";
 import toast from "react-hot-toast";
+import cartTracker from "../lib/cartTracker";
 import { LocationProvider } from "@/components/location-provider";
 import { ReactQueryProvider } from "@/lib/react-query";
 import { migrateLocalStorageData, shouldRunMigration } from "@/lib/migration";
@@ -392,6 +393,21 @@ function CartProvider({ children }: { children: ReactNode }) {
         items.push({ ...product, id: productId, quantity: quantityToAdd });
       }
       updateCartItems(items);
+      
+      // Track cart for unregistered users
+      try {
+        const mappedItems = items.map(item => ({
+          productId: item.id || item._id,
+          productName: item.name,
+          productImage: item.images && item.images.length > 0 ? item.images[0] : item.image || '',
+          price: item.price,
+          quantity: item.quantity
+        }));
+        await cartTracker.trackCartUpdate(mappedItems);
+      } catch (error) {
+        console.error('Failed to track cart for unregistered user:', error);
+      }
+      
       // No toast for regular add to cart operations
     }
   }, [isLoggedIn]);
@@ -441,10 +457,40 @@ function CartProvider({ children }: { children: ReactNode }) {
       if (item) {
         item.quantity = quantity;
         if (item.quantity <= 0) {
-          updateCartItems(items.filter((item: any) => (item.id || item._id) !== id));
+          const filteredItems = items.filter((item: any) => (item.id || item._id) !== id);
+          updateCartItems(filteredItems);
+          
+          // Track cart update for unregistered users
+          try {
+            const mappedItems = filteredItems.map(item => ({
+              productId: item.id || item._id,
+              productName: item.name,
+              productImage: item.images && item.images.length > 0 ? item.images[0] : item.image || '',
+              price: item.price,
+              quantity: item.quantity
+            }));
+            await cartTracker.trackCartUpdate(mappedItems);
+          } catch (error) {
+            console.error('Failed to track cart update for unregistered user:', error);
+          }
           return;
         }
         updateCartItems(items);
+        
+        // Track cart update for unregistered users
+        try {
+          const mappedItems = items.map(item => ({
+            productId: item.id || item._id,
+            productName: item.name,
+            productImage: item.images && item.images.length > 0 ? item.images[0] : item.image || '',
+            price: item.price,
+            quantity: item.quantity
+          }));
+          await cartTracker.trackCartUpdate(mappedItems);
+        } catch (error) {
+          console.error('Failed to track cart update for unregistered user:', error);
+        }
+        
         // No toast for regular cart updates
       }
     }
@@ -475,6 +521,13 @@ function CartProvider({ children }: { children: ReactNode }) {
       // Clear local storage cart
       localStorage.removeItem('cart');
       setCartItems([]);
+      
+      // Track cart clear for unregistered users
+      try {
+        await cartTracker.trackCartClear();
+      } catch (error) {
+        console.error('Failed to track cart clear for unregistered user:', error);
+      }
     }
   }, [isLoggedIn]);
 

@@ -4,6 +4,7 @@ import createWebStorage from "redux-persist/lib/storage/createWebStorage";
 import { TypedUseSelectorHook, useDispatch, useSelector } from 'react-redux';
 import authReducer from './slices/authSlice';
 import cartReducer from './slices/cartSlice';
+import abandonedCartMiddleware from './middleware/abandonedCartMiddleware';
 
 const createNoopStorage = () => {
   return {
@@ -42,7 +43,7 @@ export const store = configureStore({
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
       serializableCheck: false,
-    }),
+    }).concat(abandonedCartMiddleware),
 });
 
 export const persistor = persistStore(store);

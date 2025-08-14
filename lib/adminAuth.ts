@@ -32,19 +32,19 @@ export const hasAccessToSection = (userRole?: string, section?: string): boolean
   // Define role-based section access
   const rolePermissions: Record<string, string[]> = {
     'marketing_content_manager': [
-      'banners', 'promocodes', 'blog', 'newsletter', 'notices'
+      'banners', 'promocodes', 'blog', 'newsletter', 'notices', 'abandoned-cart'
     ],
     'customer_support_executive': [
-      'users', 'enquiry', 'reviews', 'orders', 'contacts'
+      'users', 'enquiry', 'reviews', 'orders', 'contacts', 'abandoned-cart'
     ],
     'report_finance_analyst': [
       'reports', 'invoice-settings', 'taxes', 'delivery'
     ],
     'order_warehouse_management': [
-      'orders', 'warehouse'
+      'orders', 'warehouse', 'stock-transfer'
     ],
     'product_inventory_management': [
-      'products', 'brands', 'categories'
+      'products', 'brands', 'categories', 'search-gaps'
     ],
     'delivery_boy': [
       'orders', 'warehouse'
