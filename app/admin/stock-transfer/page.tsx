@@ -3,10 +3,15 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import AdminLayout from "../../../components/AdminLayout"
-import { Search, Filter, Package, Truck, Building2, Clock, IndianRupee, Plus, CheckCircle, XCircle, AlertCircle } from "lucide-react"
+import { Search, Filter, Package, Truck, Building2, Clock, IndianRupee, Plus, CheckCircle, XCircle, AlertCircle, Eye, Calendar, Download } from "lucide-react"
 import { useAppSelector } from '../../../lib/store'
 import { isAdminUser, hasAccessToSection } from '../../../lib/adminAuth'
 import AdminLoader from '../../../components/ui/AdminLoader'
+import DateRangePicker from '../../../components/ui/DateRangePicker'
+import StockTransferModal from '../../../components/StockTransferModal'
+import StockTransferDetailsModal from '../../../components/StockTransferDetailsModal'
+import StockTransferReportModal from '../../../components/StockTransferReportModal'
+import toast from 'react-hot-toast'
 
 // Mock data interfaces
 interface StockTransferItem {
@@ -23,26 +28,47 @@ interface StockTransfer {
   transferId: string;
   fromWarehouse: string;
   toWarehouse: string;
+  fromWarehouseDetails?: Warehouse;
+  toWarehouseDetails?: Warehouse;
   items: StockTransferItem[];
   totalItems: number;
   totalValue: number;
   status: 'pending' | 'in-transit' | 'completed' | 'cancelled';
-  requestedBy: string;
-  requestedAt: string;
+  createdAt: string;
   completedAt?: string;
   notes?: string;
-  priority: 'low' | 'medium' | 'high';
+}
+
+interface Warehouse {
+  _id: string;
+  name: string;
+  address: string;
+  location: {
+    lat: number | null;
+    lng: number | null;
+  };
+  contactPhone: string;
+  email: string;
+  capacity: number;
+  status: 'active' | 'inactive';
 }
 
 export default function AdminStockTransfer() {
   const user = useAppSelector((state: any) => state.auth.user)
+  const token = useAppSelector((state: any) => state.auth.token)
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [filterStatus, setFilterStatus] = useState("all")
-  const [filterPriority, setFilterPriority] = useState("all")
+  const [startDate, setStartDate] = useState<Date | null>(null)
+  const [endDate, setEndDate] = useState<Date | null>(null)
+  const [showTransferModal, setShowTransferModal] = useState(false)
+  const [showDetailsModal, setShowDetailsModal] = useState(false)
+  const [showReportModal, setShowReportModal] = useState(false)
+  const [selectedTransfer, setSelectedTransfer] = useState<StockTransfer | null>(null)
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([])
   const router = useRouter()
 
-  // Mock data
+  // Stock transfers data
   const [stockTransfers, setStockTransfers] = useState<StockTransfer[]>([])
 
   useEffect(() => {
@@ -51,104 +77,76 @@ export default function AdminStockTransfer() {
       return
     }
     
-    // Simulate loading
-    setTimeout(() => {
+    // Only fetch data if token is available
+    if (token) {
+      fetchWarehouses()
+      fetchStockTransfers()
       setLoading(false)
-    }, 1000)
-  }, [user, router])
-
-  // Mock data generation
-  useEffect(() => {
-    const generateMockData = () => {
-      const mockTransfers: StockTransfer[] = [
-        {
-          _id: '1',
-          transferId: 'TR-2024-001',
-          fromWarehouse: 'Mumbai Central',
-          toWarehouse: 'Mumbai Andheri',
-          items: [
-            { _id: 'item1', productName: 'Organic Bananas', productImage: '/placeholder.svg', sku: 'BAN-ORG-001', quantity: 50, unitPrice: 120 },
-            { _id: 'item2', productName: 'Fresh Milk', productImage: '/placeholder.svg', sku: 'MILK-FRESH-001', quantity: 30, unitPrice: 60 }
-          ],
-          totalItems: 80,
-          totalValue: 7800,
-          status: 'completed',
-          requestedBy: 'John Manager',
-          requestedAt: '2024-01-15T08:00:00Z',
-          completedAt: '2024-01-15T14:30:00Z',
-          notes: 'Urgent transfer for weekend stock',
-          priority: 'high'
-        },
-        {
-          _id: '2',
-          transferId: 'TR-2024-002',
-          fromWarehouse: 'Delhi North',
-          toWarehouse: 'Delhi South',
-          items: [
-            { _id: 'item3', productName: 'Whole Wheat Bread', productImage: '/placeholder.svg', sku: 'BREAD-WW-001', quantity: 100, unitPrice: 45 },
-            { _id: 'item4', productName: 'Eggs', productImage: '/placeholder.svg', sku: 'EGG-FRESH-001', quantity: 200, unitPrice: 80 }
-          ],
-          totalItems: 300,
-          totalValue: 20500,
-          status: 'in-transit',
-          requestedBy: 'Sarah Supervisor',
-          requestedAt: '2024-01-15T10:00:00Z',
-          notes: 'Regular stock replenishment',
-          priority: 'medium'
-        },
-        {
-          _id: '3',
-          transferId: 'TR-2024-003',
-          fromWarehouse: 'Bangalore East',
-          toWarehouse: 'Bangalore West',
-          items: [
-            { _id: 'item5', productName: 'Apples', productImage: '/placeholder.svg', sku: 'APPLE-FRESH-001', quantity: 75, unitPrice: 200 },
-            { _id: 'item6', productName: 'Rice', productImage: '/placeholder.svg', sku: 'RICE-BASMATI-001', quantity: 25, unitPrice: 150 }
-          ],
-          totalItems: 100,
-          totalValue: 18750,
-          status: 'pending',
-          requestedBy: 'Mike Coordinator',
-          requestedAt: '2024-01-15T12:00:00Z',
-          notes: 'New store opening stock',
-          priority: 'high'
-        },
-        {
-          _id: '4',
-          transferId: 'TR-2024-004',
-          fromWarehouse: 'Chennai Central',
-          toWarehouse: 'Chennai Airport',
-          items: [
-            { _id: 'item7', productName: 'Pulses', productImage: '/placeholder.svg', sku: 'PULSE-MIX-001', quantity: 40, unitPrice: 180 }
-          ],
-          totalItems: 40,
-          totalValue: 7200,
-          status: 'cancelled',
-          requestedBy: 'Lisa Admin',
-          requestedAt: '2024-01-14T16:00:00Z',
-          notes: 'Cancelled due to stock unavailability',
-          priority: 'low'
-        }
-      ]
-      setStockTransfers(mockTransfers)
+    } else {
+      router.push("/")
     }
+  }, [user, token, router])
 
-    if (!loading) {
-      generateMockData()
+  // Fetch warehouses
+  const fetchWarehouses = async () => {
+    if (!token) {
+      console.error('No token available for warehouse fetch')
+      return
     }
-  }, [loading])
+    
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/warehouses`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to fetch warehouses' }));
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const warehousesData = await response.json();
+      console.log('Fetched warehouses:', warehousesData);
+      
+      // Ensure we have an array and filter for active warehouses
+      const activeWarehouses = Array.isArray(warehousesData) 
+        ? warehousesData.filter(warehouse => warehouse.status !== 'inactive')
+        : [];
+      
+      setWarehouses(activeWarehouses);
+    } catch (error) {
+      console.error('Error fetching warehouses:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      toast.error(`Failed to fetch warehouses: ${errorMessage}`);
+      // Set empty array on error
+      setWarehouses([]);
+    }
+  }
+
+
 
   const filteredTransfers = stockTransfers.filter((transfer) => {
     const matchesSearch = 
       transfer.transferId.toLowerCase().includes(searchTerm.toLowerCase()) ||
       transfer.fromWarehouse.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      transfer.toWarehouse.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      transfer.requestedBy.toLowerCase().includes(searchTerm.toLowerCase())
+      transfer.toWarehouse.toLowerCase().includes(searchTerm.toLowerCase())
     
     const matchesStatus = filterStatus === "all" || transfer.status === filterStatus
-    const matchesPriority = filterPriority === "all" || transfer.priority === filterPriority
     
-    return matchesSearch && matchesStatus && matchesPriority
+    let matchesDateRange = true
+    if (startDate && endDate) {
+      const transferDate = new Date(transfer.createdAt)
+      const start = new Date(startDate)
+      const end = new Date(endDate)
+      end.setHours(23, 59, 59) // Include the entire end date
+      matchesDateRange = transferDate >= start && transferDate <= end
+    }
+    
+    return matchesSearch && matchesStatus && matchesDateRange
   })
 
   const pendingTransfers = stockTransfers.filter(t => t.status === 'pending')
@@ -186,16 +184,186 @@ export default function AdminStockTransfer() {
     }
   }
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high':
-        return 'text-red-600 bg-red-50'
-      case 'medium':
-        return 'text-yellow-600 bg-yellow-50'
-      case 'low':
-        return 'text-green-600 bg-green-50'
-      default:
-        return 'text-gray-600 bg-gray-50'
+  const handleDateRangeChange = (start: Date | null, end: Date | null) => {
+    setStartDate(start)
+    setEndDate(end)
+  }
+
+  // Fetch stock transfers from API
+  const fetchStockTransfers = async () => {
+    if (!token) {
+      console.error('No token available for stock transfers fetch')
+      return
+    }
+    
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/stock-transfers`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to fetch stock transfers' }));
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('Fetched stock transfers:', result);
+      
+      if (result.success && Array.isArray(result.data)) {
+        // Transform API data to match frontend interface
+        const transformedTransfers = result.data.map((transfer: any) => ({
+          _id: transfer._id,
+          transferId: transfer.transferId,
+          fromWarehouse: transfer.fromWarehouse?.name || 'Unknown',
+          toWarehouse: transfer.toWarehouse?.name || 'Unknown',
+          fromWarehouseDetails: transfer.fromWarehouse ? {
+            _id: transfer.fromWarehouse._id,
+            name: transfer.fromWarehouse.name,
+            address: transfer.fromWarehouse.address || '',
+            location: transfer.fromWarehouse.location || { lat: null, lng: null },
+            contactPhone: transfer.fromWarehouse.contactPhone || '',
+            email: transfer.fromWarehouse.email || '',
+            capacity: transfer.fromWarehouse.capacity || 0,
+            status: transfer.fromWarehouse.status || 'active'
+          } : undefined,
+          toWarehouseDetails: transfer.toWarehouse ? {
+            _id: transfer.toWarehouse._id,
+            name: transfer.toWarehouse.name,
+            address: transfer.toWarehouse.address || '',
+            location: transfer.toWarehouse.location || { lat: null, lng: null },
+            contactPhone: transfer.toWarehouse.contactPhone || '',
+            email: transfer.toWarehouse.email || '',
+            capacity: transfer.toWarehouse.capacity || 0,
+            status: transfer.toWarehouse.status || 'active'
+          } : undefined,
+          items: transfer.items.map((item: any) => ({
+            _id: item.product?._id || item._id,
+            productName: item.productName,
+            productImage: item.product?.image || item.product?.mainImage || '/placeholder.svg',
+            sku: item.sku,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice
+          })),
+          totalItems: transfer.totalItems,
+          totalValue: transfer.totalValue,
+          status: transfer.status,
+          createdAt: transfer.createdAt,
+          completedAt: transfer.completedAt,
+          notes: transfer.notes
+        }));
+        
+        setStockTransfers(transformedTransfers);
+      } else {
+        setStockTransfers([]);
+      }
+    } catch (error) {
+      console.error('Error fetching stock transfers:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      toast.error(`Failed to fetch stock transfers: ${errorMessage}`);
+      setStockTransfers([]);
+    }
+  }
+
+  // Handle stock transfer creation
+  const handleCreateTransfer = async (transferData: {
+    fromWarehouse: string;
+    toWarehouse: string;
+    items: any[];
+    notes?: string;
+  }) => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/stock-transfers`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          fromWarehouse: transferData.fromWarehouse,
+          toWarehouse: transferData.toWarehouse,
+          items: transferData.items.map(item => ({
+            productId: item.productId,
+            quantity: item.quantity
+          })),
+          notes: transferData.notes
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to create stock transfer' }));
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.success) {
+        toast.success(result.message || 'Stock transfer created successfully');
+        // Refresh the transfers list
+        fetchStockTransfers();
+      } else {
+        throw new Error(result.error || 'Failed to create stock transfer');
+      }
+    } catch (error) {
+      console.error('Error creating stock transfer:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      toast.error(`Failed to create stock transfer: ${errorMessage}`);
+      throw error;
+    }
+  }
+
+  // Handle viewing transfer details
+  const handleViewDetails = (transfer: StockTransfer) => {
+    setSelectedTransfer(transfer)
+    setShowDetailsModal(true)
+  }
+
+  // Handle downloading transfer report
+  const handleDownloadReport = (transfer: StockTransfer) => {
+    setSelectedTransfer(transfer)
+    setShowReportModal(true)
+  }
+
+  // Handle status update
+  const handleStatusUpdate = async (transferId: string, newStatus: string, notes?: string) => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/stock-transfers/${transferId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        credentials: 'include',
+        body: JSON.stringify({ 
+          status: newStatus,
+          notes: notes 
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to update transfer status' }));
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.success) {
+        toast.success(result.message || 'Transfer status updated successfully');
+        // Refresh the transfers list
+        fetchStockTransfers();
+      } else {
+        throw new Error(result.error || 'Failed to update transfer status');
+      }
+    } catch (error) {
+      console.error('Error updating transfer status:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      toast.error(`Failed to update transfer status: ${errorMessage}`);
+      throw error;
     }
   }
 
@@ -233,7 +401,7 @@ export default function AdminStockTransfer() {
 
   return (
     <AdminLayout>
-      <div className="space-y-6">
+      <div className="space-y-6" data-testid="stock-transfer-page">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -241,6 +409,7 @@ export default function AdminStockTransfer() {
             <p className="text-gray-600">Manage inventory movement between warehouses</p>
           </div>
           <button
+            onClick={() => setShowTransferModal(true)}
             className="bg-brand-primary hover:bg-brand-primary-dark text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
           >
             <Plus className="h-4 w-4" />
@@ -291,134 +460,221 @@ export default function AdminStockTransfer() {
           </div>
         </div>
 
-        {/* Filters */}
-        <div className="bg-white rounded-lg p-6 shadow-md">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search transfers..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary"
-              />
-            </div>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-            >
-              <option value="all">All Status</option>
-              <option value="pending">Pending</option>
-              <option value="in-transit">In Transit</option>
-              <option value="completed">Completed</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-            <select
-              value={filterPriority}
-              onChange={(e) => setFilterPriority(e.target.value)}
-              className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-            >
-              <option value="all">All Priority</option>
-              <option value="high">High</option>
-              <option value="medium">Medium</option>
-              <option value="low">Low</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Table */}
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1000px] text-left border-separate border-spacing-y-1">
-              <thead>
-                <tr className="bg-gray-50">
-                  <th className="text-left py-3 px-6 font-medium text-sm">Transfer ID</th>
-                  <th className="text-left py-3 px-6 font-medium text-sm">From → To</th>
-                  <th className="text-left py-3 px-6 font-medium text-sm">Items</th>
-                  <th className="text-left py-3 px-6 font-medium text-sm">Total Value</th>
-                  <th className="text-left py-3 px-6 font-medium text-sm">Status</th>
-                  <th className="text-left py-3 px-6 font-medium text-sm">Priority</th>
-                  <th className="text-left py-3 px-6 font-medium text-sm">Requested</th>
-                  <th className="text-left py-3 px-6 font-medium text-sm">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredTransfers.map((transfer) => (
-                  <tr key={transfer._id} className="bg-white hover:bg-gray-50">
-                    <td className="py-4 px-6">
-                      <p className="font-medium text-codGray">{transfer.transferId}</p>
-                      <p className="text-sm text-gray-500">{transfer.requestedBy}</p>
-                    </td>
-                    <td className="py-4 px-6">
-                      <div>
-                        <p className="text-sm text-codGray">{transfer.fromWarehouse}</p>
-                        <p className="text-xs text-gray-500">→</p>
-                        <p className="text-sm text-codGray">{transfer.toWarehouse}</p>
-                      </div>
-                    </td>
-                    <td className="py-4 px-6">
-                      <div className="space-y-1">
-                        {transfer.items.map((item) => (
-                          <div key={item._id} className="flex items-center space-x-2">
-                            <span className="text-sm text-codGray">{item.productName}</span>
-                            <span className="text-xs text-gray-500">x{item.quantity}</span>
-                          </div>
-                        ))}
-                      </div>
-                      <p className="text-xs text-gray-500 mt-1">Total: {transfer.totalItems} items</p>
-                    </td>
-                    <td className="py-4 px-6">
-                      <p className="font-medium text-green-600">
-                        <IndianRupee className="inline h-4 w-4" />
-                        {transfer.totalValue.toLocaleString()}
-                      </p>
-                    </td>
-                    <td className="py-4 px-6">
-                      <div className={`inline-flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(transfer.status)}`}>
-                        {getStatusIcon(transfer.status)}
-                        <span className="capitalize">{transfer.status}</span>
-                      </div>
-                    </td>
-                    <td className="py-4 px-6">
-                      <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getPriorityColor(transfer.priority)}`}>
-                        <span className="capitalize">{transfer.priority}</span>
-                      </div>
-                    </td>
-                    <td className="py-4 px-6">
-                      <p className="text-sm text-gray-600">
-                        {new Date(transfer.requestedAt).toLocaleDateString()}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {new Date(transfer.requestedAt).toLocaleTimeString()}
-                      </p>
-                    </td>
-                    <td className="py-4 px-6">
-                      <div className="flex space-x-2">
-                        <button className="text-brand-primary hover:text-brand-primary-dark text-sm font-medium">
-                          View Details
-                        </button>
-                        {transfer.status === 'pending' && (
-                          <button className="text-green-600 hover:text-green-700 text-sm">
-                            Approve
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {filteredTransfers.length === 0 && (
-              <div className="text-center py-8">
-                <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-500">No stock transfers found</p>
+        {/* Filters - Only show when there are transfers */}
+        {stockTransfers.length > 0 && (
+          <div className="bg-white rounded-lg p-6 shadow-md">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="relative md:col-span-2">
+                <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search transfers..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                />
               </div>
-            )}
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+              >
+                <option value="all">All Status</option>
+                <option value="pending">Pending</option>
+                <option value="in-transit">In Transit</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+              <div className="flex items-center justify-center">
+                <DateRangePicker
+                  startDate={startDate}
+                  endDate={endDate}
+                  onDateRangeChange={handleDateRangeChange}
+                  placeholder="Date Range"
+                  className="w-full"
+                />
+              </div>
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* Content Area */}
+        {stockTransfers.length === 0 ? (
+          // Empty State
+          <div className="bg-white rounded-lg shadow-md p-12">
+            <div className="text-center">
+              {/* Empty State Icon */}
+              <div className="mx-auto w-24 h-24 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-full flex items-center justify-center mb-6">
+                <Truck className="w-12 h-12 text-blue-500" />
+              </div>
+              
+              {/* Empty State Text */}
+              <h3 className="text-2xl font-bold text-gray-900 mb-3">No Stock Transfers Yet</h3>
+              <p className="text-gray-600 text-lg mb-8 max-w-md mx-auto">
+                Get started by creating your first stock transfer between warehouses. 
+                This will help you manage inventory movement efficiently.
+              </p>
+              
+              {/* Call to Action */}
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <button
+                  onClick={() => setShowTransferModal(true)}
+                  className="bg-brand-primary hover:bg-brand-primary-dark text-white px-8 py-3 rounded-lg font-semibold transition-colors flex items-center justify-center space-x-2 shadow-lg hover:shadow-xl"
+                >
+                  <Plus className="w-5 h-5" />
+                  <span>Create First Transfer</span>
+                </button>
+              </div>
+              
+              {/* Additional Info */}
+              <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6 max-w-2xl mx-auto">
+                <div className="text-center">
+                  <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mx-auto mb-3">
+                    <Package className="w-6 h-6 text-green-600" />
+                  </div>
+                  <h4 className="font-semibold text-gray-900 mb-1">Inventory Management</h4>
+                  <p className="text-sm text-gray-600">Efficiently move stock between locations</p>
+                </div>
+                <div className="text-center">
+                  <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-3">
+                    <Building2 className="w-6 h-6 text-blue-600" />
+                  </div>
+                  <h4 className="font-semibold text-gray-900 mb-1">Warehouse Coordination</h4>
+                  <p className="text-sm text-gray-600">Coordinate transfers across multiple warehouses</p>
+                </div>
+                <div className="text-center">
+                  <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mx-auto mb-3">
+                    <Truck className="w-6 h-6 text-purple-600" />
+                  </div>
+                  <h4 className="font-semibold text-gray-900 mb-1">Track Progress</h4>
+                  <p className="text-sm text-gray-600">Monitor transfer status and completion</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          // Table View (when transfers exist)
+          <div className="bg-white rounded-lg shadow-md overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1000px] text-left border-separate border-spacing-y-1">
+                <thead>
+                  <tr className="bg-gray-50">
+                    <th className="text-left py-3 px-6 font-medium text-sm">Transfer ID</th>
+                    <th className="text-center py-3 px-6 font-medium text-sm">From → To</th>
+                    <th className="text-center py-3 px-6 font-medium text-sm">Items</th>
+                    <th className="text-center py-3 px-6 font-medium text-sm">Total Value</th>
+                    <th className="text-center py-3 px-6 font-medium text-sm">Status</th>
+                    <th className="text-center py-3 px-6 font-medium text-sm">Last Updated</th>
+                    <th className="text-center py-3 px-6 font-medium text-sm">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredTransfers.map((transfer) => (
+                    <tr key={transfer._id} className="bg-white hover:bg-gray-50">
+                      <td className="py-4 px-6">
+                        <p className="font-semibold  text-codGray">{transfer.transferId}</p>
+                      </td>
+                      <td className="py-4 px-6 text-center">
+                        <div>
+                          <p className="text-sm text-codGray">{transfer.fromWarehouse}</p>
+                          <p className="text-xs text-gray-500">→</p>
+                          <p className="text-sm text-codGray">{transfer.toWarehouse}</p>
+                        </div>
+                      </td>
+                      <td className="py-4 px-6 text-center">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-codGray">{transfer.totalItems}</p>
+                          <p className="text-xs text-gray-500">items</p>
+                        </div>
+                      </td>
+                      <td className="py-4 px-6 text-center">
+                        <p className="font-medium text-green-600">
+                          <IndianRupee className="inline h-4 w-4" />
+                          {transfer.totalValue.toLocaleString()}
+                        </p>
+                      </td>
+                      <td className="py-4 px-6 text-center">
+                        <div className={`inline-flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(transfer.status)}`}>
+                          {getStatusIcon(transfer.status)}
+                          <span className="capitalize">{transfer.status}</span>
+                        </div>
+                      </td>
+                      <td className="py-4 px-6 text-center">
+                        <p className="text-sm text-gray-600">
+                          {new Date(transfer.createdAt).toLocaleDateString()}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {new Date(transfer.createdAt).toLocaleTimeString()}
+                        </p>
+                      </td>
+                      <td className="py-4 px-6 text-center">
+                        <div className="flex items-center justify-center space-x-2">
+                          <button 
+                            onClick={() => handleViewDetails(transfer)}
+                            className="inline-flex items-center space-x-1 text-brand-primary hover:text-brand-primary-dark text-sm font-medium px-2 py-1 rounded-lg hover:bg-brand-primary/10 transition-colors"
+                          >
+                            <Eye className="h-4 w-4" />
+                            <span>View</span>
+                          </button>
+                          <button 
+                            onClick={() => handleDownloadReport(transfer)}
+                            className="inline-flex items-center space-x-1 text-green-600 hover:text-green-700 text-sm font-medium px-2 py-1 rounded-lg hover:bg-green-50 transition-colors"
+                          >
+                            <Download className="h-4 w-4" />
+                            <span>Report</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {filteredTransfers.length === 0 && (
+                <div className="text-center py-8">
+                  <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-500">No stock transfers found</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Stock Transfer Modal */}
+      <StockTransferModal
+        open={showTransferModal}
+        onClose={() => setShowTransferModal(false)}
+        onSubmit={handleCreateTransfer}
+      />
+
+      {/* Stock Transfer Details Modal */}
+      {showDetailsModal && selectedTransfer && (
+        <StockTransferDetailsModal
+          viewing={selectedTransfer}
+          onClose={() => {
+            setShowDetailsModal(false)
+            setSelectedTransfer(null)
+          }}
+          onStatusUpdate={handleStatusUpdate}
+          onRefresh={() => {
+            // Refresh the transfers list if needed
+            // This could trigger a re-fetch from the API
+          }}
+          userRole={user?.role}
+        />
+      )}
+
+      {/* Stock Transfer Report Modal */}
+      {showReportModal && selectedTransfer && (
+        <StockTransferReportModal
+          isOpen={showReportModal}
+          onClose={() => {
+            setShowReportModal(false)
+            setSelectedTransfer(null)
+          }}
+          transferData={selectedTransfer}
+        />
+      )}
     </AdminLayout>
   )
 }

@@ -157,11 +157,28 @@ const authSlice = createSlice({
         } else {
           // If backend returns { ...user, token }
           const { token, ...user } = action.payload;
-          state.user = user;
-          state.token = token;
+          state.user = user as any;
+          state.token = token as any;
         }
         state.error = null;
-        if (typeof window !== 'undefined') localStorage.setItem('token', state.token!);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('token', state.token!);
+          // Persist contact info for tracking when logged out later
+          try {
+            const existing = localStorage.getItem('guest_info');
+            const parsed = existing ? JSON.parse(existing) : {};
+            const merged = {
+              ...parsed,
+              email: state.user?.email || parsed.email,
+              phone: state.user?.phone || parsed.phone,
+              updatedFrom: 'login',
+              updatedAt: new Date().toISOString(),
+            };
+            localStorage.setItem('guest_info', JSON.stringify(merged));
+          } catch (e) {
+            console.warn('Failed to persist guest contact info on login:', e);
+          }
+        }
       })
       .addCase(login.rejected, (state, action) => {
         state.loading = false;
@@ -206,6 +223,23 @@ const authSlice = createSlice({
       })
       .addCase(fetchProfile.fulfilled, (state, action) => {
         state.user = action.payload.user || action.payload;
+        // Persist contact info once profile is fetched (OTP login flow)
+        if (typeof window !== 'undefined') {
+          try {
+            const existing = localStorage.getItem('guest_info');
+            const parsed = existing ? JSON.parse(existing) : {};
+            const merged = {
+              ...parsed,
+              email: state.user?.email || parsed.email,
+              phone: state.user?.phone || parsed.phone,
+              updatedFrom: 'profile',
+              updatedAt: new Date().toISOString(),
+            };
+            localStorage.setItem('guest_info', JSON.stringify(merged));
+          } catch (e) {
+            console.warn('Failed to persist guest contact info on profile fetch:', e);
+          }
+        }
       });
   },
 });

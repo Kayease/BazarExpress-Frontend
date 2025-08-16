@@ -43,6 +43,21 @@ export default function Footer() {
       toast.error("Please enter a valid email address");
       return;
     }
+
+    // Store the email in localStorage for guest tracking (merge with existing guest_info)
+    try {
+      const existing = localStorage.getItem('guest_info');
+      const parsed = existing ? JSON.parse(existing) : {};
+      const merged = {
+        ...parsed,
+        email,
+        emailSource: 'newsletter',
+        emailUpdatedAt: new Date().toISOString(),
+      };
+      localStorage.setItem('guest_info', JSON.stringify(merged));
+    } catch (err) {
+      console.warn('Could not store newsletter email to guest_info:', err);
+    }
     
     setIsSubmitting(true);
     

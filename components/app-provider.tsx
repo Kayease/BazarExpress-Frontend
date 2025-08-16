@@ -805,6 +805,10 @@ function AppProviderInner({ children }: { children: ReactNode }) {
     localStorage.setItem("token", token);
     localStorage.setItem("user", JSON.stringify(user));
     
+    // Clear guest info when user logs in
+    localStorage.removeItem('guest_info');
+    localStorage.removeItem('guest_modal_shown');
+    
     // Update Redux state (you might need to dispatch a login action)
     // For now, we'll just reload the page to trigger auth state update
     window.location.reload();

@@ -44,6 +44,30 @@ class CartTracker {
         return true;
       }
 
+      // Merge phone/email from localStorage guest_info if present and not provided
+      try {
+        if (typeof window !== 'undefined') {
+          const stored = localStorage.getItem('guest_info');
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            if (!userInfo.phone && parsed?.phone) {
+              userInfo.phone = parsed.phone;
+            }
+            if (!userInfo.email && parsed?.email) {
+              userInfo.email = parsed.email;
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Could not read guest_info from localStorage:', e);
+      }
+
+      // Do not send to backend if we have neither email nor phone
+      if (!userInfo.email && !userInfo.phone) {
+        console.log('Skipping guest cart tracking: missing contact info');
+        return true; // treat as no-op
+      }
+
       const response = await fetch(`${this.API_URL}/abandoned-carts/track-guest`, {
         method: 'POST',
         headers: {

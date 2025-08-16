@@ -121,13 +121,26 @@ class AbandonedCartTracker {
     try {
       const isRegistered = !!user;
       
+      // Get guest info from localStorage if available
+      let guestInfo = null;
+      if (!isRegistered && typeof window !== 'undefined') {
+        const storedGuestInfo = localStorage.getItem('guest_info');
+        if (storedGuestInfo) {
+          try {
+            guestInfo = JSON.parse(storedGuestInfo);
+          } catch (error) {
+            console.error('Error parsing guest info:', error);
+          }
+        }
+      }
+      
       const payload = {
         userId: isRegistered ? user.id : null,
         sessionId: !isRegistered ? sessionId : null,
         userInfo: {
           name: user?.name || '',
-          email: user?.email || '',
-          phone: user?.phone || '',
+          email: user?.email || guestInfo?.email || '',
+          phone: user?.phone || guestInfo?.phone || '',
           items: cartItems.map(item => ({
             productId: item.id,
             quantity: item.quantity,
@@ -135,6 +148,20 @@ class AbandonedCartTracker {
           }))
         }
       };
+
+      // Debug logging
+      console.log('Abandoned Cart Tracker - Sending payload:', {
+        isRegistered,
+        sessionId,
+        guestInfo,
+        payload
+      });
+
+      // Do not send to backend if no contact info for guests
+      if (!isRegistered && !payload.userInfo.email && !payload.userInfo.phone) {
+        console.log('Skipping abandoned cart tracking (guest without contact info)');
+        return;
+      }
 
       const response = await fetch('/api/abandoned-carts/track', {
         method: 'POST',

@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import AdminLayout from "../../../components/AdminLayout"
-import { Search, TrendingUp, Users, AlertTriangle, Trash2, RefreshCw } from "lucide-react"
+import { Search, TrendingUp, Users, AlertTriangle, Trash2, RefreshCw, Eye, X, Calendar, MapPin } from "lucide-react"
 import { useAppSelector } from '../../../lib/store'
 import { isAdminUser, hasAccessToSection } from '../../../lib/adminAuth'
 import AdminLoader from '../../../components/ui/AdminLoader'
+import DateRangePicker from '../../../components/ui/DateRangePicker'
 
 // Search gap interfaces
 interface SearchGap {
@@ -33,7 +34,8 @@ export default function AdminSearchGaps() {
   const user = useAppSelector((state: any) => state.auth.user)
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
-  const [filterTime, setFilterTime] = useState("all")
+  const [startDate, setStartDate] = useState<Date | null>(null)
+  const [endDate, setEndDate] = useState<Date | null>(null)
   const [searchGaps, setSearchGaps] = useState<SearchGap[]>([])
   const [stats, setStats] = useState({
     totalGaps: 0,
@@ -48,6 +50,13 @@ export default function AdminSearchGaps() {
     isOpen: false,
     searchGap: null,
     isDeleting: false
+  })
+  const [pincodeModal, setPincodeModal] = useState<{
+    isOpen: boolean;
+    searchGap: SearchGap | null;
+  }>({
+    isOpen: false,
+    searchGap: null
   })
   const router = useRouter()
 
@@ -64,7 +73,19 @@ export default function AdminSearchGaps() {
   const fetchSearchGaps = async () => {
     try {
       const token = localStorage.getItem('token')
-      const response = await fetch(`${API_BASE_URL}/search-gaps?search=${searchTerm}&timeFilter=${filterTime}`, {
+      
+      // Build query parameters
+      const params = new URLSearchParams()
+      if (searchTerm) params.append('search', searchTerm)
+      if (startDate && endDate) {
+        params.append('startDate', startDate.toISOString())
+        params.append('endDate', endDate.toISOString())
+        console.log('Adding date params to search gaps:', { startDate: startDate.toISOString(), endDate: endDate.toISOString() })
+      }
+      
+      console.log('Fetching search gaps with params:', params.toString())
+      
+      const response = await fetch(`${API_BASE_URL}/search-gaps?${params.toString()}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -73,6 +94,7 @@ export default function AdminSearchGaps() {
       
       if (response.ok) {
         const data = await response.json()
+        console.log('Search gaps response:', data)
         setSearchGaps(data.searchGaps || [])
       }
     } catch (error) {
@@ -82,10 +104,77 @@ export default function AdminSearchGaps() {
     }
   }
 
+  const fetchSearchGapsWithDates = async (start: Date | null, end: Date | null) => {
+    try {
+      const token = localStorage.getItem('token')
+      
+      // Build query parameters
+      const params = new URLSearchParams()
+      if (searchTerm) params.append('search', searchTerm)
+      if (start && end) {
+        params.append('startDate', start.toISOString())
+        params.append('endDate', end.toISOString())
+        console.log('Adding date params to search gaps:', { startDate: start.toISOString(), endDate: end.toISOString() })
+      }
+      
+      console.log('Fetching search gaps with params:', params.toString())
+      
+      const response = await fetch(`${API_BASE_URL}/search-gaps?${params.toString()}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        console.log('Search gaps response:', data)
+        setSearchGaps(data.searchGaps || [])
+      }
+    } catch (error) {
+      console.error('Error fetching search gaps:', error)
+    }
+  }
+
   const fetchStats = async () => {
     try {
       const token = localStorage.getItem('token')
-      const response = await fetch(`${API_BASE_URL}/search-gaps/stats`, {
+      
+      // Build query parameters for stats
+      const params = new URLSearchParams()
+      if (startDate && endDate) {
+        params.append('startDate', startDate.toISOString())
+        params.append('endDate', endDate.toISOString())
+      }
+      
+      const response = await fetch(`${API_BASE_URL}/search-gaps/stats?${params.toString()}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        setStats(data)
+      }
+    } catch (error) {
+      console.error('Error fetching stats:', error)
+    }
+  }
+
+  const fetchStatsWithDates = async (start: Date | null, end: Date | null) => {
+    try {
+      const token = localStorage.getItem('token')
+      
+      // Build query parameters for stats
+      const params = new URLSearchParams()
+      if (start && end) {
+        params.append('startDate', start.toISOString())
+        params.append('endDate', end.toISOString())
+      }
+      
+      const response = await fetch(`${API_BASE_URL}/search-gaps/stats?${params.toString()}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -149,15 +238,47 @@ export default function AdminSearchGaps() {
     fetchStats()
   }
 
-  // Refresh data when filters change
+  const handleDateRangeChange = (start: Date | null, end: Date | null) => {
+    console.log('=== SEARCH GAPS: Date range change callback triggered ===')
+    console.log('Received dates:', { start, end })
+    console.log('Previous dates:', { startDate, endDate })
+    
+    setStartDate(start)
+    setEndDate(end)
+    
+    // Fetch data immediately when date range is applied
+    console.log('Fetching data with date range:', { start, end })
+    fetchSearchGapsWithDates(start, end)
+    fetchStatsWithDates(start, end)
+  }
+
+  // Refresh data when search term changes
   useEffect(() => {
     if (!loading) {
       fetchSearchGaps()
+      fetchStats()
     }
-  }, [searchTerm, filterTime])
+  }, [searchTerm])
+
+  // Remove the problematic useEffect that was causing the loop
+  // The handleDateRangeChange function will handle date filtering directly
 
   // Data is already filtered on the server side based on searchTerm and filterTime
   const filteredGaps = searchGaps
+
+  const openPincodeModal = (searchGap: SearchGap) => {
+    setPincodeModal({
+      isOpen: true,
+      searchGap
+    })
+  }
+
+  const closePincodeModal = () => {
+    setPincodeModal({
+      isOpen: false,
+      searchGap: null
+    })
+  }
 
   if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'search-gaps')) {
     return <AdminLoader message="Checking permissions..." fullScreen />
@@ -235,30 +356,27 @@ export default function AdminSearchGaps() {
 
         {/* Filters */}
         <div className="bg-white rounded-lg p-6 shadow-md">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <div className="relative md:col-span-3">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="relative md:col-span-2">
               <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
               <input
                 type="text"
                 placeholder="Search gaps..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary h-10"
               />
             </div>
-            <select
-              value={filterTime}
-              onChange={(e) => setFilterTime(e.target.value)}
-              className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-            >
-              <option value="all">All Time</option>
-              <option value="today">Today</option>
-              <option value="week">This Week</option>
-              <option value="month">This Month</option>
-            </select>
+            <DateRangePicker
+              startDate={startDate}
+              endDate={endDate}
+              onDateRangeChange={handleDateRangeChange}
+              placeholder="Filter by date range"
+              className="md:col-span-1"
+            />
             <button
               onClick={handleRefresh}
-              className="flex items-center justify-center px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-primary-dark focus:outline-none focus:ring-2 focus:ring-brand-primary transition-colors"
+              className="flex items-center justify-center px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-primary-dark focus:outline-none focus:ring-2 focus:ring-brand-primary transition-colors h-10"
               title="Refresh data"
             >
               <RefreshCw className="h-4 w-4" />
@@ -303,13 +421,22 @@ export default function AdminSearchGaps() {
                       </p>
                     </td>
                     <td className="py-4 px-6 text-center">
-                      <button
-                        onClick={() => openDeleteModal(gap)}
-                        className="text-red-600 hover:text-red-700 p-2 rounded-lg hover:bg-red-50 transition-colors"
-                        title="Delete search gap"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      <div className="flex items-center justify-center space-x-2">
+                        <button
+                          onClick={() => openPincodeModal(gap)}
+                          className="text-blue-600 hover:text-blue-700 p-2 rounded-lg hover:bg-blue-50 transition-colors"
+                          title="View pincodes"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => openDeleteModal(gap)}
+                          className="text-red-600 hover:text-red-700 p-2 rounded-lg hover:bg-red-50 transition-colors"
+                          title="Delete search gap"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -324,6 +451,167 @@ export default function AdminSearchGaps() {
           </div>
         </div>
       </div>
+
+      {/* Pincode List Modal */}
+      {pincodeModal.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden shadow-2xl">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-t-2xl">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center space-x-3">
+                  <div className="flex-shrink-0 w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                    <Eye className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-white">Pincode Details</h3>
+                    <p className="text-white/80">Search term: "{pincodeModal.searchGap?.searchTerm}"</p>
+                  </div>
+                </div>
+                <button
+                  onClick={closePincodeModal}
+                  className="text-white/80 hover:text-white p-2 hover:bg-white/10 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              {/* Summary Statistics */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <Search className="w-4 h-4 text-blue-500" />
+                    <span className="text-sm font-medium text-gray-600">Total Searches</span>
+                  </div>
+                  <p className="text-lg font-bold text-gray-900">{pincodeModal.searchGap?.searchCount}</p>
+                </div>
+                
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <Users className="w-4 h-4 text-green-500" />
+                    <span className="text-sm font-medium text-gray-600">Unique Users</span>
+                  </div>
+                  <p className="text-lg font-bold text-gray-900">{pincodeModal.searchGap?.userCount}</p>
+                </div>
+                
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <Calendar className="w-4 h-4 text-orange-500" />
+                    <span className="text-sm font-medium text-gray-600">First Searched</span>
+                  </div>
+                  <p className="text-sm font-semibold text-gray-900">
+                    {pincodeModal.searchGap?.firstSearched ? 
+                      new Date(pincodeModal.searchGap.firstSearched).toLocaleDateString() : 'N/A'
+                    }
+                  </p>
+                </div>
+                
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <TrendingUp className="w-4 h-4 text-purple-500" />
+                    <span className="text-sm font-medium text-gray-600">Last Searched</span>
+                  </div>
+                  <p className="text-sm font-semibold text-gray-900">
+                    {pincodeModal.searchGap?.lastSearched ? 
+                      new Date(pincodeModal.searchGap.lastSearched).toLocaleDateString() : 'N/A'
+                    }
+                  </p>
+                </div>
+              </div>
+
+              {/* Search Entries Table */}
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-4 flex items-center">
+                  <MapPin className="w-5 h-5 mr-2 text-blue-500" />
+                  Search Entries by Pincode ({pincodeModal.searchGap?.searchedBy?.length || 0})
+                </h4>
+                
+                {pincodeModal.searchGap?.searchedBy && pincodeModal.searchGap.searchedBy.length > 0 ? (
+                  <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                    {/* Table Header */}
+                    <div className="bg-gray-50 px-6 py-3 border-b border-gray-200">
+                      <div className="grid grid-cols-12 gap-4 text-sm font-medium text-gray-700">
+                        <div className="col-span-4">User Information</div>
+                        <div className="col-span-3 text-center">Pincode</div>
+                        <div className="col-span-3 text-center">Location</div>
+                        <div className="col-span-2 text-center">Searched At</div>
+                      </div>
+                    </div>
+                    
+                    {/* Scrollable Table Body */}
+                    <div className="max-h-[400px] overflow-y-auto">
+                      {pincodeModal.searchGap.searchedBy.map((entry, index) => (
+                        <div 
+                          key={index} 
+                          className={`px-6 py-4 border-b border-gray-100 hover:bg-gray-50 transition-colors ${
+                            index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'
+                          }`}
+                        >
+                          <div className="grid grid-cols-12 gap-4 text-sm">
+                            {/* User Information */}
+                            <div className="col-span-4">
+                              <div className="flex items-center space-x-2">
+                                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                                  <Users className="w-4 h-4 text-blue-600" />
+                                </div>
+                                <div>
+                                  <p className="font-medium text-gray-900">
+                                    {entry.userId ? 'Registered User' : 'Guest User'}
+                                  </p>
+                                  <p className="text-xs text-gray-500 font-mono">
+                                    {entry.userId || entry.guestId || 'Anonymous'}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                            
+                            {/* Pincode */}
+                            <div className="col-span-3 flex items-center justify-center">
+                              <div className="flex items-center space-x-2">
+                                <MapPin className="w-4 h-4 text-green-500" />
+                                <span className="font-medium text-gray-900">
+                                  {entry.pincode || 'Not specified'}
+                                </span>
+                              </div>
+                            </div>
+                            
+                            {/* Location (City/State based on pincode) */}
+                            <div className="col-span-3 flex items-center justify-center">
+                              <span className="text-gray-600">
+                                {entry.pincode ? 'Location available' : 'Location unknown'}
+                              </span>
+                            </div>
+                            
+                            {/* Timestamp */}
+                            <div className="col-span-2 flex items-center justify-center">
+                              <div className="text-center">
+                                <p className="text-sm font-medium text-gray-900">
+                                  {new Date(entry.searchedAt).toLocaleDateString()}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {new Date(entry.searchedAt).toLocaleTimeString()}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-12 bg-gray-50 rounded-xl">
+                    <Search className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-500 text-lg">No search entries found</p>
+                    <p className="text-gray-400 text-sm">This search gap doesn't have any recorded entries yet.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Confirmation Modal */}
       {deleteModal.isOpen && (
@@ -346,7 +634,7 @@ export default function AdminSearchGaps() {
                 <button
                   onClick={closeDeleteModal}
                   disabled={deleteModal.isDeleting}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
                 >
                   Cancel
                 </button>

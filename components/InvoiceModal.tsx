@@ -154,16 +154,41 @@ export default function InvoiceModal({ isOpen, onClose, orderData }: InvoiceModa
         const html2pdf = (window as any).html2pdf;
         const element = invoiceRef.current;
 
+        // Create a temporary wrapper for better centering
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = `
+          width: 210mm;
+          min-height: 297mm;
+          margin: 0 auto;
+          padding: 0;
+          background: white;
+          display: flex;
+          justify-content: center;
+          align-items: flex-start;
+        `;
+        
+        const clonedElement = element.cloneNode(true) as HTMLElement;
+        clonedElement.style.cssText = `
+          width: 100%;
+          max-width: 794px;
+          margin: 0 auto;
+          padding: 20px;
+          box-sizing: border-box;
+        `;
+        
+        wrapper.appendChild(clonedElement);
+        document.body.appendChild(wrapper);
+
         const opt = {
-          margin: [15, 15, 15, 15],
+          margin: [5, 5, 5, 5],
           filename: `Invoice-${orderData.orderId}.pdf`,
-          image: { type: 'png', quality: 1.0 },
+          image: { type: 'png', quality: 0.98 },
           html2canvas: {
-            scale: 4,
+            scale: 2,
             useCORS: true,
             letterRendering: true,
             allowTaint: false,
-            dpi: 300,
+            dpi: 192,
             width: 794,
             height: 1123,
             scrollX: 0,
@@ -177,7 +202,7 @@ export default function InvoiceModal({ isOpen, onClose, orderData }: InvoiceModa
             unit: 'mm',
             format: 'a4',
             orientation: 'portrait',
-            compress: false,
+            compress: true,
             precision: 16
           },
           pagebreak: {
@@ -186,7 +211,10 @@ export default function InvoiceModal({ isOpen, onClose, orderData }: InvoiceModa
           }
         };
 
-        await html2pdf().set(opt).from(element).save();
+        await html2pdf().set(opt).from(wrapper).save();
+        
+        // Clean up
+        document.body.removeChild(wrapper);
       } catch (error) {
         console.error('Error generating PDF:', error);
         alert('Failed to generate PDF. Please try again or contact support.');
@@ -386,7 +414,7 @@ export default function InvoiceModal({ isOpen, onClose, orderData }: InvoiceModa
         </div>
 
         {/* Invoice Content - Modified container */}
-        <div className="flex-1 overflow-auto p-2 print:p-0">
+        <div className="flex-1 overflow-auto p-4 print:p-0">
           <div
             ref={invoiceRef}
             className="bg-white mx-auto"
@@ -397,7 +425,9 @@ export default function InvoiceModal({ isOpen, onClose, orderData }: InvoiceModa
               width: '794px', // Standard A4 width in pixels at 96dpi
               maxWidth: '100%',
               margin: '0 auto',
-              padding: '10px'
+              padding: '30px',
+              boxSizing: 'border-box',
+              minHeight: '1123px' // A4 height in pixels
             }}
           >
             {/* Print-specific styles */}
@@ -406,11 +436,14 @@ export default function InvoiceModal({ isOpen, onClose, orderData }: InvoiceModa
                 @media print {
                   @page {
                     size: A4 portrait;
-                    margin: 0;
+                    margin: 10mm;
                   }
                   body {
                     margin: 0;
                     padding: 0;
+                    display: flex;
+                    justify-content: center;
+                    align-items: flex-start;
                   }
                   body * {
                     visibility: hidden;
@@ -420,28 +453,43 @@ export default function InvoiceModal({ isOpen, onClose, orderData }: InvoiceModa
                   }
                   #invoice-content {
                     position: absolute;
-                    left: 0;
+                    left: 50%;
                     top: 0;
-                    width: 100%;
+                    transform: translateX(-50%);
+                    width: 794px;
                     margin: 0;
-                    padding: 0;
+                    padding: 20px;
+                    box-sizing: border-box;
                   }
                   table {
                     width: 100% !important;
+                    table-layout: fixed !important;
                   }
                   td, th {
                     padding: 3px !important;
-                    font-size: 9px !important;
+                    font-size: 8px !important;
+                    word-wrap: break-word !important;
                   }
                   .no-break {
                     page-break-inside: avoid;
                   }
                 }
+                
+                /* PDF generation specific styles */
+                .pdf-container {
+                  display: flex;
+                  justify-content: center;
+                  align-items: flex-start;
+                  width: 100%;
+                  min-height: 100vh;
+                  background: white;
+                }
               `}
             </style>
 
             {/* Add an ID to the main invoice container for print styling */}
-            <div id="invoice-content">
+            <div id="invoice-content" className="pdf-container">
+              <div style={{ width: '100%', maxWidth: '794px', margin: '0 auto' }}>
               {/* Header */}
               <div className="no-break" style={{ border: '2px solid #000', marginBottom: '10px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', borderBottom: '1px solid #000' }}>
@@ -818,6 +866,7 @@ export default function InvoiceModal({ isOpen, onClose, orderData }: InvoiceModa
                     </div>
                   </div>
                 </div>
+              </div>
               </div>
             </div>
           </div>

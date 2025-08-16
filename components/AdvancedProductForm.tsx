@@ -340,12 +340,17 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
     const price = Number(product.price) || 0;
     const mrp = Number(product.mrp) || 0;
     const costPrice = Number(product.costPrice) || 0;
-    // 1. Main image required
+    // 1. SKU is required
+    if (!product.sku || product.sku.trim() === "") {
+      toast.error("SKU is required.");
+      return;
+    }
+    // 2. Main image required
     if (!product.image && !imageFile) {
       toast.error("Main product image is required.");
       return;
     }
-    // 2. Cost price < MRP and < selling price
+    // 3. Cost price < MRP and < selling price
     if (costPrice >= mrp) {
       toast.error("Cost price must be less than MRP.");
       return;
@@ -354,10 +359,19 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
       toast.error("Cost price must be less than the selling price.");
       return;
     }
-    // 3. Selling price <= MRP
+    // 4. Selling price <= MRP
     if (price > mrp) {
       toast.error("Selling price cannot be higher than the MRP.");
       return;
+    }
+    // 5. Validate variant SKUs if variants exist
+    if (Object.keys(variants).length > 0) {
+      for (const [key, variant] of Object.entries(variants)) {
+        if (!variant.sku || variant.sku.trim() === "") {
+          toast.error(`SKU is required for variant: ${key}`);
+          return;
+        }
+      }
     }
     setLoading(true);
     try {
@@ -521,6 +535,7 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
         <div className="bg-surface-primary rounded-lg shadow-md">
           <form onSubmit={handleSubmit} className="p-8 space-y-6">
             {uploading && <div className="text-brand-primary font-semibold mb-2 flex items-center gap-2"><svg className="animate-spin h-5 w-5 text-brand-primary" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>Uploading images, please wait...</div>}
+            
             {/* Basic Information */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
@@ -546,6 +561,7 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                   onChange={(e) => setProduct({ ...product, sku: e.target.value })}
                   className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
                   placeholder="Enter SKU"
+                  required
                 />
               </div>
               <div>
@@ -982,8 +998,17 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                     {key === 'Inventory' && showInventory && (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">SKU</label>
-                          <input type="text" value={product.sku} onChange={e => setProduct({ ...product, sku: e.target.value })} className="w-full border border-gray-300 rounded-lg p-3" placeholder="Enter SKU" />
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            SKU <span className="text-red-500">*</span>
+                          </label>
+                          <input 
+                            type="text" 
+                            value={product.sku} 
+                            onChange={e => setProduct({ ...product, sku: e.target.value })} 
+                            className="w-full border border-gray-300 rounded-lg p-3" 
+                            placeholder="Enter SKU" 
+                            required 
+                          />
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">HSN Code</label>
@@ -1220,6 +1245,7 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                                             disabled={autoSku}
                                             onChange={e => setVariants(prev => ({ ...prev, [key]: { ...variant, sku: e.target.value } }))}
                                             className={`w-24 border rounded px-1 py-0.5 ${autoSku ? 'bg-gray-100 text-gray-400' : ''}`}
+                                            required={!autoSku}
                                           />
                                         </td>
                                         {/* Price */}
