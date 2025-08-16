@@ -11,6 +11,9 @@ interface StockTransferItem {
   sku: string;
   quantity: number;
   unitPrice: number;
+  variantKey?: string;
+  variantName?: string;
+  variantImage?: string;
 }
 
 interface StockTransfer {
@@ -218,6 +221,11 @@ export default function StockTransferDetailsModal({
                     {/* Product Info */}
                     <div className="flex-1 ml-4">
                       <h5 className="font-medium text-gray-900 mb-1">{item.productName}</h5>
+                      {item.variantName && (
+                        <div className="text-sm text-blue-600 mb-1">
+                          Variant: {item.variantName}
+                        </div>
+                      )}
                       <div className="flex items-center space-x-4 text-sm text-gray-500">
                         <span>SKU: {item.sku}</span>
                         <span>Qty: {item.quantity}</span>

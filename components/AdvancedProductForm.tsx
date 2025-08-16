@@ -130,6 +130,17 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
   // Add refresh trigger for WarehouseSelector
   const [warehouseRefreshTrigger, setWarehouseRefreshTrigger] = useState(0);
 
+  // Add state for SKU validation
+  const [skuValidation, setSkuValidation] = useState<{
+    isChecking: boolean;
+    isValid: boolean;
+    message: string;
+  }>({
+    isChecking: false,
+    isValid: true,
+    message: ''
+  });
+
   // Add state for search inputs and focus
   const [categorySearch, setCategorySearch] = useState(() => {
     if (mode === 'edit' && initialProduct && initialProduct.category) {
@@ -174,6 +185,13 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
   }
   function getVariantKey(combo: string[]): string {
     return combo.join("::");
+  }
+  
+  function calculateTotalVariantStock(): number {
+    return Object.values(variants).reduce((total: number, variant: any) => {
+      const stock = parseInt(variant.stock) || 0;
+      return total + stock;
+    }, 0);
   }
   function regenerateVariants(newAttributes = attributes) {
     // Only generate variants if there is at least one attribute with values
@@ -303,6 +321,86 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
     }));
   }, [product.quantity]);
 
+  // Calculate total quantity from variants when variants exist
+  useEffect(() => {
+    const hasVariants = Object.keys(variants).length > 0;
+    if (hasVariants) {
+      const totalVariantStock = calculateTotalVariantStock();
+      
+      setProduct((prev: any) => ({
+        ...prev,
+        quantity: totalVariantStock
+      }));
+    }
+  }, [variants]);
+
+  // Auto-generate SEO fields
+  const generateSEOFields = (productData: any, categoriesData: any[], brandsData: any[]) => {
+    const { name, description, category, brand, price } = productData;
+    
+    if (!name) return { metaTitle: '', metaDescription: '', metaKeywords: '' };
+
+    // Get category and brand names
+    const categoryObj = categoriesData.find(cat => cat._id === category);
+    const brandObj = brandsData.find(br => br._id === brand);
+    const categoryName = categoryObj?.name || '';
+    const brandName = brandObj?.name || '';
+
+    // Generate Meta Title (60 characters max for SEO)
+    let metaTitle = name;
+    if (brandName) metaTitle = `${brandName} ${name}`;
+    if (categoryName && metaTitle.length < 50) metaTitle += ` - ${categoryName}`;
+    if (metaTitle.length > 60) metaTitle = metaTitle.substring(0, 57) + '...';
+
+    // Generate Meta Description (160 characters max for SEO)
+    let metaDescription = '';
+    if (description) {
+      // Strip HTML tags and get plain text
+      const plainDescription = description.replace(/<[^>]*>/g, '').trim();
+      metaDescription = plainDescription;
+    } else {
+      metaDescription = `Buy ${name}`;
+      if (brandName) metaDescription += ` by ${brandName}`;
+      if (categoryName) metaDescription += ` in ${categoryName}`;
+      if (price) metaDescription += ` at best price of ₹${price}`;
+      metaDescription += '. High quality products with fast delivery.';
+    }
+    if (metaDescription.length > 160) metaDescription = metaDescription.substring(0, 157) + '...';
+
+    // Generate Meta Keywords (comma separated)
+    const keywords = [];
+    if (name) keywords.push(name.toLowerCase());
+    if (brandName) keywords.push(brandName.toLowerCase());
+    if (categoryName) keywords.push(categoryName.toLowerCase());
+    
+    // Add variations of the product name
+    const nameWords = name.toLowerCase().split(' ').filter((word: string) => word.length > 2);
+    keywords.push(...nameWords);
+    
+    // Add common e-commerce keywords
+    keywords.push('buy online', 'best price', 'quality product');
+    if (categoryName) keywords.push(`${categoryName.toLowerCase()} online`);
+    
+    // Remove duplicates and join
+    const uniqueKeywords = [...new Set(keywords)];
+    const metaKeywords = uniqueKeywords.slice(0, 10).join(', '); // Limit to 10 keywords
+
+    return { metaTitle, metaDescription, metaKeywords };
+  };
+
+  // Auto-generate SEO fields when product data changes
+  useEffect(() => {
+    if (product.name && categories.length && brands.length) {
+      const seoFields = generateSEOFields(product, categories, brands);
+      setProduct((prev: any) => ({
+        ...prev,
+        ...seoFields
+      }));
+    }
+  }, [product.name, product.description, product.category, product.brand, product.price, categories, brands]);
+
+
+
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -321,31 +419,137 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
     }));
   };
 
+  // Function to check if SKU already exists in the selected warehouse
+  const checkSKUExists = async (sku: string, warehouseId: string, excludeProductId?: string) => {
+    try {
+      const response = await apiGet(`${API_URL}/products/check-sku?sku=${encodeURIComponent(sku)}&warehouse=${encodeURIComponent(warehouseId)}${excludeProductId ? `&excludeId=${excludeProductId}` : ''}`);
+      return response;
+    } catch (error) {
+      console.error('Error checking SKU:', error);
+      return { exists: false };
+    }
+  };
+
+  // Debounced SKU validation for real-time feedback
+  useEffect(() => {
+    const validateSKU = async () => {
+      if (!product.sku || !product.warehouse || product.sku.trim() === '') {
+        setSkuValidation({ isChecking: false, isValid: true, message: '' });
+        return;
+      }
+
+      setSkuValidation({ isChecking: true, isValid: true, message: 'Checking SKU...' });
+
+      try {
+        const result = await checkSKUExists(product.sku, product.warehouse, mode === 'edit' ? productId : undefined);
+        if (result.exists) {
+          let message = `SKU already exists in this warehouse`;
+          if (result.productName) {
+            if (result.isVariant && result.variantName) {
+              message += ` (${result.productName} - ${result.variantName})`;
+            } else {
+              message += ` (${result.productName})`;
+            }
+          }
+          setSkuValidation({
+            isChecking: false,
+            isValid: false,
+            message: message
+          });
+        } else {
+          setSkuValidation({
+            isChecking: false,
+            isValid: true,
+            message: 'SKU is available'
+          });
+        }
+      } catch (error) {
+        setSkuValidation({
+          isChecking: false,
+          isValid: true,
+          message: ''
+        });
+      }
+    };
+
+    const timeoutId = setTimeout(validateSKU, 500); // 500ms debounce
+    return () => clearTimeout(timeoutId);
+  }, [product.sku, product.warehouse, mode, productId]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     // --- Custom Validations ---
     const price = Number(product.price) || 0;
     const mrp = Number(product.mrp) || 0;
+    
     // 1. SKU is required
     if (!product.sku || product.sku.trim() === "") {
       toast.error("SKU is required.");
       return;
     }
-    // 2. Main image required
+
+    // 2. Warehouse is required
+    if (!product.warehouse || product.warehouse.trim() === "") {
+      toast.error("Please select a warehouse.");
+      return;
+    }
+
+    // 3. Check for duplicate SKU in the selected warehouse
+    try {
+      const skuResult = await checkSKUExists(product.sku, product.warehouse, mode === 'edit' ? productId : undefined);
+      if (skuResult.exists) {
+        let errorMessage = `SKU "${product.sku}" already exists in the selected warehouse`;
+        if (skuResult.productName) {
+          if (skuResult.isVariant && skuResult.variantName) {
+            errorMessage += ` (${skuResult.productName} - ${skuResult.variantName})`;
+          } else {
+            errorMessage += ` (${skuResult.productName})`;
+          }
+        }
+        errorMessage += '. Please use a different SKU.';
+        toast.error(errorMessage);
+        return;
+      }
+    } catch (error) {
+      toast.error("Error validating SKU. Please try again.");
+      return;
+    }
+    // 4. Main image required
     if (!product.image && !imageFile) {
       toast.error("Main product image is required.");
       return;
     }
-    // 3. Selling price <= MRP
+    // 5. Selling price <= MRP
     if (price > mrp) {
       toast.error("Selling price cannot be higher than the MRP.");
       return;
     }
-    // 5. Validate variant SKUs if variants exist
+    // 6. Validate variant SKUs if variants exist
     if (Object.keys(variants).length > 0) {
       for (const [key, variant] of Object.entries(variants)) {
         if (!variant.sku || variant.sku.trim() === "") {
           toast.error(`SKU is required for variant: ${key}`);
+          return;
+        }
+        
+        // Check if variant SKU already exists in the selected warehouse
+        try {
+          const variantSkuResult = await checkSKUExists(variant.sku, product.warehouse, mode === 'edit' ? productId : undefined);
+          if (variantSkuResult.exists) {
+            let errorMessage = `Variant SKU "${variant.sku}" for variant "${key}" already exists in the selected warehouse`;
+            if (variantSkuResult.productName) {
+              if (variantSkuResult.isVariant && variantSkuResult.variantName) {
+                errorMessage += ` (${variantSkuResult.productName} - ${variantSkuResult.variantName})`;
+              } else {
+                errorMessage += ` (${variantSkuResult.productName})`;
+              }
+            }
+            errorMessage += '. Please use a different SKU.';
+            toast.error(errorMessage);
+            return;
+          }
+        } catch (error) {
+          toast.error(`Error validating variant SKU for "${key}". Please try again.`);
           return;
         }
       }
@@ -521,14 +725,46 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   SKU <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  value={product.sku ?? ""}
-                  onChange={(e) => setProduct({ ...product, sku: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                  placeholder="Enter SKU"
-                  required
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={product.sku ?? ""}
+                    onChange={(e) => setProduct({ ...product, sku: e.target.value })}
+                    className={`w-full border rounded-lg p-3 focus:outline-none focus:ring-2 pr-10 ${
+                      skuValidation.isValid 
+                        ? 'border-gray-300 focus:ring-brand-primary' 
+                        : 'border-red-300 focus:ring-red-500'
+                    }`}
+                    placeholder="Enter SKU"
+                    required
+                  />
+                  {skuValidation.isChecking && (
+                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                      <svg className="animate-spin h-4 w-4 text-gray-400" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                      </svg>
+                    </div>
+                  )}
+                  {!skuValidation.isChecking && product.sku && product.warehouse && (
+                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                      {skuValidation.isValid ? (
+                        <svg className="h-4 w-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                      ) : (
+                        <svg className="h-4 w-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {skuValidation.message && (
+                  <p className={`text-xs mt-1 ${skuValidation.isValid ? 'text-green-600' : 'text-red-600'}`}>
+                    {skuValidation.message}
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -763,11 +999,17 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                   type="number"
                   value={product.quantity ?? ""}
                   onChange={e => setProduct({ ...product, quantity: e.target.value === "" ? "" : Number(e.target.value) })}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                  className={`w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary ${Object.keys(variants).length > 0 ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                   placeholder="0"
                   min="0"
                   required
+                  readOnly={Object.keys(variants).length > 0}
                 />
+                {Object.keys(variants).length > 0 && (
+                  <p className="text-xs text-blue-600 mt-1">
+                    Quantity is automatically calculated from variant stocks ({Object.keys(variants).length} variants)
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1007,7 +1249,19 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
-                          <input type="number" value={product.quantity} onChange={e => setProduct({ ...product, quantity: Number(e.target.value) })} className="w-full border border-gray-300 rounded-lg p-3" placeholder="0" />
+                          <input 
+                            type="number" 
+                            value={product.quantity} 
+                            onChange={e => setProduct({ ...product, quantity: Number(e.target.value) })} 
+                            className={`w-full border border-gray-300 rounded-lg p-3 ${Object.keys(variants).length > 0 ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                            placeholder="0" 
+                            readOnly={Object.keys(variants).length > 0}
+                          />
+                          {Object.keys(variants).length > 0 && (
+                            <p className="text-xs text-blue-600 mt-1">
+                              Auto-calculated from {Object.keys(variants).length} variant(s)
+                            </p>
+                          )}
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Low Stock Threshold</label>
@@ -1313,6 +1567,18 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                                 </tbody>
                               </table>
                             </div>
+                            {/* Total Stock Summary */}
+                            <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm font-medium text-blue-800">Total Stock Across All Variants:</span>
+                                <span className="text-lg font-bold text-blue-900">
+                                  {calculateTotalVariantStock()} units
+                                </span>
+                              </div>
+                              <p className="text-xs text-blue-600 mt-1">
+                                This total will be used as the main product quantity
+                              </p>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -1349,18 +1615,48 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                       </div>
                     )}
                     {key === 'SEO' && showSEO && (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Meta Title</label>
-                          <input type="text" value={product.metaTitle} onChange={e => setProduct({ ...product, metaTitle: e.target.value })} className="w-full border border-gray-300 rounded-lg p-3" placeholder="Meta title for SEO" />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Meta Description</label>
-                          <input type="text" value={product.metaDescription} onChange={e => setProduct({ ...product, metaDescription: e.target.value })} className="w-full border border-gray-300 rounded-lg p-3" placeholder="Meta description for SEO" />
-                        </div>
-                        <div className="md:col-span-2">
-                          <label className="block text-sm font-medium  text-gray-700 mb-1">Meta Keywords (comma separated)</label>
-                          <input type="text" value={product.metaKeywords} onChange={e => setProduct({ ...product, metaKeywords: e.target.value })} className="w-full border border-gray-300 rounded-lg p-3" placeholder="keywords1, keywords2" />
+                      <div className="space-y-6">
+                        <p className="text-sm text-gray-600">SEO fields are automatically generated based on product details</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Meta Title 
+                              <span className="text-xs text-green-600 ml-2">✓ Auto-generated</span>
+                            </label>
+                            <input 
+                              type="text" 
+                              value={product.metaTitle} 
+                              readOnly 
+                              className="w-full border border-gray-300 rounded-lg p-3 bg-gray-50 text-gray-700 cursor-not-allowed" 
+                              placeholder="Auto-generated based on product details" 
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Meta Description
+                              <span className="text-xs text-green-600 ml-2">✓ Auto-generated</span>
+                            </label>
+                            <input 
+                              type="text" 
+                              value={product.metaDescription} 
+                              readOnly 
+                              className="w-full border border-gray-300 rounded-lg p-3 bg-gray-50 text-gray-700 cursor-not-allowed" 
+                              placeholder="Auto-generated based on product details" 
+                            />
+                          </div>
+                          <div className="md:col-span-2">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Meta Keywords (comma separated)
+                              <span className="text-xs text-green-600 ml-2">✓ Auto-generated</span>
+                            </label>
+                            <input 
+                              type="text" 
+                              value={product.metaKeywords} 
+                              readOnly 
+                              className="w-full border border-gray-300 rounded-lg p-3 bg-gray-50 text-gray-700 cursor-not-allowed" 
+                              placeholder="Auto-generated based on product details" 
+                            />
+                          </div>
                         </div>
                       </div>
                     )}

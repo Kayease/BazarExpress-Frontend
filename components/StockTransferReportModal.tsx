@@ -17,6 +17,9 @@ interface StockTransferItem {
   sku: string;
   quantity: number;
   unitPrice: number;
+  variantKey?: string;
+  variantName?: string;
+  variantImage?: string;
 }
 
 interface Warehouse {
@@ -566,6 +569,11 @@ export default function StockTransferReportModal({
                           border: '1px solid #e5e7eb'
                         }}>
                           <div style={{ fontWeight: 'bold' }}>{item.productName}</div>
+                          {item.variantName && (
+                            <div style={{ fontSize: '7px', color: '#6b7280', marginTop: '2px' }}>
+                              Variant: {item.variantName}
+                            </div>
+                          )}
                         </td>
                         <td style={{ 
                           padding: '6px', 
