@@ -76,14 +76,12 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
     brand: "",
     price: "",
     mrp: "",
-    costPrice: "",
     tax: "",
-    priceIncludesTax: false,
+    priceIncludesTax: true, // Default to true
     sku: "",
     hsn: "",
     stockStatus: true,
     quantity: 0,
-    allowBackorders: false,
     lowStockThreshold: 0,
     warehouse: "",
     status: "active",
@@ -93,22 +91,14 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
     shippingClass: "",
     returnable: false,
     returnWindow: 0,
-    codAvailable: false,
+    codAvailable: true,
     mainImage: null as string | null,
     galleryImages: [] as string[],
-    video: "",
-    model3d: null as string | null,
     metaTitle: "",
     metaDescription: "",
     metaKeywords: "",
-    canonicalUrl: "",
-    legal_hsn: "",
-    batchNumber: "",
-    manufacturer: "",
-    warranty: "",
-    certifications: "",
-    safetyInfo: "",
     unit: "",
+    locationName: "", // New field for product location
   });
   const [uploading, setUploading] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -210,7 +200,6 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
   const [showVariants, setShowVariants] = useState(false);
   const [showMedia, setShowMedia] = useState(false);
   const [showSEO, setShowSEO] = useState(false);
-  const [showLegal, setShowLegal] = useState(false);
 
   // Fetch categories, brands, warehouses, and taxes
   useEffect(() => {
@@ -256,19 +245,8 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
         metaTitle: initialProduct.metaTitle || '',
         metaDescription: initialProduct.metaDescription || '',
         metaKeywords: initialProduct.metaKeywords || '',
-        canonicalUrl: initialProduct.canonicalUrl || '',
-        legal_hsn: initialProduct.legal_hsn || '',
-        batchNumber: initialProduct.batchNumber || '',
-        manufacturer: initialProduct.manufacturer || '',
-        warranty: initialProduct.warranty || '',
-        certifications: initialProduct.certifications || '',
-        safetyInfo: initialProduct.safetyInfo || '',
         mainImage: initialProduct.mainImage || '',
-        video: initialProduct.video || '',
-        model3d: initialProduct.model3d || '',
-        costPrice: initialProduct.costPrice ?? 0,
-        priceIncludesTax: !!initialProduct.priceIncludesTax,
-        allowBackorders: !!initialProduct.allowBackorders,
+        priceIncludesTax: initialProduct.priceIncludesTax !== undefined ? !!initialProduct.priceIncludesTax : true, // Default to true
         lowStockThreshold: initialProduct.lowStockThreshold ?? 0,
         weight: initialProduct.weight ?? 0,
         dimensions: initialProduct.dimensions || { l: '', w: '', h: '' },
@@ -276,6 +254,7 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
         returnable: !!initialProduct.returnable,
         returnWindow: initialProduct.returnWindow ?? 0,
         codAvailable: !!initialProduct.codAvailable,
+        locationName: initialProduct.locationName || '', // New field
       }));
       setAttributes(initialProduct.attributes || []);
       setVariants(initialProduct.variants || {});
@@ -289,7 +268,7 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
         setSubcategories([]);
         return;
       }
-      
+
       try {
         const data = await apiGet(`${API_URL}/categories/subcategories/${product.category}`);
         setSubcategories(data);
@@ -298,7 +277,7 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
         setSubcategories([]);
       }
     };
-    
+
     fetchSubcategories();
   }, [product.category, API_URL]);
 
@@ -315,6 +294,14 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
       setProduct((prev: any) => ({ ...prev, slug: slugify(product.name) }));
     }
   }, [product.name]);
+
+  // Auto-adjust stock status based on quantity
+  useEffect(() => {
+    setProduct((prev: any) => ({
+      ...prev,
+      stockStatus: prev.quantity > 0
+    }));
+  }, [product.quantity]);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -339,7 +326,6 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
     // --- Custom Validations ---
     const price = Number(product.price) || 0;
     const mrp = Number(product.mrp) || 0;
-    const costPrice = Number(product.costPrice) || 0;
     // 1. SKU is required
     if (!product.sku || product.sku.trim() === "") {
       toast.error("SKU is required.");
@@ -350,16 +336,7 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
       toast.error("Main product image is required.");
       return;
     }
-    // 3. Cost price < MRP and < selling price
-    if (costPrice >= mrp) {
-      toast.error("Cost price must be less than MRP.");
-      return;
-    }
-    if (costPrice >= price) {
-      toast.error("Cost price must be less than the selling price.");
-      return;
-    }
-    // 4. Selling price <= MRP
+    // 3. Selling price <= MRP
     if (price > mrp) {
       toast.error("Selling price cannot be higher than the MRP.");
       return;
@@ -427,7 +404,6 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
         brand: product.brand || "",
         price: Number(product.price) || 0,
         mrp: Number(product.mrp) || 0,
-        costPrice: Number(product.costPrice) || 0,
         tax: product.tax || "",
         priceIncludesTax: !!product.priceIncludesTax,
         sku: product.sku || "",
@@ -437,7 +413,6 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
         image: imageUrl || "/placeholder.png",
         unit: product.unit || "",
         hsn: product.hsn || "",
-        allowBackorders: !!product.allowBackorders,
         lowStockThreshold: Number(product.lowStockThreshold) || 0,
         weight: Number(product.weight) || 0,
         dimensions: product.dimensions || { l: "", w: "", h: "" },
@@ -447,18 +422,10 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
         codAvailable: !!product.codAvailable,
         mainImage: product.mainImage || "",
         galleryImages: galleryImageUrls,
-        video: product.video || "",
-        model3d: product.model3d || "",
         metaTitle: product.metaTitle || "",
         metaDescription: product.metaDescription || "",
         metaKeywords: product.metaKeywords || "",
-        canonicalUrl: product.canonicalUrl || "",
-        legal_hsn: product.legal_hsn || "",
-        batchNumber: product.batchNumber || "",
-        manufacturer: product.manufacturer || "",
-        warranty: product.warranty || "",
-        certifications: product.certifications || "",
-        safetyInfo: product.safetyInfo || "",
+        locationName: product.locationName || "", // New field
         variants: updatedVariants,
         attributes: attributes !== undefined ? attributes : [],
       };
@@ -505,7 +472,6 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
     { key: 'Variants', open: showVariants, setOpen: setShowVariants, icon: <Package className="text-brand-primary" /> },
     { key: 'Media', open: showMedia, setOpen: setShowMedia, icon: <Camera className="text-brand-primary" /> },
     { key: 'SEO', open: showSEO, setOpen: setShowSEO, icon: <Globe className="text-brand-primary" /> },
-    { key: 'Legal', open: showLegal, setOpen: setShowLegal, icon: <Shield className="text-brand-primary" /> },
   ];
 
   const categoryInputRef = useRef<HTMLInputElement>(null);
@@ -535,7 +501,7 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
         <div className="bg-surface-primary rounded-lg shadow-md">
           <form onSubmit={handleSubmit} className="p-8 space-y-6">
             {uploading && <div className="text-brand-primary font-semibold mb-2 flex items-center gap-2"><svg className="animate-spin h-5 w-5 text-brand-primary" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>Uploading images, please wait...</div>}
-            
+
             {/* Basic Information */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
@@ -906,18 +872,33 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                   <option value="inactive">Inactive</option>
                 </select>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Unit <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={product.unit ?? ""}
-                  onChange={e => setProduct({ ...product, unit: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                  placeholder="1 L, 500 ml, 200 g, etc."
-                  required
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Unit <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={product.unit ?? ""}
+                    onChange={e => setProduct({ ...product, unit: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                    placeholder="1 L, 500 ml, 200 g, etc."
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Product Location Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={product.locationName ?? ""}
+                    onChange={e => setProduct({ ...product, locationName: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                    placeholder="Enter product location name"
+                    required
+                  />
+                </div>
               </div>
             </div>
             {/* Description */}
@@ -1001,13 +982,13 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                           <label className="block text-sm font-medium text-gray-700 mb-1">
                             SKU <span className="text-red-500">*</span>
                           </label>
-                          <input 
-                            type="text" 
-                            value={product.sku} 
-                            onChange={e => setProduct({ ...product, sku: e.target.value })} 
-                            className="w-full border border-gray-300 rounded-lg p-3" 
-                            placeholder="Enter SKU" 
-                            required 
+                          <input
+                            type="text"
+                            value={product.sku}
+                            onChange={e => setProduct({ ...product, sku: e.target.value })}
+                            className="w-full border border-gray-300 rounded-lg p-3"
+                            placeholder="Enter SKU"
+                            required
                           />
                         </div>
                         <div>
@@ -1016,18 +997,17 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Stock Status</label>
-                          <select value={product.stockStatus ? "in" : "out"} onChange={e => setProduct({ ...product, stockStatus: e.target.value === "in" })} className="w-full border border-gray-300 rounded-lg p-3">
-                            <option value="in">In Stock</option>
-                            <option value="out">Out of Stock</option>
-                          </select>
+                          <input
+                            type="text"
+                            value={product.quantity > 0 ? "In Stock" : "Out of Stock"}
+                            className="w-full border border-gray-300 rounded-lg p-3 bg-gray-100"
+                            readOnly
+                          />
+                          <p className="text-xs text-gray-500 mt-1">Auto-adjusted based on quantity</p>
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
                           <input type="number" value={product.quantity} onChange={e => setProduct({ ...product, quantity: Number(e.target.value) })} className="w-full border border-gray-300 rounded-lg p-3" placeholder="0" />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Allow Backorders</label>
-                          <input type="checkbox" checked={product.allowBackorders} onChange={e => setProduct({ ...product, allowBackorders: e.target.checked })} />
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Low Stock Threshold</label>
@@ -1053,10 +1033,6 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Selling Price</label>
                           <input type="number" value={product.price} onChange={e => setProduct({ ...product, price: e.target.value })} className="w-full border border-gray-300 rounded-lg p-3" placeholder="0.00" />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Cost Price</label>
-                          <input type="number" value={product.costPrice} onChange={e => setProduct({ ...product, costPrice: e.target.value })} className="w-full border border-gray-300 rounded-lg p-3" placeholder="0.00" />
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Tax</label>
@@ -1101,7 +1077,14 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Return Window (days)</label>
-                          <input type="number" value={product.returnWindow} onChange={e => setProduct({ ...product, returnWindow: e.target.value })} className="w-full border border-gray-300 rounded-lg p-3" placeholder="0" />
+                          <input
+                            type="number"
+                            value={product.returnWindow}
+                            onChange={e => setProduct({ ...product, returnWindow: e.target.value })}
+                            className={`w-full border border-gray-300 rounded-lg p-3 ${!product.returnable ? 'bg-gray-100' : ''}`}
+                            placeholder="0"
+                            disabled={!product.returnable}
+                          />
                         </div>
                         <div className="flex items-center mt-2">
                           <input type="checkbox" checked={product.codAvailable} onChange={e => setProduct({ ...product, codAvailable: e.target.checked })} />
@@ -1202,7 +1185,7 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                                   onClick={() => setAutoSku(v => !v)}
                                 >
                                   <span className="sr-only">Toggle Auto SKU</span>
-                                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${autoSku ? 'translate-x-5' : 'translate-x-1'}`}/>
+                                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${autoSku ? 'translate-x-5' : 'translate-x-1'}`} />
                                 </button>
                               </label>
                               <div className="flex items-center gap-2">
@@ -1363,14 +1346,6 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                             ))}
                           </div>
                         </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Product Video URL</label>
-                          <input type="url" value={product.video} onChange={e => setProduct({ ...product, video: e.target.value })} className="w-full border border-gray-300 rounded-lg p-3" placeholder="https://youtube.com/..." />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">3D Model (optional)</label>
-                          <input type="url" value={product.model3d} onChange={e => setProduct({ ...product, model3d: e.target.value })} className="w-full border border-gray-300 rounded-lg p-3" placeholder="https://..." />
-                        </div>
                       </div>
                     )}
                     {key === 'SEO' && showSEO && (
@@ -1383,44 +1358,13 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                           <label className="block text-sm font-medium text-gray-700 mb-1">Meta Description</label>
                           <input type="text" value={product.metaDescription} onChange={e => setProduct({ ...product, metaDescription: e.target.value })} className="w-full border border-gray-300 rounded-lg p-3" placeholder="Meta description for SEO" />
                         </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Meta Keywords (comma separated)</label>
+                        <div className="md:col-span-2">
+                          <label className="block text-sm font-medium  text-gray-700 mb-1">Meta Keywords (comma separated)</label>
                           <input type="text" value={product.metaKeywords} onChange={e => setProduct({ ...product, metaKeywords: e.target.value })} className="w-full border border-gray-300 rounded-lg p-3" placeholder="keywords1, keywords2" />
                         </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Canonical URL</label>
-                          <input type="url" value={product.canonicalUrl} onChange={e => setProduct({ ...product, canonicalUrl: e.target.value })} className="w-full border border-gray-300 rounded-lg p-3" placeholder="https://yourdomain.com/product-slug" />
-                        </div>
                       </div>
                     )}
-                    {key === 'Legal' && showLegal && (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">HSN (Legal)</label>
-                          <input type="text" value={product.legal_hsn} onChange={e => setProduct({ ...product, legal_hsn: e.target.value })} className="w-full border border-gray-300 rounded-lg p-3" placeholder="Legal HSN code" />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Batch Number</label>
-                          <input type="text" value={product.batchNumber} onChange={e => setProduct({ ...product, batchNumber: e.target.value })} className="w-full border border-gray-300 rounded-lg p-3" placeholder="Batch number" />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Manufacturer</label>
-                          <input type="text" value={product.manufacturer} onChange={e => setProduct({ ...product, manufacturer: e.target.value })} className="w-full border border-gray-300 rounded-lg p-3" placeholder="Manufacturer name" />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Warranty</label>
-                          <input type="text" value={product.warranty} onChange={e => setProduct({ ...product, warranty: e.target.value })} className="w-full border border-gray-300 rounded-lg p-3" placeholder="Warranty status" />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Certifications (comma separated)</label>
-                          <input type="text" value={product.certifications} onChange={e => setProduct({ ...product, certifications: e.target.value })} className="w-full border border-gray-300 rounded-lg p-3" placeholder="ISO, BIS, ..." />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Safety Info</label>
-                          <input type="text" value={product.safetyInfo} onChange={e => setProduct({ ...product, safetyInfo: e.target.value })} className="w-full border border-gray-300 rounded-lg p-3" placeholder="Safety information" />
-                        </div>
-                      </div>
-                    )}
+
                   </div>
                 </div>
               ))}

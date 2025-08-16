@@ -79,17 +79,13 @@ interface ExtendedProduct {
   priceIncludesTax?: boolean;
   weight?: number;
   dimensions?: ProductDimensions;
-  manufacturer?: string;
-  warranty?: string;
   deliveryTime?: string;
   shippingClass?: string;
   returnable?: boolean;
   returnWindow?: number;
   codAvailable?: boolean;
   galleryImages?: string[];
-  batchNumber?: string;
-  certifications?: string;
-  safetyInfo?: string;
+  locationName?: string;
   attributes?: ProductAttribute[];
   rating?: number;
   warehouse?: any;
@@ -856,11 +852,7 @@ export default function ProductDetailsPage() {
                         ? `${product.dimensions.l || "—"} × ${product.dimensions.w || "—"} × ${product.dimensions.h || "—"}`
                         : "—",
                   },
-                  { label: "Manufacturer", value: product.manufacturer || "—" },
-                  { label: "Warranty", value: product.warranty || "—" },
-                  { label: "Batch Number", value: product.batchNumber || "—" },
-                  { label: "Certifications", value: product.certifications || "—" },
-                  { label: "Safety Info", value: product.safetyInfo || "—" },
+
                   {
                     label: "Tax Rate",
                     value: product.tax && product.tax.rate !== undefined ? `${product.tax.rate}%` : "—",
