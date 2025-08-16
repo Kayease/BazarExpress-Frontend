@@ -372,14 +372,7 @@ export default function StockTransferReportModal({
                         )}
                       </div>
                     </div>
-                    <div style={{ fontSize: '9px', color: '#6b7280', lineHeight: '1.4' }}>
-                      Phone: +91 9876543210<br />
-                      Email: info@bazar.com<br />
-                      Address: 123 Business Street, City, State - 123456
-                      {invoiceSettings?.gstin && <><br />GSTIN: {invoiceSettings.gstin}</>}
-                      {invoiceSettings?.pan && <><br />PAN: {invoiceSettings.pan}</>}
-                      {invoiceSettings?.fssai && <><br />FSSAI: {invoiceSettings.fssai}</>}
-                    </div>
+
                   </div>
                   <div style={{ textAlign: 'right', flex: '0 0 auto', maxWidth: '35%' }}>
                     <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#1f2937', marginBottom: '8px' }}>
