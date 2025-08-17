@@ -9,6 +9,7 @@ interface StockTransferItem {
   productName: string;
   productImage: string;
   sku: string;
+  mainSku?: string;
   quantity: number;
   unitPrice: number;
   variantKey?: string;
@@ -99,6 +100,7 @@ export default function StockTransferDetailsModal({
       toast.success('Transfer status updated successfully')
       onRefresh?.()
       setStatusNotes('')
+      onClose() // Close the modal after successful status update
     } catch (error) {
       console.error('Error updating transfer status:', error)
       toast.error('Failed to update transfer status')
@@ -202,7 +204,7 @@ export default function StockTransferDetailsModal({
               </h4>
               <div className="space-y-3">
                 {viewing.items.map((item: StockTransferItem, index: number) => (
-                  <div key={`${item._id}-${index}`} className="flex items-center p-4 border border-gray-200 rounded-xl hover:shadow-sm transition-shadow">
+                  <div key={`${item._id}-${index}-${item.variantKey || 'main'}`} className="flex items-center p-4 border border-gray-200 rounded-xl hover:shadow-sm transition-shadow">
                     {/* Product Image */}
                     <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
                       {item.productImage ? (
@@ -227,7 +229,7 @@ export default function StockTransferDetailsModal({
                         </div>
                       )}
                       <div className="flex items-center space-x-4 text-sm text-gray-500">
-                        <span>SKU: {item.sku}</span>
+                        <span>SKU: {item.variantKey && item.mainSku ? `${item.mainSku}:${item.sku}` : item.sku}</span>
                         <span>Qty: {item.quantity}</span>
                       </div>
                     </div>

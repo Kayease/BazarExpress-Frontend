@@ -246,8 +246,11 @@ export default function AdminStockTransfer() {
             productName: item.productName,
             productImage: item.product?.image || item.product?.mainImage || '/placeholder.svg',
             sku: item.sku,
+            mainSku: item.mainSku || item.product?.sku,
             quantity: item.quantity,
-            unitPrice: item.unitPrice
+            unitPrice: item.unitPrice,
+            variantKey: item.variantKey,
+            variantName: item.variantName
           })),
           totalItems: transfer.totalItems,
           totalValue: transfer.totalValue,
@@ -289,7 +292,9 @@ export default function AdminStockTransfer() {
           toWarehouse: transferData.toWarehouse,
           items: transferData.items.map(item => ({
             productId: item.productId,
-            quantity: item.quantity
+            quantity: item.quantity,
+            variantKey: item.variantKey,
+            variantDetails: item.variantDetails
           })),
           notes: transferData.notes
         })

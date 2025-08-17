@@ -15,6 +15,7 @@ interface StockTransferItem {
   productName: string;
   productImage: string;
   sku: string;
+  mainSku?: string;
   quantity: number;
   unitPrice: number;
   variantKey?: string;
@@ -555,7 +556,7 @@ export default function StockTransferReportModal({
                   </thead>
                   <tbody>
                     {transferData.items.map((item, index) => (
-                      <tr key={item._id}>
+                      <tr key={`${item._id}-${index}-${item.variantKey || 'main'}`}>
                         <td style={{ 
                           padding: '6px', 
                           fontSize: '8px',
@@ -581,7 +582,7 @@ export default function StockTransferReportModal({
                           fontSize: '8px',
                           border: '1px solid #e5e7eb'
                         }}>
-                          {item.sku}
+                          {item.variantKey && item.mainSku ? `${item.mainSku}:${item.sku}` : item.sku}
                         </td>
                         <td style={{ 
                           padding: '6px', 

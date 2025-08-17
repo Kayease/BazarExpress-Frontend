@@ -184,8 +184,42 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
     return arr.reduce((a, b) => a.flatMap(d => b.map(e => [...d, e])), [[]] as string[][]);
   }
   function getVariantKey(combo: string[]): string {
-    return combo.join("::");
+    // Normalize to uppercase for consistency
+    return combo.map(v => v.toUpperCase()).join("::");
   }
+
+  // Function to normalize attribute values - uppercase for strings, preserve numbers
+  function normalizeAttributeValue(value: string): string {
+    const trimmedValue = value.trim();
+    
+    // Check if it's a number (including decimal numbers)
+    if (/^\d+(\.\d+)?$/.test(trimmedValue)) {
+      return trimmedValue; // Keep numbers as-is
+    }
+    
+    // For strings, convert to uppercase
+    return trimmedValue.toUpperCase();
+  }
+
+  // Update variants when autoSku is toggled
+  useEffect(() => {
+    if (autoSku && attributes.length > 0) {
+      const updatedVariants = { ...variants };
+      const combinations = cartesian(attributes.map(a => a.values.length ? a.values : [""]));
+      
+      combinations.forEach(combo => {
+        const key = getVariantKey(combo);
+        const normalizedCombo = combo.map(normalizeAttributeValue);
+        const generatedSku = normalizedCombo.map(v => v.replace(/\s+/g, '')).join('');
+        
+        if (updatedVariants[key]) {
+          updatedVariants[key].sku = generatedSku;
+        }
+      });
+      
+      setVariants(updatedVariants);
+    }
+  }, [autoSku, attributes]);
   
   function calculateTotalVariantStock(): number {
     return Object.values(variants).reduce((total: number, variant: any) => {
@@ -241,6 +275,29 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
     fetchData();
   }, [API_URL]);
 
+  // Function to normalize variant keys to uppercase
+  const normalizeVariants = (variants: any) => {
+    if (!variants || typeof variants !== 'object') return {};
+    
+    const normalizedVariants: any = {};
+    Object.entries(variants).forEach(([key, value]) => {
+      // Convert variant key to uppercase format
+      const normalizedKey = key.split('::').map(v => v.toUpperCase()).join('::');
+      normalizedVariants[normalizedKey] = value;
+    });
+    return normalizedVariants;
+  };
+
+  // Function to normalize attributes (both names and values)
+  const normalizeAttributes = (attributes: any[]) => {
+    if (!attributes || !Array.isArray(attributes)) return [];
+    
+    return attributes.map(attr => ({
+      ...attr,
+      values: attr.values.map((value: string) => normalizeAttributeValue(value))
+    }));
+  };
+
   useEffect(() => {
     if (initialProduct) {
       setProduct((prev: any) => ({
@@ -274,8 +331,9 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
         codAvailable: !!initialProduct.codAvailable,
         locationName: initialProduct.locationName || '', // New field
       }));
-      setAttributes(initialProduct.attributes || []);
-      setVariants(initialProduct.variants || {});
+      // Normalize attributes and variant keys to uppercase
+      setAttributes(normalizeAttributes(initialProduct.attributes || []));
+      setVariants(normalizeVariants(initialProduct.variants || {}));
     }
   }, [initialProduct]);
 
@@ -524,9 +582,18 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
       toast.error("Selling price cannot be higher than the MRP.");
       return;
     }
-    // 6. Validate variant SKUs if variants exist
-    if (Object.keys(variants).length > 0) {
-      for (const [key, variant] of Object.entries(variants)) {
+    // 6. Auto-generate SKUs if enabled and validate variant SKUs if variants exist
+    const updatedVariantsForValidation = { ...variants };
+    if (Object.keys(updatedVariantsForValidation).length > 0) {
+      // Auto-generate SKUs if enabled
+      if (autoSku) {
+        for (const key of Object.keys(updatedVariantsForValidation)) {
+          updatedVariantsForValidation[key].sku = key.split("::").map(v => v.replace(/\s+/g, '')).join('');
+        }
+      }
+      
+      // Validate that all variants have SKUs
+      for (const [key, variant] of Object.entries(updatedVariantsForValidation)) {
         if (!variant.sku || variant.sku.trim() === "") {
           toast.error(`SKU is required for variant: ${key}`);
           return;
@@ -553,6 +620,11 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
           return;
         }
       }
+      
+      // Update the variants state with auto-generated SKUs
+      if (autoSku) {
+        setVariants(updatedVariantsForValidation);
+      }
     }
     setLoading(true);
     try {
@@ -568,7 +640,7 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
       }
       // Always use quantity as stock
       const stock = Number(product.quantity) || 0;
-      // Upload variant images and handle autoSku
+      // Upload variant images (SKUs are already handled in validation)
       const updatedVariants = { ...variants };
       for (const key of Object.keys(updatedVariants)) {
         // Upload new images (File objects) for this variant
@@ -583,9 +655,6 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
             }
           }
           updatedVariants[key].images = uploadedImages;
-        }
-        if (autoSku) {
-          updatedVariants[key].sku = key.split("::").map(v => v.replace(/\s+/g, '').toUpperCase()).join('-');
         }
       }
       let galleryImageUrls: string[] = [];
@@ -1409,8 +1478,11 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                                     if (e.key === "," || e.key === "Enter") {
                                       e.preventDefault();
                                       if ((attributeValueInputs[attr.name] || "").trim()) {
-                                        setAttributes(attrs => attrs.map(a => a.name === attr.name ? { ...a, values: Array.from(new Set([...a.values, ...(attributeValueInputs[attr.name] || "").split(",").map(v => v.trim()).filter(Boolean)])) } : a));
+                                        const normalizedValues = (attributeValueInputs[attr.name] || "").split(",").map(v => normalizeAttributeValue(v)).filter(Boolean);
+                                        const updatedAttributes = attributes.map(a => a.name === attr.name ? { ...a, values: Array.from(new Set([...a.values, ...normalizedValues])) } : a);
+                                        setAttributes(updatedAttributes);
                                         setAttributeValueInputs(inputs => ({ ...inputs, [attr.name]: "" }));
+                                        regenerateVariants(updatedAttributes);
                                       }
                                     }
                                   }}
@@ -1419,8 +1491,11 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                                 />
                                 <button type="button" onClick={() => {
                                   if ((attributeValueInputs[attr.name] || "").trim()) {
-                                    setAttributes(attrs => attrs.map(a => a.name === attr.name ? { ...a, values: Array.from(new Set([...a.values, ...(attributeValueInputs[attr.name] || "").split(",").map(v => v.trim()).filter(Boolean)])) } : a));
+                                    const normalizedValues = (attributeValueInputs[attr.name] || "").split(",").map(v => normalizeAttributeValue(v)).filter(Boolean);
+                                    const updatedAttributes = attributes.map(a => a.name === attr.name ? { ...a, values: Array.from(new Set([...a.values, ...normalizedValues])) } : a);
+                                    setAttributes(updatedAttributes);
                                     setAttributeValueInputs(inputs => ({ ...inputs, [attr.name]: "" }));
+                                    regenerateVariants(updatedAttributes);
                                   }
                                 }} className="ml-1 px-2 py-1 bg-brand-primary text-white rounded">+</button>
                               </div>
@@ -1466,19 +1541,20 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                                 </thead>
                                 <tbody>
                                   {cartesian(attributes.map(a => a.values.length ? a.values : [""])).map(combo => {
-                                    const key = combo.join('::');
+                                    const key = getVariantKey(combo); // Use normalized key
+                                    const normalizedCombo = combo.map(normalizeAttributeValue); // Normalize for display
                                     const variant = variants[key] || { sku: '', price: '', stock: '', image: null };
-                                    const generateSku = (combo: string[]) => combo.map(v => v.replace(/\s+/g, '').toUpperCase()).join('-');
+                                    const generateSku = (combo: string[]) => combo.map(v => v.replace(/\s+/g, '')).join('');
                                     return (
                                       <tr key={key} className="hover:bg-gray-50">
-                                        {combo.map((val, i) => (
+                                        {normalizedCombo.map((val, i) => (
                                           <td key={val + i} className="px-3 py-2 border-b">{val}</td>
                                         ))}
                                         {/* SKU */}
                                         <td className="px-3 py-2 border-b">
                                           <input
                                             type="text"
-                                            value={autoSku ? generateSku(combo) : variant.sku}
+                                            value={autoSku ? generateSku(normalizedCombo) : variant.sku}
                                             disabled={autoSku}
                                             onChange={e => setVariants(prev => ({ ...prev, [key]: { ...variant, sku: e.target.value } }))}
                                             className={`w-24 border rounded px-1 py-0.5 ${autoSku ? 'bg-gray-100 text-gray-400' : ''}`}

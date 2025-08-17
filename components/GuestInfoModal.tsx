@@ -79,7 +79,7 @@ export default function GuestInfoModal({ isOpen, onClose, onInfoSubmit }: GuestI
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md z-[999]">
         <DialogHeader className="text-center">
           <DialogTitle className="text-2xl font-bold text-gray-900 flex items-center justify-center gap-2">
             <Gift className="w-6 h-6 text-brand-primary" />
