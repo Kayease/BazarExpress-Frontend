@@ -1,11 +1,12 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { Search, Eye, Package, Truck, CheckCircle, X, RefreshCw, Loader2, Calendar, CreditCard, MapPin, User, Warehouse } from "lucide-react"
+import { Search, Eye, Package, Truck, CheckCircle, X, RefreshCw, Loader2, Calendar, CreditCard, MapPin, User, Warehouse, Download } from "lucide-react"
 import { useAppSelector } from '../lib/store'
 import toast from 'react-hot-toast'
 import { useDebounce } from '../hooks/use-debounce'
 import { useAdminStatsRefresh } from '../lib/hooks/useAdminStatsRefresh'
+import WarehousePickingModal from './WarehousePickingModal'
 
 interface OrderItem {
   productId: string
@@ -17,6 +18,10 @@ interface OrderItem {
   categoryId?: string | { _id: string; name: string }
   brand?: string
   brandId?: string | { _id: string; name: string }
+  locationName?: string // Product location in warehouse
+  variantName?: string // Direct variant name field
+  variantId?: string // Variant ID for lookup
+  selectedVariant?: string | { name: string; [key: string]: any } // Selected variant info
 }
 
 interface Order {
@@ -91,6 +96,29 @@ const getDisplayStatus = (order: Order) => {
 
 const statusOptions = ["new", "processing", "shipped", "delivered", "cancelled", "refunded"]
 
+// Type guard to ensure warehouseInfo has the correct structure
+const hasValidWarehouseInfo = (order: any): order is Order => {
+  return order && 
+         order.warehouseInfo && 
+         typeof order.warehouseInfo.warehouseName === 'string' && 
+         typeof order.warehouseInfo.warehouseId === 'string'
+}
+
+// Transform function to ensure order has correct warehouseInfo structure
+const normalizeOrder = (order: any): Order => {
+  // If warehouseInfo has _id and name instead of warehouseId and warehouseName, transform it
+  if (order.warehouseInfo && order.warehouseInfo._id && order.warehouseInfo.name && !order.warehouseInfo.warehouseId) {
+    return {
+      ...order,
+      warehouseInfo: {
+        warehouseId: order.warehouseInfo._id,
+        warehouseName: order.warehouseInfo.name
+      }
+    }
+  }
+  return order as Order
+}
+
 interface OrdersTableProps {
   title: string
   statusFilter?: string
@@ -158,6 +186,7 @@ export default function OrdersTable({
     cancelled: 0,
     refunded: 0,
   })
+  const [pickingModalOrder, setPickingModalOrder] = useState<Order | null>(null) // Track which order to show picking modal for
   const ORDERS_PER_PAGE = 20
 
   // Global stats refresh system integration
@@ -218,7 +247,11 @@ export default function OrdersTable({
       }
 
       const data = await response.json()
-      setOrders(data.orders || [])
+      const rawOrders = data.orders || []
+      
+      // Normalize and transform orders to ensure they have the correct structure
+      const normalizedOrders = rawOrders.map(normalizeOrder)
+      setOrders(normalizedOrders)
 
       // Update pagination data
       if (data.pagination) {
@@ -323,6 +356,66 @@ export default function OrdersTable({
       // Don't show error toast for stats as it's not critical
     }
   }, [token, shouldShowStatsCards])
+
+  // Function to fetch order with product location details
+  const fetchOrderWithProductLocations = useCallback(async (order: Order): Promise<Order> => {
+    try {
+      // Fetch product details for each item to get location information
+      const itemsWithLocations = await Promise.all(
+        order.items.map(async (item) => {
+          try {
+            // Use the backend API URL
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/products/${item.productId}`, {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              }
+            })
+            
+            if (response.ok) {
+              const productData = await response.json()
+              return {
+                ...item,
+                locationName: productData.locationName || 'Location not specified'
+              }
+            }
+            return {
+              ...item,
+              locationName: 'Location not specified'
+            }
+          } catch (error) {
+            console.error(`Error fetching product ${item.productId}:`, error)
+            return {
+              ...item,
+              locationName: 'Location not specified'
+            }
+          }
+        })
+      )
+      
+      return {
+        ...order,
+        items: itemsWithLocations
+      }
+    } catch (error) {
+      console.error('Error fetching product locations:', error)
+      return order
+    }
+  }, [token])
+
+  // Function to handle opening picking modal
+  const handleOpenPickingModal = useCallback(async (order: Order) => {
+    if (!order) return
+    
+    try {
+      // Fetch product details with locations if needed
+      const orderWithLocations = await fetchOrderWithProductLocations(order)
+      setPickingModalOrder(orderWithLocations)
+    } catch (error) {
+      console.error('Error fetching order details:', error)
+      toast.error('Failed to load order details')
+    }
+  }, [fetchOrderWithProductLocations])
 
   useEffect(() => {
     fetchOrders(1)
@@ -1099,6 +1192,16 @@ export default function OrdersTable({
                     >
                       <MapPin className="h-3 w-3" />
                     </button>
+                    {/* Download Invoice Button - Only for warehouse managers and admins */}
+                    {(user?.role === 'order_warehouse_management' || user?.role === 'admin') && (
+                      <button
+                        onClick={() => handleOpenPickingModal(order)}
+                        className="inline-flex items-center px-2 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded transition-colors"
+                        title="Generate Warehouse Picking List"
+                      >
+                        <Download className="h-3 w-3" />
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -1299,7 +1402,47 @@ export default function OrdersTable({
 
                       {/* Product Info */}
                       <div className="flex-1 ml-4">
-                        <h5 className="font-medium text-gray-900 mb-1">{item.name}</h5>
+                        <h5 className="font-medium text-gray-900 mb-1">
+                          {item.name}
+                          {(() => {
+                            // Enhanced variant name extraction
+                            let variantName = null
+                            
+                            // Priority order for variant name extraction:
+                            // 1. Direct variantName field
+                            // 2. selectedVariant.name if selectedVariant exists
+                            // 3. selectedVariant as string if it's a string
+                            // 4. Look up variant in productId.variants array using variantId
+                            // 5. Extract from product name if it contains variant info
+                            if (item.variantName) {
+                              variantName = item.variantName
+                            } else if (item.selectedVariant && typeof item.selectedVariant === 'object' && item.selectedVariant.name) {
+                              variantName = item.selectedVariant.name
+                            } else if (item.selectedVariant && typeof item.selectedVariant === 'string') {
+                              variantName = item.selectedVariant
+                            } else if (typeof item.productId === 'object' && (item.productId as any).variantName) {
+                              variantName = (item.productId as any).variantName
+                            } else if (item.variantId && typeof item.productId === 'object' && (item.productId as any).variants) {
+                              // Look up variant in the product's variants array
+                              const variant = (item.productId as any).variants.find((v: any) => v._id === item.variantId || v.id === item.variantId)
+                              if (variant && variant.name) {
+                                variantName = variant.name
+                              }
+                            } else if (item.name && item.name.includes('(') && item.name.includes(')')) {
+                              // Fallback: Extract from product name if it contains variant info
+                              const match = item.name.match(/\(([^)]+)\)/)
+                              if (match && match[1]) {
+                                variantName = match[1]
+                              }
+                            }
+                            
+                            return variantName ? (
+                              <span className="text-sm text-blue-600 font-medium ml-2 bg-blue-50 px-2 py-1 rounded">
+                                {variantName}
+                              </span>
+                            ) : null
+                          })()}
+                        </h5>
                         <div className="flex items-center space-x-4 text-sm text-gray-500">
                           <span>Qty: {item.quantity}</span>
                           {item.brandId && (
@@ -1679,6 +1822,15 @@ export default function OrdersTable({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Warehouse Picking Modal */}
+      {pickingModalOrder && hasValidWarehouseInfo(pickingModalOrder) && (
+        <WarehousePickingModal
+          order={pickingModalOrder}
+          isOpen={!!pickingModalOrder}
+          onClose={() => setPickingModalOrder(null)}
+        />
       )}
     </div>
   )

@@ -18,6 +18,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useAppContext, useCartContext, useWishlistContext } from "@/components/app-provider";
 import { useLocation } from "@/components/location-provider";
 import { useHomeProducts, useSearchProducts } from "@/hooks/use-products";
+import toast from "react-hot-toast";
 // import { useWarehouseValidation } from "@/hooks/use-warehouse-validation";
 
 // Define interfaces for our data types
@@ -199,7 +200,7 @@ export default function ProductSection({
   }, [cartItems]);
 
 
-  const handleAdd = (product: Product) => {
+  const handleAdd = async (product: Product) => {
     const productId = product._id;
     
     // Check warehouse validation before adding
@@ -210,8 +211,21 @@ export default function ProductSection({
       return;
     }
     
-    setQuantities(q => ({ ...q, [productId]: 1 }));
-    addToCart({ ...product, id: productId, quantity: 1 });
+    try {
+      setQuantities(q => ({ ...q, [productId]: 1 }));
+      await addToCart({ ...product, id: productId, quantity: 1 });
+      toast.success(`${product.name} added to cart`);
+    } catch (error: any) {
+      if (error.isVariantRequired) {
+        toast.error(`Please select a variant for ${product.name} before adding to cart`);
+      } else if (error.isWarehouseConflict) {
+        toast.error(error.message);
+      } else {
+        toast.error('Failed to add item to cart');
+      }
+      // Reset quantity on error
+      setQuantities(q => ({ ...q, [productId]: 0 }));
+    }
   };
   const handleInc = (product: Product) => {
     const id = product._id;

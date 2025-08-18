@@ -36,7 +36,10 @@ interface CartContextType {
   cartItems: any[];
   setCartItems: (items: any[]) => void;
   addToCart: (product: any) => void;
-  updateCartItem: (id: any, quantity: number, showToast?: boolean) => void;
+  updateCartItem: (id: any, quantity: number, variantId?: string, showToast?: boolean) => void;
+  removeCartItem: (id: any, variantId?: string) => void;
+  isItemBeingRemoved: (id: any, variantId?: string) => boolean;
+  isItemBeingAdded: (id: any, variantId?: string) => boolean;
   clearCart: () => void;
   cartTotal: number;
   isLoadingCart: boolean;
@@ -52,8 +55,8 @@ export function useCartContext() {
 interface WishlistContextType {
   wishlistItems: any[];
   addToWishlist: (product: any) => void;
-  removeFromWishlist: (productId: string) => void;
-  isInWishlist: (productId: string) => boolean;
+  removeFromWishlist: (productId: string, variantId?: string) => void;
+  isInWishlist: (productId: string, variantId?: string) => boolean;
   isLoadingWishlist: boolean;
 }
 const WishlistContext = createContext<WishlistContextType | undefined>(undefined);
@@ -109,6 +112,8 @@ export function useModal() {
 function CartProvider({ children }: { children: ReactNode }) {
   const [cartItems, setCartItems] = useState<any[]>([]);
   const [isLoadingCart, setIsLoadingCart] = useState(false);
+  const [removingItems, setRemovingItems] = useState<Set<string>>(new Set());
+  const [addingItems, setAddingItems] = useState<Set<string>>(new Set());
   const reduxUser = useSelector((state: RootState) => state.auth.user);
   const isLoggedIn = !!reduxUser;
   
@@ -139,14 +144,21 @@ function CartProvider({ children }: { children: ReactNode }) {
             productId: item.productId._id,
             productName: item.productId.name,
             warehouse: item.productId.warehouse,
-            quantity: item.quantity
+            quantity: item.quantity,
+            variantName: item.variantName
           });
           
           const mappedItem = {
             id: item.productId._id,
             _id: item.productId._id,
+            // Create composite cart item ID for variant handling
+            cartItemId: item.variantId ? `${item.productId._id}_${item.variantId}` : item.productId._id,
             ...item.productId,
-            quantity: item.quantity
+            quantity: item.quantity,
+            // Include variant information from cart item
+            variantId: item.variantId,
+            variantName: item.variantName,
+            selectedVariant: item.selectedVariant
           };
           
           // Fallback: If warehouse info is missing from API response, try to preserve it from current cart
@@ -204,8 +216,14 @@ function CartProvider({ children }: { children: ReactNode }) {
           const syncedCartItems = response.cart.map((item: any) => ({
             id: item.productId._id,
             _id: item.productId._id,
+            // Create composite cart item ID for variant handling
+            cartItemId: item.variantId ? `${item.productId._id}_${item.variantId}` : item.productId._id,
             ...item.productId,
-            quantity: item.quantity
+            quantity: item.quantity,
+            // Include variant information from cart item
+            variantId: item.variantId,
+            variantName: item.variantName,
+            selectedVariant: item.selectedVariant
           }));
           setCartItems(syncedCartItems);
           
@@ -279,6 +297,24 @@ function CartProvider({ children }: { children: ReactNode }) {
     const productId = product.id || product._id;
     const quantityToAdd = product.quantity || 1;
 
+    // Create unique identifier for this add operation
+    const addKey = product.variantId ? `${productId}_${product.variantId}` : productId;
+    
+    // Prevent multiple simultaneous additions of the same item
+    if (addingItems.has(addKey)) {
+      console.log('Item addition already in progress:', addKey);
+      return;
+    }
+
+    // Validate variant selection for products with variants
+    if (product.variants && product.variants.length > 0 && !product.variantId) {
+      throw {
+        isVariantRequired: true,
+        message: 'Please select a variant before adding to cart',
+        productName: product.name
+      };
+    }
+
     // Check if adding this product would create a warehouse conflict using new validation
     const existingWarehouse = cartItems.find(item => 
       item.warehouse && 
@@ -298,8 +334,10 @@ function CartProvider({ children }: { children: ReactNode }) {
 
     if (isLoggedIn) {
       try {
+        // Mark item as being added
+        setAddingItems(prev => new Set(prev).add(addKey));
         setIsLoadingCart(true);
-        const response = await addToCartDB(productId, quantityToAdd);
+        const response = await addToCartDB(productId, quantityToAdd, product.variantId, product.variantName, product.selectedVariant);
         
         const updatedCartItems = response.cart.map((item: any) => {
           // Get the warehouse info from either the response or the original product
@@ -313,9 +351,15 @@ function CartProvider({ children }: { children: ReactNode }) {
           const mappedItem = {
             id: item.productId._id,
             _id: item.productId._id,
+            // Create composite cart item ID for variant handling
+            cartItemId: item.variantId ? `${item.productId._id}_${item.variantId}` : item.productId._id,
             ...item.productId,
             warehouse: warehouseInfo, // Set warehouse info from above
-            quantity: item.quantity
+            quantity: item.quantity,
+            // Include variant information from cart item
+            variantId: item.variantId,
+            variantName: item.variantName,
+            selectedVariant: item.selectedVariant
           };
           
           // Double-check: If still no warehouse info, try to preserve from current cart
@@ -382,15 +426,46 @@ function CartProvider({ children }: { children: ReactNode }) {
         }
       } finally {
         setIsLoadingCart(false);
+        // Remove item from adding set
+        setAddingItems(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(addKey);
+          return newSet;
+        });
       }
     } else {
       // Local storage logic for non-logged-in users
       const items = getCartItems();
-      const existing = items.find((item: any) => (item.id || item._id) === productId);
+      
+      // Find existing item with variant matching logic
+      const existing = items.find((item: any) => {
+        const isSameProduct = (item.id || item._id) === productId;
+        
+        // If both have variantId, they must match exactly
+        if (item.variantId && product.variantId) {
+          return isSameProduct && item.variantId === product.variantId;
+        }
+        
+        // If neither has variantId, they match (same product, no variants)
+        if (!item.variantId && !product.variantId) {
+          return isSameProduct;
+        }
+        
+        // If one has variantId and other doesn't, they don't match
+        return false;
+      });
+      
       if (existing) {
         existing.quantity += quantityToAdd;
       } else {
-        items.push({ ...product, id: productId, quantity: quantityToAdd });
+        const newItem = { 
+          ...product, 
+          id: productId, 
+          quantity: quantityToAdd,
+          // Create composite cart item ID for variant handling
+          cartItemId: product.variantId ? `${productId}_${product.variantId}` : productId
+        };
+        items.push(newItem);
       }
       updateCartItems(items);
       
@@ -410,19 +485,25 @@ function CartProvider({ children }: { children: ReactNode }) {
       
       // No toast for regular add to cart operations
     }
-  }, [isLoggedIn]);
+  }, [isLoggedIn, cartItems, addingItems]);
 
-  const updateCartItem = useCallback(async (id: any, quantity: number, showToast: boolean = false) => {
+  const updateCartItem = useCallback(async (id: any, quantity: number, variantId?: string, showToast: boolean = false) => {
     if (isLoggedIn) {
       try {
         setIsLoadingCart(true);
-        const response = await updateCartItemDB(id, quantity);
+        const response = await updateCartItemDB(id, quantity, variantId);
         const updatedCartItems = response.cart.map((item: any) => {
           const mappedItem = {
             id: item.productId._id,
             _id: item.productId._id,
+            // Create composite cart item ID for variant handling
+            cartItemId: item.variantId ? `${item.productId._id}_${item.variantId}` : item.productId._id,
             ...item.productId,
-            quantity: item.quantity
+            quantity: item.quantity,
+            // Include variant information from cart item
+            variantId: item.variantId,
+            variantName: item.variantName,
+            selectedVariant: item.selectedVariant
           };
           
           // Fallback: If warehouse info is missing from API response, try to preserve it from current cart
@@ -453,11 +534,45 @@ function CartProvider({ children }: { children: ReactNode }) {
     } else {
       // Local storage logic for non-logged-in users
       const items = getCartItems();
-      const item = items.find((item: any) => (item.id || item._id) === id);
+      
+      // Find item with variant matching logic
+      const item = items.find((item: any) => {
+        const isSameProduct = (item.id || item._id) === id;
+        
+        // If both have variantId, they must match exactly
+        if (item.variantId && variantId) {
+          return isSameProduct && item.variantId === variantId;
+        }
+        
+        // If neither has variantId, they match (same product, no variants)
+        if (!item.variantId && !variantId) {
+          return isSameProduct;
+        }
+        
+        // If one has variantId and other doesn't, they don't match
+        return false;
+      });
+      
       if (item) {
         item.quantity = quantity;
         if (item.quantity <= 0) {
-          const filteredItems = items.filter((item: any) => (item.id || item._id) !== id);
+          // Filter with same variant matching logic
+          const filteredItems = items.filter((filterItem: any) => {
+            const isSameProduct = (filterItem.id || filterItem._id) === id;
+            
+            // If both have variantId, they must match exactly
+            if (filterItem.variantId && variantId) {
+              return !(isSameProduct && filterItem.variantId === variantId);
+            }
+            
+            // If neither has variantId, they match (same product, no variants)
+            if (!filterItem.variantId && !variantId) {
+              return !isSameProduct;
+            }
+            
+            // If one has variantId and other doesn't, they don't match (keep item)
+            return true;
+          });
           updateCartItems(filteredItems);
           
           // Track cart update for unregistered users
@@ -496,6 +611,85 @@ function CartProvider({ children }: { children: ReactNode }) {
     }
   }, [isLoggedIn]);
 
+  const removeCartItem = useCallback(async (id: any, variantId?: string) => {
+    // Create unique identifier for this removal operation
+    const removalKey = variantId ? `${id}_${variantId}` : id;
+    
+    // Prevent multiple simultaneous removals of the same item
+    if (removingItems.has(removalKey)) {
+      console.log('Item removal already in progress:', removalKey);
+      return;
+    }
+    
+    if (isLoggedIn) {
+      try {
+        // Mark item as being removed
+        setRemovingItems(prev => new Set(prev).add(removalKey));
+        setIsLoadingCart(true);
+        
+        const response = await removeFromCartDB(id, variantId);
+        const updatedCartItems = response.cart.map((item: any) => ({
+          id: item.productId._id,
+          _id: item.productId._id,
+          cartItemId: item.variantId ? `${item.productId._id}_${item.variantId}` : item.productId._id,
+          ...item.productId,
+          quantity: item.quantity,
+          variantId: item.variantId,
+          variantName: item.variantName,
+          selectedVariant: item.selectedVariant
+        }));
+        setCartItems(updatedCartItems);
+      } catch (error: any) {
+        console.error('Failed to remove cart item:', error);
+        
+        // Handle 404 errors gracefully (item already removed)
+        if (error.response?.status === 404) {
+          console.log('Item already removed from cart, refreshing cart state');
+          // Refresh cart to get current state
+          try {
+            const response = await getCartFromDB();
+            const updatedCartItems = response.cart.map((item: any) => ({
+              id: item.productId._id,
+              _id: item.productId._id,
+              cartItemId: item.variantId ? `${item.productId._id}_${item.variantId}` : item.productId._id,
+              ...item.productId,
+              quantity: item.quantity,
+              variantId: item.variantId,
+              variantName: item.variantName,
+              selectedVariant: item.selectedVariant
+            }));
+            setCartItems(updatedCartItems);
+          } catch (refreshError) {
+            console.error('Failed to refresh cart after 404:', refreshError);
+            toast.error('Failed to refresh cart');
+          }
+        } else {
+          toast.error('Failed to remove item from cart');
+        }
+      } finally {
+        setIsLoadingCart(false);
+        // Remove item from removing set
+        setRemovingItems(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(removalKey);
+          return newSet;
+        });
+      }
+    } else {
+      // Local storage logic for non-logged-in users
+      const items = getCartItems();
+      const filteredItems = items.filter((item: any) => {
+        const itemId = item.id || item._id;
+        if (variantId) {
+          return !(itemId === id && item.variantId === variantId);
+        } else {
+          return itemId !== id;
+        }
+      });
+      updateCartItems(filteredItems);
+    }
+  }, [isLoggedIn, removingItems]);
+
   const clearCart = useCallback(async () => {
     if (isLoggedIn) {
       try {
@@ -531,6 +725,18 @@ function CartProvider({ children }: { children: ReactNode }) {
     }
   }, [isLoggedIn]);
 
+  // Helper function to check if an item is being removed
+  const isItemBeingRemoved = useCallback((id: any, variantId?: string) => {
+    const removalKey = variantId ? `${id}_${variantId}` : id;
+    return removingItems.has(removalKey);
+  }, [removingItems]);
+
+  // Helper function to check if an item is being added
+  const isItemBeingAdded = useCallback((id: any, variantId?: string) => {
+    const addKey = variantId ? `${id}_${variantId}` : id;
+    return addingItems.has(addKey);
+  }, [addingItems]);
+
   const cartTotal = useMemo(() => {
     const total = cartItems.reduce((sum: number, item: any) => {
       if (!item.tax || !item.tax.percentage) {
@@ -564,10 +770,13 @@ function CartProvider({ children }: { children: ReactNode }) {
     setCartItems: updateCartItems,
     addToCart,
     updateCartItem,
+    removeCartItem,
     clearCart,
     cartTotal,
-    isLoadingCart
-  }), [cartItems, addToCart, updateCartItem, clearCart, cartTotal, isLoadingCart]);
+    isLoadingCart,
+    isItemBeingRemoved,
+    isItemBeingAdded
+  }), [cartItems, addToCart, updateCartItem, removeCartItem, clearCart, cartTotal, isLoadingCart, isItemBeingRemoved, isItemBeingAdded]);
 
   return (
     <CartContext.Provider value={cartContextValue}>
@@ -592,7 +801,13 @@ function WishlistProvider({ children }: { children: ReactNode }) {
         const dbWishlistItems = response.wishlist.map((item: any) => ({
           id: item.productId._id,
           _id: item.productId._id,
-          ...item.productId
+          ...item.productId,
+          // Include variant information from wishlist item
+          variantId: item.variantId,
+          variantName: item.variantName,
+          selectedVariant: item.selectedVariant,
+          // Create composite wishlist item ID for variant handling
+          wishlistItemId: item.variantId ? `${item.productId._id}_${item.variantId}` : item.productId._id
         }));
         setWishlistItems(dbWishlistItems);
         // Don't persist to localStorage for logged-in users
@@ -622,15 +837,41 @@ function WishlistProvider({ children }: { children: ReactNode }) {
         const localWishlist = JSON.parse(localStorage.getItem('wishlistItems') || '[]');
         const localWishlistCount = localWishlist.length;
         
+        console.log('Syncing wishlist with DB:', {
+          localWishlistCount,
+          localWishlist: localWishlist.map((item: any) => ({
+            id: item.id || item._id,
+            name: item.name,
+            variantId: item.variantId,
+            variantName: item.variantName
+          }))
+        });
+        
         // Clear local wishlist immediately to prevent syncing with other accounts
         localStorage.removeItem('wishlistItems');
         
         if (localWishlistCount > 0) {
           const response = await syncWishlistDB(localWishlist);
+          console.log('Sync response:', {
+            wishlistCount: response.wishlist.length,
+            wishlist: response.wishlist.map((item: any) => ({
+              productId: item.productId._id,
+              productName: item.productId.name,
+              variantId: item.variantId,
+              variantName: item.variantName
+            }))
+          });
+          
           const syncedWishlistItems = response.wishlist.map((item: any) => ({
             id: item.productId._id,
             _id: item.productId._id,
-            ...item.productId
+            ...item.productId,
+            // Include variant information from wishlist item
+            variantId: item.variantId,
+            variantName: item.variantName,
+            selectedVariant: item.selectedVariant,
+            // Create composite wishlist item ID for variant handling
+            wishlistItemId: item.variantId ? `${item.productId._id}_${item.variantId}` : item.productId._id
           }));
           setWishlistItems(syncedWishlistItems);
           
@@ -691,14 +932,23 @@ function WishlistProvider({ children }: { children: ReactNode }) {
 
   const addToWishlist = useCallback(async (product: any) => {
     const productId = product.id || product._id;
+    const variantId = product.variantId;
+    const variantName = product.variantName;
+    const selectedVariant = product.selectedVariant;
 
     if (isLoggedIn) {
       try {
-        const response = await addToWishlistDB(productId);
+        const response = await addToWishlistDB(productId, variantId, variantName, selectedVariant);
         const updatedWishlistItems = response.wishlist.map((item: any) => ({
           id: item.productId._id,
           _id: item.productId._id,
-          ...item.productId
+          ...item.productId,
+          // Include variant information from wishlist item
+          variantId: item.variantId,
+          variantName: item.variantName,
+          selectedVariant: item.selectedVariant,
+          // Create composite wishlist item ID for variant handling
+          wishlistItemId: item.variantId ? `${item.productId._id}_${item.variantId}` : item.productId._id
         }));
         setWishlistItems(updatedWishlistItems);
         // Don't persist to localStorage for logged-in users
@@ -709,9 +959,32 @@ function WishlistProvider({ children }: { children: ReactNode }) {
       }
     } else {
       // Local storage logic for non-logged-in users
-      const existing = wishlistItems.find((item: any) => (item.id || item._id) === productId);
+      // Find existing item with variant matching logic
+      const existing = wishlistItems.find((item: any) => {
+        const isSameProduct = (item.id || item._id) === productId;
+        
+        // If both have variantId, they must match exactly
+        if (item.variantId && variantId) {
+          return isSameProduct && item.variantId === variantId;
+        }
+        
+        // If neither has variantId, they match (same product, no variants)
+        if (!item.variantId && !variantId) {
+          return isSameProduct;
+        }
+        
+        // If one has variantId and other doesn't, they don't match
+        return false;
+      });
+      
       if (!existing) {
-        const newWishlist = [...wishlistItems, { ...product, id: productId }];
+        const newWishlistItem = { 
+          ...product, 
+          id: productId,
+          // Create composite wishlist item ID for variant handling
+          wishlistItemId: variantId ? `${productId}_${variantId}` : productId
+        };
+        const newWishlist = [...wishlistItems, newWishlistItem];
         setWishlistItems(newWishlist);
         localStorage.setItem('wishlistItems', JSON.stringify(newWishlist));
         // No toast for regular add to wishlist operations
@@ -719,14 +992,20 @@ function WishlistProvider({ children }: { children: ReactNode }) {
     }
   }, [wishlistItems, isLoggedIn]);
 
-  const removeFromWishlist = useCallback(async (productId: string) => {
+  const removeFromWishlist = useCallback(async (productId: string, variantId?: string) => {
     if (isLoggedIn) {
       try {
-        const response = await removeFromWishlistDB(productId);
+        const response = await removeFromWishlistDB(productId, variantId);
         const updatedWishlistItems = response.wishlist.map((item: any) => ({
           id: item.productId._id,
           _id: item.productId._id,
-          ...item.productId
+          ...item.productId,
+          // Include variant information from wishlist item
+          variantId: item.variantId,
+          variantName: item.variantName,
+          selectedVariant: item.selectedVariant,
+          // Create composite wishlist item ID for variant handling
+          wishlistItemId: item.variantId ? `${item.productId._id}_${item.variantId}` : item.productId._id
         }));
         setWishlistItems(updatedWishlistItems);
         // Don't persist to localStorage for logged-in users
@@ -737,17 +1016,36 @@ function WishlistProvider({ children }: { children: ReactNode }) {
       }
     } else {
       // Local storage logic for non-logged-in users
-      const newWishlist = wishlistItems.filter((item: any) => item.id !== productId && item._id !== productId);
+      const newWishlist = wishlistItems.filter((item: any) => {
+        const isSameProduct = (item.id === productId || item._id === productId);
+        
+        // If variantId is provided, match both product and variant
+        if (variantId) {
+          return !(isSameProduct && item.variantId === variantId);
+        }
+        
+        // If no variantId provided, remove items without variants only
+        return !(isSameProduct && !item.variantId);
+      });
       setWishlistItems(newWishlist);
       localStorage.setItem('wishlistItems', JSON.stringify(newWishlist));
       // No toast for regular remove from wishlist operations
     }
   }, [wishlistItems, isLoggedIn]);
 
-  const isInWishlist = useCallback((productId: string) => 
-    wishlistItems.some((item: any) => item.id === productId || item._id === productId),
-    [wishlistItems]
-  );
+  const isInWishlist = useCallback((productId: string, variantId?: string) => {
+    return wishlistItems.some((item: any) => {
+      const isSameProduct = (item.id === productId || item._id === productId);
+      
+      // If variantId is provided, match both product and variant
+      if (variantId) {
+        return isSameProduct && item.variantId === variantId;
+      }
+      
+      // If no variantId provided, check for items without variants only
+      return isSameProduct && !item.variantId;
+    });
+  }, [wishlistItems]);
 
   const wishlistContextValue = useMemo(() => ({
     wishlistItems,
@@ -770,7 +1068,7 @@ function AppProviderInner({ children }: { children: ReactNode }) {
   const [searchQuery, setSearchQuery] = useState("");
   const reduxUser = useSelector((state: RootState) => state.auth.user);
   const isLoggedIn = !!reduxUser;
-  const dispatch = useDispatch();
+  const dispatch = useDispatch<typeof store.dispatch>();
   const router = useRouter();
 
   // Run migration and auth validation on app start

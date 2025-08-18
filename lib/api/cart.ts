@@ -40,6 +40,10 @@ export interface CartItem {
   };
   quantity: number;
   addedAt: string;
+  // Variant information
+  variantId?: string;
+  variantName?: string;
+  selectedVariant?: any;
 }
 
 export interface CartResponse {
@@ -66,10 +70,21 @@ export const getCartFromDB = async (): Promise<CartResponse> => {
 };
 
 // Add item to cart in database
-export const addToCartDB = async (productId: string, quantity: number = 1): Promise<CartResponse> => {
+export const addToCartDB = async (
+  productId: string, 
+  quantity: number = 1, 
+  variantId?: string, 
+  variantName?: string, 
+  selectedVariant?: any
+): Promise<CartResponse> => {
   const api = createAuthAxios();
   try {
-    const response = await api.post('/cart/add', { productId, quantity });
+    const payload: any = { productId, quantity };
+    if (variantId) payload.variantId = variantId;
+    if (variantName) payload.variantName = variantName;
+    if (selectedVariant) payload.selectedVariant = selectedVariant;
+    
+    const response = await api.post('/cart/add', payload);
     return response.data;
   } catch (error: any) {
     if (error.response?.status === 400 && error.response?.data?.error === 'WAREHOUSE_CONFLICT') {
@@ -84,16 +99,27 @@ export const addToCartDB = async (productId: string, quantity: number = 1): Prom
 };
 
 // Update cart item quantity in database
-export const updateCartItemDB = async (productId: string, quantity: number): Promise<CartResponse> => {
+export const updateCartItemDB = async (
+  productId: string, 
+  quantity: number, 
+  variantId?: string
+): Promise<CartResponse> => {
   const api = createAuthAxios();
-  const response = await api.put('/cart/update', { productId, quantity });
+  const payload: any = { productId, quantity };
+  if (variantId) payload.variantId = variantId;
+  
+  const response = await api.put('/cart/update', payload);
   return response.data;
 };
 
 // Remove item from cart in database
-export const removeFromCartDB = async (productId: string): Promise<CartResponse> => {
+export const removeFromCartDB = async (productId: string, variantId?: string): Promise<CartResponse> => {
   const api = createAuthAxios();
-  const response = await api.delete(`/cart/remove/${productId}`);
+  let url = `/cart/remove/${productId}`;
+  if (variantId) {
+    url += `?variantId=${encodeURIComponent(variantId)}`;
+  }
+  const response = await api.delete(url);
   return response.data;
 };
 

@@ -27,6 +27,10 @@ interface InvoiceItem {
     percentage: number;
     description?: string;
   };
+  // Variant information
+  variantId?: string;
+  variantName?: string;
+  selectedVariant?: any;
 }
 
 interface InvoiceModalProps {
@@ -595,7 +599,10 @@ export default function InvoiceModal({ isOpen, onClose, orderData }: InvoiceModa
                         <tr key={`item-${index}`}>
                           <td style={{ padding: '3px', textAlign: 'center' }}>{index + 1}</td>
                           <td style={{ padding: '3px', textAlign: 'left', wordBreak: 'break-word' }}>{item.hsnCode || '-'}</td>
-                          <td style={{ padding: '3px', textAlign: 'left', wordBreak: 'break-word' }}>{item.name}</td>
+                          <td style={{ padding: '3px', textAlign: 'left', wordBreak: 'break-word' }}>
+                            {item.name}
+                            {item.variantName && <span style={{ fontSize: '8px', color: '#666', display: 'block' }}>({item.variantName})</span>}
+                          </td>
                           <td style={{ padding: '3px', textAlign: 'center' }}>{item.quantity}</td>
                           <td style={{ padding: '3px', textAlign: 'right' }}>{formatCurrency(item.mrp || item.price)}</td>
                           <td style={{ padding: '3px', textAlign: 'right' }}>{formatCurrency(taxCalc.basePrice || 0)}</td>

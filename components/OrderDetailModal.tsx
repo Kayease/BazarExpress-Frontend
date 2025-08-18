@@ -29,6 +29,10 @@ interface OrderItem {
   taxAmount?: number;
   hsnCode?: string;
   hsn?: string;
+  // Variant information
+  variantId?: string;
+  variantName?: string;
+  selectedVariant?: any;
 }
 
 interface Order {
@@ -275,7 +279,11 @@ export default function OrderDetailModal({ isOpen, onClose, order }: OrderDetail
         },
         taxRate: item.taxRate || item.tax?.percentage || 18,
         taxAmount: item.taxAmount,
-        hsnCode: item.hsnCode || item.hsn || '-'
+        hsnCode: item.hsnCode || item.hsn || '-',
+        // Include variant information
+        variantId: item.variantId,
+        variantName: item.variantName,
+        selectedVariant: item.selectedVariant
       })),
       pricing: order.pricing,
       taxCalculation: order.taxCalculation,
@@ -400,7 +408,12 @@ export default function OrderDetailModal({ isOpen, onClose, order }: OrderDetail
                     
                     {/* Product Info */}
                     <div className="flex-1 ml-4">
-                      <h5 className="font-medium text-gray-900 mb-1">{item.name}</h5>
+                      <h5 className="font-medium text-gray-900 mb-1">
+                        {item.name}
+                        {item.variantName && (
+                          <span className="text-sm text-gray-600 font-normal ml-2">({item.variantName})</span>
+                        )}
+                      </h5>
                       <div className="flex items-center space-x-4 text-sm text-gray-500">
                         <span>Qty: {item.quantity}</span>
                         {item.brandId && (

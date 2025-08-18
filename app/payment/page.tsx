@@ -1456,7 +1456,11 @@ export default function PaymentPage() {
           priceIncludesTax: item.priceIncludesTax,
           tax: item.tax,
           warehouse: item.warehouse,
-          warehouseId: item.warehouseId || item.warehouse?._id || item.warehouse?.id
+          warehouseId: item.warehouseId || item.warehouse?._id || item.warehouse?.id,
+          // Include variant information
+          variantId: item.variantId,
+          variantName: item.variantName,
+          selectedVariant: item.selectedVariant
         })),
         
         customerInfo: {

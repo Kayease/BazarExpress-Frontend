@@ -18,8 +18,17 @@ export default function WishlistPage() {
       console.log('Blocked: Cannot add product due to warehouse conflict');
       return;
     }
-    addToCart(item);
-    removeFromWishlist(item.id);
+    
+    // Pass variant information when adding to cart
+    const cartItem = {
+      ...item,
+      variantId: item.variantId,
+      variantName: item.variantName,
+      selectedVariant: item.selectedVariant
+    };
+    
+    addToCart(cartItem);
+    removeFromWishlist(item.id || item._id, item.variantId);
   };
 
   if (wishlistItems.length === 0) {
@@ -102,7 +111,7 @@ export default function WishlistPage() {
               cartWarehouses: cartItems.map(ci => ci.warehouse?.name).filter(Boolean)
             });
             return (
-              <div key={item.id || item._id} className="min-w-[180px] max-w-[180px] bg-white border border-gray-200 rounded-xl flex flex-col relative group font-sans" style={{ fontFamily: 'Sinkin Sans, sans-serif', boxShadow: 'none' }}>
+              <div key={item.wishlistItemId || `${item.id || item._id}_${item.variantId || 'no-variant'}`} className="min-w-[180px] max-w-[180px] bg-white border border-gray-200 rounded-xl flex flex-col relative group font-sans" style={{ fontFamily: 'Sinkin Sans, sans-serif', boxShadow: 'none' }}>
                 {/* Discount Badge */}
                 {hasDiscount && (
                   <div className="absolute left-3 top-0 z-10 flex items-center justify-center" style={{ width: '29px', height: '28px' }}>
@@ -117,7 +126,7 @@ export default function WishlistPage() {
                 {/* Remove from Wishlist Button */}
                 <button
                   className="absolute top-2 right-2 z-10 p-1 rounded-full bg-white shadow hover:bg-gray-100"
-                  onClick={() => removeFromWishlist(item.id || item._id)}
+                  onClick={() => removeFromWishlist(item.id || item._id, item.variantId)}
                   aria-label="Remove from wishlist"
                 >
                   <Trash2 className="w-5 h-5 text-red-500" />
@@ -133,6 +142,11 @@ export default function WishlistPage() {
                   </div>
                   {/* Variant/Weight/Unit */}
                   <div className="text-xs text-gray-500 mb-2 font-normal">
+                    {item.variantName && (
+                      <div className="text-xs text-blue-600 font-medium mb-1">
+                        Variant: {item.variantName}
+                      </div>
+                    )}
                     {item.unit}
                   </div>
                   {/* Bottom Section: Price, MRP, Add to Cart button */}

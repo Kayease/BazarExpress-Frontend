@@ -50,7 +50,7 @@ import OrderDetailModal from "../../components/OrderDetailModal";
 export default function Profile() {
   const user = useAppSelector((state) => state.auth.user);
   const token = useAppSelector((state) => state.auth.token);
-  const { cartItems, cartTotal, updateCartItem, addToCart } = useCartContext();
+  const { cartItems, cartTotal, updateCartItem, addToCart, isItemBeingRemoved } = useCartContext();
   const { wishlistItems, removeFromWishlist: removeFromWishlistContext } = useWishlistContext();
   const cartCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
   const [isEditing, setIsEditing] = useState(false);
@@ -309,18 +309,18 @@ export default function Profile() {
   };
 
   // Cart operations
-  const handleRemoveFromCart = (itemId: string) => {
-    updateCartItem(itemId, 0);
+  const handleRemoveFromCart = (itemId: string, variantId?: string) => {
+    updateCartItem(itemId, 0, variantId);
     // toast.success("Item removed from cart");
   };
 
-  const handleUpdateCartQuantity = (itemId: string, quantity: number) => {
-    updateCartItem(itemId, quantity);
+  const handleUpdateCartQuantity = (itemId: string, quantity: number, variantId?: string) => {
+    updateCartItem(itemId, quantity, variantId);
   };
 
   // Wishlist operations
-  const handleRemoveFromWishlist = (itemId: string) => {
-    removeFromWishlistContext(itemId);
+  const handleRemoveFromWishlist = (itemId: string, variantId?: string) => {
+    removeFromWishlistContext(itemId, variantId);
     // toast.success("Item removed from wishlist");
   };
 
@@ -626,7 +626,7 @@ export default function Profile() {
                       <div className="space-y-3 mb-6">
                         {cartItems.map((item) => (
                           <div
-                            key={item.id || item._id}
+                            key={item.cartItemId || `${item.id || item._id}_${item.variantId || 'no-variant'}`}
                             className="flex items-center space-x-3 p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200"
                           >
                             <div className="w-12 h-12 bg-white rounded-lg overflow-hidden shadow-sm flex-shrink-0">
@@ -645,6 +645,11 @@ export default function Profile() {
                               <h3 className="font-medium text-codGray truncate">
                                 {item.name}
                               </h3>
+                              {item.variantName && (
+                                <p className="text-xs text-blue-600 font-medium">
+                                  Variant: {item.variantName}
+                                </p>
+                              )}
                               <p className="text-xs text-gray-600">
                                 {item.unit || item.category}
                               </p>
@@ -657,7 +662,8 @@ export default function Profile() {
                                 onClick={() =>
                                   handleUpdateCartQuantity(
                                     item.id || item._id,
-                                    item.quantity - 1
+                                    item.quantity - 1,
+                                    item.variantId
                                   )
                                 }
                                 className="w-7 h-7 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors"
@@ -671,7 +677,8 @@ export default function Profile() {
                                 onClick={() =>
                                   handleUpdateCartQuantity(
                                     item.id || item._id,
-                                    item.quantity + 1
+                                    item.quantity + 1,
+                                    item.variantId
                                   )
                                 }
                                 className="w-7 h-7 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors"
@@ -679,8 +686,13 @@ export default function Profile() {
                                 <Plus className="w-3 h-3" />
                               </button>
                               <button
-                                onClick={() => handleRemoveFromCart(item.id || item._id)}
-                                className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors ml-2"
+                                onClick={() => handleRemoveFromCart(item.id || item._id, item.variantId)}
+                                disabled={isItemBeingRemoved(item.id || item._id, item.variantId)}
+                                className={`p-1.5 rounded-lg transition-colors ml-2 ${
+                                  isItemBeingRemoved(item.id || item._id, item.variantId)
+                                    ? "text-gray-400 cursor-not-allowed"
+                                    : "text-red-500 hover:bg-red-50"
+                                }`}
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -748,7 +760,7 @@ export default function Profile() {
                     <div className="space-y-4">
                       {wishlistItems.map((item) => (
                         <div
-                          key={item.id || item._id}
+                          key={item.wishlistItemId || `${item.id || item._id}_${item.variantId || 'no-variant'}`}
                           className="flex items-center space-x-4 p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors border border-gray-200"
                         >
                           <div className="w-16 h-16 bg-white rounded-lg overflow-hidden shadow-sm flex-shrink-0">
@@ -767,6 +779,11 @@ export default function Profile() {
                             <h3 className="font-semibold text-codGray truncate">
                               {item.name}
                             </h3>
+                            {item.variantName && (
+                              <p className="text-sm text-blue-600 font-medium">
+                                Variant: {item.variantName}
+                              </p>
+                            )}
                             <p className="text-sm text-gray-600">
                               {item.unit || item.category}
                             </p>
@@ -802,8 +819,16 @@ export default function Profile() {
                             <div className="flex space-x-2">
                               <button
                                 onClick={() => {
-                                  addToCart({ ...item, quantity: 1 });
-                                  removeFromWishlistContext(item.id || item._id);
+                                  // Pass variant information when adding to cart
+                                  const cartItem = {
+                                    ...item,
+                                    quantity: 1,
+                                    variantId: item.variantId,
+                                    variantName: item.variantName,
+                                    selectedVariant: item.selectedVariant
+                                  };
+                                  addToCart(cartItem);
+                                  removeFromWishlistContext(item.id || item._id, item.variantId);
                                   // toast.success(`${item.name} added to cart!`);
                                 }}
                                 className="flex items-center bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 transition-colors text-sm"
@@ -812,7 +837,7 @@ export default function Profile() {
                                 Add
                               </button>
                               <button
-                                onClick={() => handleRemoveFromWishlist(item.id || item._id)}
+                                onClick={() => handleRemoveFromWishlist(item.id || item._id, item.variantId)}
                                 className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                               >
                                 <Trash2 className="w-4 h-4" />

@@ -20,13 +20,20 @@ export default function CartPage() {
   const [loadingDelivery, setLoadingDelivery] = useState(false);
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
 
-  const removeFromCart = (id: string) => {
-    updateCartItem(id, 0);
+  const removeFromCart = (id: string, variantId?: string) => {
+    updateCartItem(id, 0, variantId);
   };
 
   const moveToWishlist = (item: any) => {
-    addToWishlist(item);
-    removeFromCart(item.id);
+    // Pass variant information when adding to wishlist
+    const wishlistItem = {
+      ...item,
+      variantId: item.variantId,
+      variantName: item.variantName,
+      selectedVariant: item.selectedVariant
+    };
+    addToWishlist(wishlistItem);
+    removeFromCart(item.id, item.variantId);
   };
 
   // Get user's current location

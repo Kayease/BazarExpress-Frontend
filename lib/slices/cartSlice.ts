@@ -10,6 +10,10 @@ export interface CartItem {
   category: string;
   brand?: string;
   weight?: string;
+  // Variant information
+  variantId?: string;
+  variantName?: string;
+  selectedVariant?: any;
   [key: string]: any;
 }
 

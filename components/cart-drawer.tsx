@@ -10,7 +10,7 @@ import toast from "react-hot-toast";
 
 export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const { isLoggedIn, setIsLoginOpen } = useAppContext();
-  const { cartItems, updateCartItem, cartTotal } = useCartContext();
+  const { cartItems, updateCartItem, removeCartItem, cartTotal } = useCartContext();
   const { addToWishlist, isInWishlist } = useWishlistContext();
   const router = useRouter();
   const user = useAppSelector((state: any) => state?.auth?.user);
@@ -48,18 +48,29 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
     }
   }, [isOpen, cartItems.length, onClose]);
 
-  const handleUpdate = (id: string, quantity: number) => {
-    updateCartItem(id, quantity);
+  const handleUpdate = (id: string, quantity: number, variantId?: string) => {
+    updateCartItem(id, quantity, variantId);
   };
 
-  const handleRemove = (id: string) => {
-    updateCartItem(id, 0);
+  const handleRemove = (id: string, variantId?: string) => {
+    if (removeCartItem) {
+      removeCartItem(id, variantId);
+    } else {
+      updateCartItem(id, 0, variantId);
+    }
   };
 
   const moveToWishlist = (item: any) => {
-    addToWishlist(item);
+    // Pass variant information when adding to wishlist
+    const wishlistItem = {
+      ...item,
+      variantId: item.variantId,
+      variantName: item.variantName,
+      selectedVariant: item.selectedVariant
+    };
+    addToWishlist(wishlistItem);
     // Silently remove from cart without showing the removal toast
-    updateCartItem(item.id, 0, false);
+    updateCartItem(item.id, 0, item.variantId, false);
     //toast.success('Moved to wishlist!', {icon: '❤️',duration: 2000,});
   };
 
@@ -128,7 +139,7 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
           ) : (
             <div className="p-4 space-y-3">
               {cartItems.map((item, idx) => (
-                <div key={item.id || idx} className="bg-white rounded-lg p-3 shadow-sm border border-gray-100">
+                <div key={item.cartItemId || `${item.id}_${item.variantId || 'no-variant'}` || idx} className="bg-white rounded-lg p-3 shadow-sm border border-gray-100">
                   <div className="flex">
                     {/* Product Image */}
                     <div className="relative w-16 h-16 rounded-md overflow-hidden bg-gray-100 flex-shrink-0">
@@ -144,8 +155,15 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
                     <div className="flex-1 ml-3 flex flex-col">
                       <div className="flex justify-between items-start">
                         <div>
-                          <h4 className="font-semibold text-gray-900 text-sm leading-tight">{item.name}</h4>
-                          <p className="text-xs text-gray-500">
+                          <h4 className="font-semibold text-gray-900 text-sm leading-tight">
+                            {item.name}
+                          </h4>
+                          {item.variantName && (
+                            <p className="text-xs text-blue-600 font-medium mt-0.5">
+                              Variant: {item.variantName}
+                            </p>
+                          )}
+                          <p className="text-xs text-gray-500 mt-1">
                             {item.brand && typeof item.brand === "object" && item.brand !== null 
                               ? item.brand.name || item.brandId || 'Unknown Brand'
                               : item.brand || item.brandId || 'Unknown Brand'}
@@ -165,7 +183,7 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
                             <Heart className="h-4 w-4" />
                           </button>
                           <button 
-                            onClick={() => handleRemove(item.id)}
+                            onClick={() => handleRemove(item.id, item.variantId)}
                             className="p-1.5 text-red-500 hover:bg-red-50 rounded-full transition-colors"
                             title="Remove from cart"
                           >
@@ -183,7 +201,7 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
                         {/* Quantity Controls */}
                         <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
                           <button 
-                            onClick={() => handleUpdate(item.id, item.quantity - 1)}
+                            onClick={() => handleUpdate(item.id, item.quantity - 1, item.variantId)}
                             disabled={item.quantity <= 1}
                             className="px-2 py-1 bg-gray-50 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
                           >
@@ -193,7 +211,7 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
                             {item.quantity}
                           </span>
                           <button 
-                            onClick={() => handleUpdate(item.id, item.quantity + 1)}
+                            onClick={() => handleUpdate(item.id, item.quantity + 1, item.variantId)}
                             className="px-2 py-1 bg-gray-50 hover:bg-gray-100"
                           >
                             <Plus className="h-3 w-3" />

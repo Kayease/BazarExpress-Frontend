@@ -58,16 +58,27 @@ export const getWishlistFromDB = async (): Promise<WishlistResponse> => {
 };
 
 // Add item to wishlist in database
-export const addToWishlistDB = async (productId: string): Promise<WishlistResponse> => {
+export const addToWishlistDB = async (productId: string, variantId?: string, variantName?: string, selectedVariant?: any): Promise<WishlistResponse> => {
   const api = createAuthAxios();
-  const response = await api.post('/wishlist/add', { productId });
+  const payload: any = { productId };
+  
+  // Add variant information if provided
+  if (variantId) payload.variantId = variantId;
+  if (variantName) payload.variantName = variantName;
+  if (selectedVariant) payload.selectedVariant = selectedVariant;
+  
+  const response = await api.post('/wishlist/add', payload);
   return response.data;
 };
 
 // Remove item from wishlist in database
-export const removeFromWishlistDB = async (productId: string): Promise<WishlistResponse> => {
+export const removeFromWishlistDB = async (productId: string, variantId?: string): Promise<WishlistResponse> => {
   const api = createAuthAxios();
-  const response = await api.delete(`/wishlist/remove/${productId}`);
+  let url = `/wishlist/remove/${productId}`;
+  if (variantId) {
+    url += `?variantId=${encodeURIComponent(variantId)}`;
+  }
+  const response = await api.delete(url);
   return response.data;
 };
 

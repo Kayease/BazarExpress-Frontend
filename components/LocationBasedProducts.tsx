@@ -154,23 +154,29 @@ export function LocationBasedProducts({
 
 
   // Handle add to cart
-  const handleAddToCart = (product: ProductWithDelivery) => {
+  const handleAddToCart = async (product: ProductWithDelivery) => {
     try {
-      addToCart({
+      await addToCart({
         id: product._id,
         name: product.name,
         price: product.price,
         image: product.image,
         quantity: 1,
         warehouseId: product.warehouseId._id,
-        warehouseName: product.warehouseId.name
+        warehouseName: product.warehouseId.name,
+        variants: product.variants // Include variants for validation
       });
       
       toast.success(`${product.name} added to cart`);
-    } catch (error) {
-      toast.error('Failed to add item to cart');
+    } catch (error: any) {
+      if (error.isVariantRequired) {
+        toast.error(`Please select a variant for ${product.name} before adding to cart`);
+      } else if (error.isWarehouseConflict) {
+        toast.error(error.message);
+      } else {
+        toast.error('Failed to add item to cart');
+      }
     }
-
   };
 
   // No location selected

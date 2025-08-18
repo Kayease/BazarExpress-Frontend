@@ -1,8 +1,9 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Search, Eye, Package, Truck, CheckCircle, X, RefreshCw, Loader2, Calendar, CreditCard, MapPin, User, Warehouse } from "lucide-react"
+import { Search, Eye, Package, Truck, CheckCircle, X, RefreshCw, Loader2, Calendar, CreditCard, MapPin, User, Warehouse, Download, FileText } from "lucide-react"
 import toast from 'react-hot-toast'
+import WarehousePickingModal from './WarehousePickingModal'
 
 interface OrderItem {
   productId: string
@@ -14,6 +15,11 @@ interface OrderItem {
   categoryId?: string | { _id: string; name: string }
   brand?: string
   brandId?: string | { _id: string; name: string }
+  locationName?: string // Product location in warehouse
+  // Variant information
+  variantId?: string
+  variantName?: string
+  selectedVariant?: any
 }
 
 interface Order {
@@ -181,6 +187,108 @@ export default function OrderDetailsModal({
   getAvailableStatusOptions = defaultGetAvailableStatusOptions
 }: OrderDetailsModalProps) {
   
+  // State for picking modal
+  const [pickingModalOrder, setPickingModalOrder] = useState<Order | null>(null)
+  // State for enhanced order data with variant information
+  const [enhancedOrder, setEnhancedOrder] = useState<Order | null>(null)
+  
+  // Effect to enhance order data when viewing changes
+  useEffect(() => {
+    const enhanceOrderData = async () => {
+      if (!viewing) {
+        setEnhancedOrder(null)
+        return
+      }
+      
+      try {
+        // Use the same function that works for the picking modal
+        console.log('OrderDetailsModal: Enhancing order data for:', viewing.orderId)
+        const orderWithLocations = await fetchOrderWithProductLocations(viewing, token)
+        console.log('OrderDetailsModal: Enhanced order data:', orderWithLocations)
+        setEnhancedOrder(orderWithLocations)
+      } catch (error) {
+        console.error('Error enhancing order data:', error)
+        // Fallback to original order if enhancement fails
+        setEnhancedOrder(viewing)
+      }
+    }
+    
+    enhanceOrderData()
+  }, [viewing, token])
+  
+  // Function to handle opening picking modal
+  const handleOpenPickingModal = async () => {
+    if (!viewing) return
+    
+    try {
+      // Fetch product details with locations if needed
+      const orderWithLocations = await fetchOrderWithProductLocations(viewing, token)
+      setPickingModalOrder(orderWithLocations)
+    } catch (error) {
+      console.error('Error fetching order details:', error)
+      toast.error('Failed to load order details')
+    }
+  }
+  
+  // Function to fetch order with product location details
+  const fetchOrderWithProductLocations = async (order: Order, token: string): Promise<Order> => {
+    try {
+      // Fetch product details for each item to get location information
+      const itemsWithLocations = await Promise.all(
+        order.items.map(async (item) => {
+          try {
+            // Use the backend API URL
+            const response = await fetch(`http://localhost:4000/api/products/${item.productId}`, {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              }
+            })
+            
+            if (response.ok) {
+              const productData = await response.json()
+              console.log(`OrderDetailsModal: Product data for ${item.productId}:`, productData)
+              console.log(`OrderDetailsModal: Original item data:`, item)
+              const enhancedItem = {
+                ...item,
+                locationName: productData.locationName || 'Location not specified',
+                // Preserve and enhance variant information
+                variantName: item.variantName || productData.variantName || null,
+                selectedVariant: item.selectedVariant || null
+              }
+              console.log(`OrderDetailsModal: Enhanced item:`, enhancedItem)
+              return enhancedItem
+            }
+            return {
+              ...item,
+              locationName: 'Location not specified',
+              // Preserve variant information even if product fetch fails
+              variantName: item.variantName || null,
+              selectedVariant: item.selectedVariant || null
+            }
+          } catch (error) {
+            console.error(`Error fetching product ${item.productId}:`, error)
+            return {
+              ...item,
+              locationName: 'Location not specified',
+              // Preserve variant information even if product fetch fails
+              variantName: item.variantName || null,
+              selectedVariant: item.selectedVariant || null
+            }
+          }
+        })
+      )
+      
+      return {
+        ...order,
+        items: itemsWithLocations
+      }
+    } catch (error) {
+      console.error('Error fetching product locations:', error)
+      return order
+    }
+  }
+  
   // Handle OTP input changes - use passed function or default
   const handleOtpChange = propHandleOtpChange || ((index: number, value: string) => {
     if (value.length > 1) return
@@ -223,7 +331,19 @@ export default function OrderDetailsModal({
 
   if (!viewing) return null
 
+  // Use enhanced order data if available, otherwise fallback to viewing
+  const displayOrder = enhancedOrder || viewing
+  
+  // Debug: Log the data to see what's available
+  console.log('OrderDetailsModal Debug:', {
+    viewing: viewing,
+    enhancedOrder: enhancedOrder,
+    displayOrder: displayOrder,
+    firstItem: displayOrder?.items?.[0]
+  })
+
   return (
+    <>
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[999]">
       <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
         {/* Header */}
@@ -231,14 +351,27 @@ export default function OrderDetailsModal({
           <div className="flex justify-between items-center">
             <div>
               <h3 className="text-xl font-bold">Order Details</h3>
-              <p className="text-white/80">#{viewing.orderId}</p>
+              <p className="text-white/80">#{displayOrder.orderId}</p>
             </div>
-            <button
-              onClick={onClose}
-              className="text-white/80 hover:text-white p-2 hover:bg-white/10 rounded-lg transition-colors"
-            >
-              <X className="h-5 w-5" />
-            </button>
+            <div className="flex items-center space-x-2">
+              {/* Download Invoice Button - Only for warehouse managers and admins */}
+              {(user?.role === 'order_warehouse_management' || user?.role === 'admin') && (
+                <button
+                  onClick={handleOpenPickingModal}
+                  className="flex items-center space-x-2 bg-white/10 hover:bg-white/20 text-white px-3 py-2 rounded-lg transition-colors"
+                  title="Generate Warehouse Picking List"
+                >
+                  <Download className="h-4 w-4" />
+                  <span className="text-sm font-medium">Picking List</span>
+                </button>
+              )}
+              <button
+                onClick={onClose}
+                className="text-white/80 hover:text-white p-2 hover:bg-white/10 rounded-lg transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -248,13 +381,13 @@ export default function OrderDetailsModal({
             <div className="bg-gray-50 rounded-xl p-4">
               <div className="flex items-center space-x-2 mb-2">
                 {(() => {
-                  const StatusIcon = statusConfig[viewing.status as keyof typeof statusConfig].icon;
+                  const StatusIcon = statusConfig[displayOrder.status as keyof typeof statusConfig].icon;
                   return <StatusIcon className="w-4 h-4 text-brand-primary" />;
                 })()}
                 <span className="text-sm font-medium text-gray-600">Order Status</span>
               </div>
-              <span className={`inline-flex items-center px-3 py-1 text-sm font-medium rounded-full ${statusConfig[viewing.status as keyof typeof statusConfig].bg} ${statusConfig[viewing.status as keyof typeof statusConfig].color}`}>
-                {viewing.status.charAt(0).toUpperCase() + viewing.status.slice(1)}
+              <span className={`inline-flex items-center px-3 py-1 text-sm font-medium rounded-full ${statusConfig[displayOrder.status as keyof typeof statusConfig].bg} ${statusConfig[displayOrder.status as keyof typeof statusConfig].color}`}>
+                {displayOrder.status.charAt(0).toUpperCase() + displayOrder.status.slice(1)}
               </span>
             </div>
 
@@ -264,7 +397,7 @@ export default function OrderDetailsModal({
                 <span className="text-sm font-medium text-gray-600">Order Date</span>
               </div>
               <p className="text-sm font-semibold text-gray-900">
-                {new Date(viewing.createdAt).toLocaleDateString('en-IN', {
+                {new Date(displayOrder.createdAt).toLocaleDateString('en-IN', {
                   year: 'numeric',
                   month: 'long',
                   day: 'numeric'
@@ -278,7 +411,7 @@ export default function OrderDetailsModal({
                 <span className="text-sm font-medium text-gray-600">Payment</span>
               </div>
               <p className="text-sm font-semibold text-gray-900">
-                {viewing.paymentInfo?.method === 'cod' ? 'Cash on Delivery' : 'Online Payment'}
+                {displayOrder.paymentInfo?.method === 'cod' ? 'Cash on Delivery' : 'Online Payment'}
               </p>
             </div>
 
@@ -288,7 +421,7 @@ export default function OrderDetailsModal({
                 <span className="text-sm font-medium text-gray-600">Warehouse</span>
               </div>
               <p className="text-sm font-semibold text-gray-900">
-                {viewing.warehouseInfo.warehouseName}
+                {displayOrder.warehouseInfo.warehouseName}
               </p>
             </div>
           </div>
@@ -300,25 +433,25 @@ export default function OrderDetailsModal({
               <h4 className="font-semibold text-gray-900">Delivery Address</h4>
             </div>
             <div className="text-sm text-gray-700 space-y-1">
-              <p className="font-medium">{viewing.customerInfo.name}</p>
-              {viewing.deliveryInfo.address.building && <p>{viewing.deliveryInfo.address.building}</p>}
-              <p>{viewing.deliveryInfo.address.area}</p>
-              <p>{viewing.deliveryInfo.address.city}, {viewing.deliveryInfo.address.state} - {viewing.deliveryInfo.address.pincode}</p>
-              {viewing.deliveryInfo.address.landmark && (
-                <p className="text-gray-500">Near {viewing.deliveryInfo.address.landmark}</p>
+              <p className="font-medium">{displayOrder.customerInfo.name}</p>
+              {displayOrder.deliveryInfo.address.building && <p>{displayOrder.deliveryInfo.address.building}</p>}
+              <p>{displayOrder.deliveryInfo.address.area}</p>
+              <p>{displayOrder.deliveryInfo.address.city}, {displayOrder.deliveryInfo.address.state} - {displayOrder.deliveryInfo.address.pincode}</p>
+              {displayOrder.deliveryInfo.address.landmark && (
+                <p className="text-gray-500">Near {displayOrder.deliveryInfo.address.landmark}</p>
               )}
             </div>
           </div>
 
           {/* Order Items */}
-          {viewing.items && viewing.items.length > 0 && (
+          {displayOrder.items && displayOrder.items.length > 0 && (
             <div>
               <h4 className="font-semibold text-gray-900 mb-4 flex items-center">
                 <Package className="w-5 h-5 text-brand-primary mr-2" />
-                Order Items ({viewing.items.length})
+                Order Items ({displayOrder.items.length})
               </h4>
               <div className="space-y-3">
-                {viewing.items.map((item: OrderItem, index: number) => (
+                {displayOrder.items.map((item: OrderItem, index: number) => (
                   <div key={`${item.productId}-${index}`} className="flex items-center p-4 border border-gray-200 rounded-xl hover:shadow-sm transition-shadow">
                     {/* Product Image */}
                     <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
@@ -337,8 +470,64 @@ export default function OrderDetailsModal({
 
                     {/* Product Info */}
                     <div className="flex-1 ml-4">
-                      <h5 className="font-medium text-gray-900 mb-1">{item.name}</h5>
-                      <div className="flex items-center space-x-4 text-sm text-gray-500">
+                      <h5 className="font-medium text-gray-900 mb-1">
+                        {item.name}
+                        {(() => {
+                          // Enhanced variant name extraction with debugging
+                          let variantName = null
+                          
+                          // Debug: Log item data to understand structure
+                          console.log('OrderDetailsModal - Item variant data:', {
+                            productId: item.productId,
+                            variantId: item.variantId,
+                            variantName: item.variantName,
+                            selectedVariant: item.selectedVariant,
+                            itemName: item.name
+                          })
+                          
+                          // Priority order for variant name extraction:
+                          // 1. Direct variantName field (most reliable)
+                          if (item.variantName) {
+                            variantName = item.variantName
+                            console.log('OrderDetailsModal - Using direct variantName:', variantName)
+                          } 
+                          // 2. selectedVariant.name if selectedVariant is an object
+                          else if (item.selectedVariant && typeof item.selectedVariant === 'object' && item.selectedVariant.name) {
+                            variantName = item.selectedVariant.name
+                            console.log('OrderDetailsModal - Using selectedVariant.name:', variantName)
+                          } 
+                          // 3. selectedVariant as string if it's a string
+                          else if (item.selectedVariant && typeof item.selectedVariant === 'string') {
+                            variantName = item.selectedVariant
+                            console.log('OrderDetailsModal - Using selectedVariant as string:', variantName)
+                          } 
+                          // 4. Look up variant in productId.variants array using variantId
+                          else if (item.variantId && typeof item.productId === 'object' && (item.productId as any).variants) {
+                            const variant = (item.productId as any).variants.find((v: any) => v._id === item.variantId || v.id === item.variantId)
+                            if (variant && variant.name) {
+                              variantName = variant.name
+                              console.log('OrderDetailsModal - Found variant in product variants:', variantName)
+                            }
+                          }
+                          // 5. Fallback: Extract from product name if it contains variant info
+                          else if (item.name && item.name.includes('(') && item.name.includes(')')) {
+                            const match = item.name.match(/\(([^)]+)\)/)
+                            if (match && match[1]) {
+                              variantName = match[1]
+                              console.log('OrderDetailsModal - Extracted from product name:', variantName)
+                            }
+                          }
+                          
+                          console.log('OrderDetailsModal - Final variant name:', variantName)
+                          
+                          return variantName ? (
+                            <span className="text-sm text-blue-600 font-medium ml-2 bg-blue-50 px-2 py-1 rounded">
+                              {variantName}
+                            </span>
+                          ) : null
+                        })()}
+                      </h5>
+                      <div className="flex items-center space-x-4 text-sm text-gray-500 mb-1">
                         <span>Qty: {item.quantity}</span>
                         {item.brandId && (
                           <span>
@@ -351,6 +540,13 @@ export default function OrderDetailsModal({
                           </span>
                         )}
                       </div>
+                      {/* Warehouse Location - Only visible to warehouse managers and admins */}
+                      {(user?.role === 'order_warehouse_management' || user?.role === 'admin') && item.locationName && (
+                        <div className="flex items-center space-x-1 text-xs">
+                          <MapPin className="w-3 h-3 text-blue-600" />
+                          <span className="text-blue-600 font-medium">Location: {item.locationName}</span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Price Info */}
@@ -378,38 +574,38 @@ export default function OrderDetailsModal({
               {/* Subtotal */}
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Subtotal</span>
-                <span className="text-gray-900 font-medium">₹{(viewing.pricing.subtotal || viewing.pricing.total).toFixed(2)}</span>
+                <span className="text-gray-900 font-medium">₹{(displayOrder.pricing.subtotal || displayOrder.pricing.total).toFixed(2)}</span>
               </div>
 
               {/* Discount Applied */}
-              {(viewing.pricing.discountAmount || 0) > 0 && (
+              {(displayOrder.pricing.discountAmount || 0) > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-green-600">Discount Applied</span>
-                  <span className="text-green-600 font-medium">-₹{(viewing.pricing.discountAmount || 0).toFixed(2)}</span>
+                  <span className="text-green-600 font-medium">-₹{(displayOrder.pricing.discountAmount || 0).toFixed(2)}</span>
                 </div>
               )}
 
               {/* Tax */}
-              {(viewing.pricing.taxAmount || 0) > 0 && (
+              {(displayOrder.pricing.taxAmount || 0) > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Tax</span>
-                  <span className="text-gray-900">₹{(viewing.pricing.taxAmount || 0).toFixed(2)}</span>
+                  <span className="text-gray-900">₹{(displayOrder.pricing.taxAmount || 0).toFixed(2)}</span>
                 </div>
               )}
 
               {/* Delivery Charges */}
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Delivery Charges</span>
-                <span className={`font-medium ${(viewing.pricing.deliveryCharge || 0) === 0 ? 'text-green-600' : 'text-gray-900'}`}>
-                  {(viewing.pricing.deliveryCharge || 0) === 0 ? 'FREE' : `₹${(viewing.pricing.deliveryCharge || 0).toFixed(2)}`}
+                <span className={`font-medium ${(displayOrder.pricing.deliveryCharge || 0) === 0 ? 'text-green-600' : 'text-gray-900'}`}>
+                  {(displayOrder.pricing.deliveryCharge || 0) === 0 ? 'FREE' : `₹${(displayOrder.pricing.deliveryCharge || 0).toFixed(2)}`}
                 </span>
               </div>
 
               {/* COD Charges */}
-              {(viewing.pricing.codCharge || 0) > 0 && (
+              {(displayOrder.pricing.codCharge || 0) > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">COD Charges</span>
-                  <span className="text-gray-900 font-medium">₹{(viewing.pricing.codCharge || 0).toFixed(2)}</span>
+                  <span className="text-gray-900 font-medium">₹{(displayOrder.pricing.codCharge || 0).toFixed(2)}</span>
                 </div>
               )}
 
@@ -417,7 +613,7 @@ export default function OrderDetailsModal({
               <div className="border-t pt-3 mt-3">
                 <div className="flex justify-between">
                   <span className="text-lg font-semibold text-gray-900">Total</span>
-                  <span className="text-xl font-bold text-green-600">₹{Math.ceil(viewing.pricing.total)}</span>
+                  <span className="text-xl font-bold text-green-600">₹{Math.ceil(displayOrder.pricing.total)}</span>
                 </div>
               </div>
             </div>
@@ -433,19 +629,19 @@ export default function OrderDetailsModal({
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Name:</span>
-                  <span className="font-medium text-gray-900">{viewing.customerInfo.name}</span>
+                  <span className="font-medium text-gray-900">{displayOrder.customerInfo.name}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Email:</span>
-                  <span className="font-medium text-gray-900">{viewing.customerInfo.email || 'N/A'}</span>
+                  <span className="font-medium text-gray-900">{displayOrder.customerInfo.email || 'N/A'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Phone:</span>
-                  <span className="font-medium text-gray-900">{viewing.customerInfo.phone}</span>
+                  <span className="font-medium text-gray-900">{displayOrder.customerInfo.phone}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Warehouse:</span>
-                  <span className="font-medium text-gray-900">{viewing.warehouseInfo.warehouseName}</span>
+                  <span className="font-medium text-gray-900">{displayOrder.warehouseInfo.warehouseName}</span>
                 </div>
               </div>
             </div>
@@ -459,22 +655,22 @@ export default function OrderDetailsModal({
                 <div className="flex justify-between">
                   <span className="text-gray-600">Method:</span>
                   <span className="font-medium text-gray-900">
-                    {viewing.paymentInfo?.method === 'cod' ? 'Cash on Delivery' : 'Online Payment'}
+                    {displayOrder.paymentInfo?.method === 'cod' ? 'Cash on Delivery' : 'Online Payment'}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Payment Type:</span>
-                  <span className="font-medium text-gray-900">{viewing.paymentInfo?.paymentMethod?.toUpperCase() || 'N/A'}</span>
+                  <span className="font-medium text-gray-900">{displayOrder.paymentInfo?.paymentMethod?.toUpperCase() || 'N/A'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Status:</span>
-                  <span className={`font-medium ${viewing.paymentInfo?.status === 'paid' ? 'text-green-600' : viewing.paymentInfo?.status === 'pending' ? 'text-yellow-600' : 'text-red-600'}`}>
-                    {viewing.paymentInfo?.status?.charAt(0).toUpperCase() + viewing.paymentInfo?.status?.slice(1) || 'N/A'}
+                  <span className={`font-medium ${displayOrder.paymentInfo?.status === 'paid' ? 'text-green-600' : displayOrder.paymentInfo?.status === 'pending' ? 'text-yellow-600' : 'text-red-600'}`}>
+                    {displayOrder.paymentInfo?.status?.charAt(0).toUpperCase() + displayOrder.paymentInfo?.status?.slice(1) || 'N/A'}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Total Amount:</span>
-                  <span className="font-semibold text-lg text-gray-900">₹{Math.ceil(viewing.pricing.total)}</span>
+                  <span className="font-semibold text-lg text-gray-900">₹{Math.ceil(displayOrder.pricing.total)}</span>
                 </div>
               </div>
             </div>
@@ -567,7 +763,7 @@ export default function OrderDetailsModal({
                     <span className="text-sm font-medium text-blue-800">Assigned Delivery Agent:</span>
                   </div>
                   <div className="mt-1 text-sm text-blue-700">
-                    {viewing.assignedDeliveryBoy.name} - {viewing.assignedDeliveryBoy.phone}
+                    {displayOrder.assignedDeliveryBoy?.name} - {displayOrder.assignedDeliveryBoy?.phone}
                   </div>
                 </div>
               )}
@@ -625,8 +821,8 @@ export default function OrderDetailsModal({
                 <button
                   className="w-full bg-brand-primary hover:bg-brand-primary/90 text-white font-semibold py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                   onClick={defaultUpdateStatus}
-                  disabled={updating || status === viewing.status || generatingOtp !== null || (status === 'shipped' && !selectedDeliveryBoy)}
-                  title={status === viewing.status ? `Order is already ${status}` : status === 'shipped' && !selectedDeliveryBoy ? 'Please select a delivery agent' : ''}
+                  disabled={updating || status === displayOrder.status || generatingOtp !== null || (status === 'shipped' && !selectedDeliveryBoy)}
+                  title={status === displayOrder.status ? `Order is already ${status}` : status === 'shipped' && !selectedDeliveryBoy ? 'Please select a delivery agent' : ''}
                 >
                   {generatingOtp ? (
                     <>
@@ -673,8 +869,53 @@ export default function OrderDetailsModal({
               ) : null}
             </div>
           </div>
+
+          {/* Invoice Actions */}
+          <div className="bg-gray-50 rounded-xl p-4">
+            <h4 className="font-semibold text-gray-900 mb-4 flex items-center">
+              <FileText className="w-5 h-5 text-brand-primary mr-2" />
+              Invoice Actions
+            </h4>
+            
+            {/* Preview Invoice Button - Available for all users */}
+            <button
+              onClick={handleOpenPickingModal}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors flex items-center justify-center mb-3"
+              title="Preview Invoice"
+            >
+              <Eye className="h-4 w-4 mr-2" />
+              Preview Invoice
+            </button>
+            
+            {/* Generate Picking List - Only for warehouse managers and admins */}
+            {(user?.role === 'order_warehouse_management' || user?.role === 'admin') && (
+              <>
+                <button
+                  onClick={handleOpenPickingModal}
+                  className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors flex items-center justify-center"
+                  title="Generate Warehouse Picking List"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Generate Picking List
+                </button>
+                <p className="text-xs text-gray-600 mt-2 text-center">
+                  Generate PDF with product locations for warehouse collection
+                </p>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>
+
+    {/* Warehouse Picking Modal */}
+    {pickingModalOrder && (
+      <WarehousePickingModal
+        order={pickingModalOrder}
+        isOpen={!!pickingModalOrder}
+        onClose={() => setPickingModalOrder(null)}
+      />
+    )}
+  </>
   )
 }

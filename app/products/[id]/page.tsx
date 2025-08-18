@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { canAddToCart, getWarehouseConflictInfo } from "@/lib/warehouse-validation";
 import { ReviewModal } from "@/components/ReviewModal";
+import toast from "react-hot-toast";
 
 interface ProductDimensions {
   l: string;
@@ -89,6 +90,8 @@ interface ExtendedProduct {
   attributes?: ProductAttribute[];
   rating?: number;
   warehouse?: any;
+  manufacturer?: string;
+  warranty?: string;
   variants?: {
     [key: string]: {
       name: string;
@@ -118,7 +121,7 @@ export default function ProductDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [mainImageIdx, setMainImageIdx] = useState(0);
   const [quantity, setQuantity] = useState(1);
-  const { addToCart, cartItems } = useCartContext();
+  const { addToCart, cartItems, isItemBeingAdded } = useCartContext();
   const { addToWishlist, isInWishlist } = useWishlistContext();
   const { user } = useAppContext();
   const [relatedProducts, setRelatedProducts] = useState<ExtendedProduct[]>([]);
@@ -476,7 +479,7 @@ export default function ProductDetailsPage() {
                         }}
                         className={selectedVariant === variantKey ? "bg-green-600 hover:bg-green-700" : ""}
                       >
-                        {variantKey}
+                        {variants[variantKey].name || variantKey.replace(/::/g, ' ')}
                       </Button>
                     ))}
                   </div>
@@ -715,23 +718,43 @@ export default function ProductDetailsPage() {
                     {canAddProduct ? (
                       <Button
                         className="flex-1 bg-green-600 hover:bg-green-700 h-12"
-                        disabled={product.stock <= 0}
-                        onClick={() =>
-                          addToCart({
-                            id: product._id,
-                            name: product.name,
-                            price: product.price,
-                            image: product.image,
-                            category: categoryName,
-                            brand: brandName,
-                            sku: product.sku,
-                            quantity,
-                            warehouse: product.warehouse,
-                          })
-                        }
+                        disabled={product.stock <= 0 || isItemBeingAdded(product._id, selectedVariant || undefined)}
+                        onClick={async () => {
+                          try {
+                            await addToCart({
+                              id: product._id,
+                              name: product.name,
+                              price: selectedVariant && variants ? variants[selectedVariant].price : product.price,
+                              image: product.image,
+                              category: categoryName,
+                              brand: brandName,
+                              sku: product.sku,
+                              quantity,
+                              warehouse: product.warehouse,
+                              variants: variants ? Object.keys(variants) : undefined,
+                              variantId: selectedVariant,
+                              variantName: selectedVariant && variants && variants[selectedVariant] 
+                                ? (variants[selectedVariant].name || selectedVariant.replace(/::/g, ' ')) 
+                                : undefined,
+                              selectedVariant: selectedVariant && variants ? variants[selectedVariant] : undefined,
+                            });
+                            const variantText = selectedVariant && variants && variants[selectedVariant] 
+                              ? ` (${variants[selectedVariant].name || selectedVariant.replace(/::/g, ' ')})` 
+                              : '';
+                            toast.success(`${product.name}${variantText} added to cart`);
+                          } catch (error: any) {
+                            if (error.isVariantRequired) {
+                              toast.error(`Please select a variant for ${product.name} before adding to cart`);
+                            } else if (error.isWarehouseConflict) {
+                              toast.error(error.message);
+                            } else {
+                              toast.error('Failed to add item to cart');
+                            }
+                          }
+                        }}
                       >
                         <ShoppingCart className="h-5 w-5 mr-2" />
-                        Add to Cart
+                        {isItemBeingAdded(product._id, selectedVariant || undefined) ? 'Adding...' : 'Add to Cart'}
                       </Button>
                     ) : (
                       <Button
@@ -749,26 +772,38 @@ export default function ProductDetailsPage() {
                       variant="outline"
                       size="icon"
                       className={`h-12 w-12 ${
-                        isInWishlist(product._id)
+                        isInWishlist(product._id, selectedVariant || undefined)
                           ? "border-red-300 bg-red-50 text-red-500"
                           : "hover:border-red-300 hover:bg-red-50"
                       }`}
-                      onClick={() =>
+                      onClick={() => {
+                        // Check if variants exist and none is selected
+                        if (variants && Object.keys(variants).length > 0 && !selectedVariant) {
+                          toast.error('Please select a variant before adding to wishlist');
+                          return;
+                        }
+                        
                         addToWishlist({
                           id: product._id,
                           name: product.name,
-                          price: product.price,
+                          price: selectedVariant && variants ? variants[selectedVariant].price : product.price,
                           image: product.image,
                           category: categoryName,
                           brand: brandName,
                           sku: product.sku,
                           warehouse: product.warehouse,
-                        })
-                      }
+                          // Include variant information
+                          variantId: selectedVariant,
+                          variantName: selectedVariant && variants && variants[selectedVariant] 
+                            ? (variants[selectedVariant].name || selectedVariant.replace(/::/g, ' ')) 
+                            : undefined,
+                          selectedVariant: selectedVariant && variants ? variants[selectedVariant] : undefined,
+                        });
+                      }}
                     >
                       <Heart
                         className={`h-5 w-5 ${
-                          isInWishlist(product._id)
+                          isInWishlist(product._id, selectedVariant || undefined)
                             ? "text-red-500 fill-red-500"
                             : "text-gray-400"
                         }`}
