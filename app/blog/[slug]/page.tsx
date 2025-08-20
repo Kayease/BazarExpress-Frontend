@@ -5,7 +5,7 @@ import { useParams } from "next/navigation"
 import Footer from "@/components/footer"
 import { Calendar, User, ArrowLeft, Heart, Eye, Loader2 } from "lucide-react"
 import toast from "react-hot-toast"
-import MarkdownPreview from '@uiw/react-markdown-preview';
+
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL
 
@@ -197,7 +197,10 @@ export default function BlogDetailPage() {
         {/* Blog Content */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
           <div className="prose prose-lg max-w-none">
-            <MarkdownPreview source={blog.content || ''} />
+            <div 
+              dangerouslySetInnerHTML={{ __html: blog.content || '' }}
+              className="blog-content"
+            />
           </div>
         </div>
 

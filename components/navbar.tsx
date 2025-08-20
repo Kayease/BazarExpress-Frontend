@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Search,
   MapPin,
@@ -57,6 +57,7 @@ export default function Navbar() {
   const [cartAnimation, setCartAnimation] = useState(false);
   const [wishlistAnimation, setWishlistAnimation] = useState(false);
   const [currentSearchPlaceholder, setCurrentSearchPlaceholder] = useState(0);
+  const [typingTimeout, setTypingTimeout] = useState<NodeJS.Timeout | null>(null);
 
   const searchPlaceholders = [
     "Search \"milk\"",
@@ -80,6 +81,81 @@ export default function Navbar() {
     }, 2000);
     return () => clearInterval(interval);
   }, []);
+
+  // Debounced search function
+  const performSearch = useCallback((query: string, isImmediate = false) => {
+    if (!query.trim()) return;
+    
+    // Build URL with location context
+    let url = `/search?q=${encodeURIComponent(query.trim())}`;
+    
+    // Add pincode parameter if location is detected
+    if (locationState.isLocationDetected && locationState.pincode) {
+      url += `&pincode=${locationState.pincode}`;
+    }
+    
+    // Add delivery mode for proper warehouse filtering
+    if (isGlobalMode) {
+      url += `&mode=global`;
+    }
+    
+    // Add typing indicator - false means search is complete
+    url += `&typing=false`;
+    
+    router.push(url);
+  }, [locationState, isGlobalMode, router]);
+
+  // Handle search input changes with debouncing
+  const handleSearchChange = useCallback((value: string) => {
+    setSearchValue(value);
+    
+    // Clear existing timeout
+    if (typingTimeout) {
+      clearTimeout(typingTimeout);
+    }
+    
+    // Only trigger search if we're on search page
+    if (pathname === '/search') {
+      if (value.trim()) {
+        // Show typing indicator immediately when user types
+        let url = `/search?q=${encodeURIComponent(value.trim())}`;
+        if (locationState.isLocationDetected && locationState.pincode) {
+          url += `&pincode=${locationState.pincode}`;
+        }
+        if (isGlobalMode) {
+          url += `&mode=global`;
+        }
+        url += `&typing=true`;
+        
+        // Update URL immediately for typing indicator
+        window.history.replaceState({}, '', url);
+        
+        // Set new timeout for actual search after stopping typing
+        const newTimeout = setTimeout(() => {
+          performSearch(value, false); // This will set typing=false and trigger actual search
+        }, 800); // Reduced delay for better responsiveness
+        
+        setTypingTimeout(newTimeout);
+      } else {
+        // If search is cleared, clear the timeout and navigate to clean search page
+        if (typingTimeout) {
+          clearTimeout(typingTimeout);
+          setTypingTimeout(null);
+        }
+        
+        let url = `/search`;
+        if (locationState.isLocationDetected && locationState.pincode) {
+          url += `?pincode=${locationState.pincode}`;
+        }
+        if (isGlobalMode) {
+          url += locationState.isLocationDetected && locationState.pincode ? `&mode=global` : `?mode=global`;
+        }
+        window.history.replaceState({}, '', url);
+      }
+    }
+  }, [typingTimeout, pathname, performSearch, locationState, isGlobalMode]);
+
+
 
   // Remove duplicate location detection - now handled by LocationProvider
 
@@ -134,7 +210,7 @@ export default function Navbar() {
               {/* Logo */}
               <Link href="/" className="flex items-center">
                   <Image
-                    src="/logo.png"
+                    src="/logo.svg"
                     alt="BazarXpress"
                     width={100}
                     height={40}
@@ -198,25 +274,31 @@ export default function Navbar() {
                 <input
                   type="text"
                   value={searchValue}
-                  onChange={(e) => setSearchValue(e.target.value)}
-                  onFocus={() => setIsFocused(true)}
-                  onBlur={() => setIsFocused(false)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && searchValue.trim()) {
-                      // Build URL with location context for pincode-based filtering
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  onFocus={() => {
+                    setIsFocused(true);
+                    // If on search page and has value, show typing indicator when focused
+                    if (pathname === '/search' && searchValue.trim()) {
                       let url = `/search?q=${encodeURIComponent(searchValue.trim())}`;
-                      
-                      // Add pincode parameter if location is detected
                       if (locationState.isLocationDetected && locationState.pincode) {
                         url += `&pincode=${locationState.pincode}`;
                       }
-                      
-                      // Add delivery mode for proper warehouse filtering
                       if (isGlobalMode) {
                         url += `&mode=global`;
                       }
-                      
-                      router.push(url);
+                      url += `&typing=true`;
+                      window.history.replaceState({}, '', url);
+                    }
+                  }}
+                  onBlur={() => setIsFocused(false)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && searchValue.trim()) {
+                      // Clear any pending timeout for immediate search
+                      if (typingTimeout) {
+                        clearTimeout(typingTimeout);
+                        setTypingTimeout(null);
+                      }
+                      performSearch(searchValue.trim(), true);
                     }
                   }}
                   className="absolute inset-0 w-full h-full bg-transparent border-none outline-none px-12 text-sm text-gray-900"

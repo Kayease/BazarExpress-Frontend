@@ -195,11 +195,11 @@ export default function InvoiceSettings({ isOpen, onClose, onSave, initialSettin
             <div className="mt-6 bg-white border border-blue-200 rounded-lg p-4">
               <div className="flex items-center">
                 <div className="flex-shrink-0 p-2 bg-blue-100 rounded-lg">
-                  <img src="/logo.png" alt="Business Logo" className="h-12 w-auto" />
+                  <img src="/logo.svg" alt="Business Logo" className="h-12 w-auto" />
                 </div>
                 <div className="ml-4">
                   <h4 className="text-sm font-semibold text-blue-900">Business Logo</h4>
-                  <p className="text-sm text-blue-700">Automatically using: /logo.png</p>
+                  <p className="text-sm text-blue-700">Automatically using: /logo.svg</p>
                   <p className="text-xs text-blue-600 mt-1">Logo will appear on all invoices</p>
                 </div>
               </div>

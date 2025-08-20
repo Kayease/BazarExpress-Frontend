@@ -62,12 +62,33 @@ export default function Home() {
   }, []);
 
   const handleAddToCart = (product: any) => {
-    addToCart(product);
-    setIsCartOpen(true);
-    toast({
-      title: "Added to Cart",
-      description: `${product.name} has been added to your cart.`,
-    });
+    // Check if product has variants and include the first variant by default
+    if (product.variants && Object.keys(product.variants).length > 0) {
+      const firstVariantKey = Object.keys(product.variants)[0];
+      const firstVariant = product.variants[firstVariantKey];
+      
+      const productWithVariant = {
+        ...product,
+        variantId: firstVariantKey,
+        variantName: firstVariant.name || firstVariantKey.replace(/::/g, ' '),
+        selectedVariant: firstVariant,
+        price: (firstVariant.price !== undefined ? firstVariant.price : product.price)
+      };
+      
+      addToCart(productWithVariant);
+      setIsCartOpen(true);
+      toast({
+        title: "Added to Cart",
+        description: `${product.name} (${firstVariant.name || firstVariantKey.replace(/::/g, ' ')}) has been added to your cart.`,
+      });
+    } else {
+      addToCart(product);
+      setIsCartOpen(true);
+      toast({
+        title: "Added to Cart",
+        description: `${product.name} has been added to your cart.`,
+      });
+    }
   };
 
   return (

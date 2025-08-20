@@ -9,7 +9,18 @@ export const queryKeys = {
   categories: ['categories'] as const,
   brands: ['brands'] as const,
   products: (params?: any) => ['products', params] as const,
-  productsByLocation: (pincode: string, params?: any) => ['products', 'location', pincode, params] as const,
+  productsByLocation: (pincode: string, params?: any) => [
+    'products', 
+    'location', 
+    pincode, 
+    params?.category || 'none', // Use 'none' to represent no category filter
+    params?.subcategory || 'none',
+    params?.parentCategory || 'none',
+    params?.search || 'none',
+    params?.mode || 'auto',
+    params?.page || 1,
+    params?.forceRefresh || 0
+  ] as const,
   product: (id: string) => ['product', id] as const,
 };
 
@@ -72,26 +83,55 @@ export function useProductsByLocation(
     page?: number;
     limit?: number;
     category?: string;
+    subcategory?: string;
+    parentCategory?: string;
     search?: string;
     mode?: string;
+    forceRefresh?: number;
   }
 ) {
+  const queryKey = queryKeys.productsByLocation(pincode, params);
+  
+  console.log('🔧 useProductsByLocation called with:', {
+    pincode,
+    params,
+    queryKey,
+    category: params?.category,
+    parentCategory: params?.parentCategory,
+    showAllProducts: !params?.category && !params?.parentCategory,
+    forceRefresh: params?.forceRefresh
+  });
+  
   return useQuery({
-    queryKey: queryKeys.productsByLocation(pincode, params),
+    queryKey,
     queryFn: async () => {
       const options = {
         page: params?.page || 1,
         limit: params?.limit || 20,
         category: params?.category,
+        subcategory: params?.subcategory,
+        parentCategory: params?.parentCategory,
         search: params?.search,
         mode: (params?.mode === 'global' ? 'global' : 'auto') as 'auto' | 'global'
       };
       
-      return await getProductsByPincode(pincode, options);
+      console.log('🔧 Fetching products with options:', options);
+      const result = await getProductsByPincode(pincode, options);
+      console.log('🔧 Fetch result:', {
+        success: result.success,
+        productsCount: result.products?.length || 0,
+        totalProducts: result.totalProducts,
+        deliveryMode: result.deliveryMode
+      });
+      return result;
     },
-    enabled: !!pincode,
-    staleTime: 1 * 60 * 1000, // 1 minute
-    gcTime: 3 * 60 * 1000, // 3 minutes
+    enabled: true, // Always enabled now since we use fallback pincode
+    staleTime: 1 * 60 * 1000, // 1 minute - reasonable cache time
+    gcTime: 5 * 60 * 1000, // 5 minutes garbage collection
+    refetchOnMount: true, // Always refetch on mount to handle navigation returns
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
+    retry: 1, // Only retry once to avoid delays
   });
 }
 
@@ -147,5 +187,6 @@ export function useInvalidateQueries() {
     invalidateBrands: () => queryClient.invalidateQueries({ queryKey: queryKeys.brands }),
     invalidateProducts: () => queryClient.invalidateQueries({ queryKey: ['products'] }),
     invalidateProduct: (id: string) => queryClient.invalidateQueries({ queryKey: queryKeys.product(id) }),
+    invalidateProductsByLocation: () => queryClient.invalidateQueries({ queryKey: ['products', 'location'] }),
   };
 }

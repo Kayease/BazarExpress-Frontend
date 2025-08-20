@@ -220,7 +220,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         <div className="p-4 border-b border-purple-900/30 bg-purple-800/80 flex items-center justify-between">
           {sidebarOpen && (
             <div className="flex items-center space-x-2">
-              <Image src="/logo-footer.png" alt="logo" width={40} height={40} className="rounded-full shadow-md" />
+              <Image src="/logo-footer.svg" alt="logo" width={40} height={40} className="rounded-full shadow-md" />
               <span className="font-bold text-xl tracking-wide">Admin Panel</span>
             </div>
           )}

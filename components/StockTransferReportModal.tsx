@@ -356,7 +356,7 @@ export default function StockTransferReportModal({
                   <div style={{ flex: '1', maxWidth: '60%' }}>
                     <div style={{ display: 'flex', alignItems: 'center', marginBottom: '10px' }}>
                       <img 
-                        src="/logo.png" 
+                        src="/logo.svg" 
                         alt="Company Logo" 
                         style={{ 
                           width: '50px', 

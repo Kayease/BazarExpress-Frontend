@@ -499,7 +499,7 @@ export default function InvoiceModal({ isOpen, onClose, orderData }: InvoiceModa
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', borderBottom: '1px solid #000' }}>
                   <div style={{ display: 'flex', alignItems: 'center' }}>
                     <img
-                      src="/logo.png"
+                      src="/logo.svg"
                       alt={invoiceSettings.businessName}
                       style={{ height: '40px', width: 'auto', marginRight: '10px' }}
                       onError={(e) => {

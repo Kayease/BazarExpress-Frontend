@@ -9,7 +9,7 @@ const STATIC_ASSETS = [
   '/',
   '/manifest.json',
   '/favicon.ico',
-  '/logo.png',
+  '/logo.svg',
   '/no-results.jpg',
   // Add other static assets
 ];
@@ -140,8 +140,8 @@ self.addEventListener('push', (event) => {
     event.waitUntil(
       self.registration.showNotification(data.title, {
         body: data.body,
-        icon: '/logo.png',
-        badge: '/logo.png',
+        icon: '/logo.svg',
+        badge: '/logo.svg',
       })
     );
   }

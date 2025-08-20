@@ -3,17 +3,18 @@
 import { useQuery } from '@tanstack/react-query';
 import { monitoredCacheService as cacheService } from '@/components/performance-monitor';
 import { getProductsByPincode } from '@/lib/warehouse-location';
+import { ProductWithWarehouse } from '@/lib/warehouse-validation';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 interface Product {
   _id: string;
   name: string;
-  price: number;
-  unit: string;
-  image: string;
-  rating: number;
-  deliveryTime: string;
+  price?: number;
+  unit?: string;
+  image?: string;
+  rating?: number;
+  deliveryTime?: string;
   description?: string;
   stock?: number;
   category?: any;
@@ -57,7 +58,7 @@ interface Category {
 
 interface ProductSection {
   category: Category;
-  products: Product[];
+  products: ProductWithWarehouse[];
 }
 
 interface ProductsParams {
@@ -70,7 +71,7 @@ interface ProductsParams {
 // Fetch products by location
 async function fetchProductsByLocation(params: ProductsParams): Promise<{
   success: boolean;
-  products: Product[];
+  products: ProductWithWarehouse[];
   message?: string;
 }> {
   const { pincode, isGlobalMode, searchQuery, limit = 100 } = params;
@@ -86,7 +87,7 @@ async function fetchProductsByLocation(params: ProductsParams): Promise<{
   );
   
   // Try cache first
-  const cached = cacheService.get<{ success: boolean; products: Product[] }>(cacheKey);
+  const cached = cacheService.get<{ success: boolean; products: ProductWithWarehouse[] }>(cacheKey);
   if (cached) {
     return cached;
   }
@@ -171,7 +172,7 @@ export function useHomeProducts(pincode?: string, isGlobalMode?: boolean) {
         const allCatIds = [parentCat._id, ...subcatIds];
         
         // Filter products for this category and its subcategories
-        const catProducts = locationProducts.products.filter((product: Product) => {
+        const catProducts = locationProducts.products.filter((product: ProductWithWarehouse) => {
           if (!product.category) return false;
           const categoryId = typeof product.category === 'object' ? product.category._id : product.category;
           return allCatIds.includes(categoryId);
@@ -185,7 +186,7 @@ export function useHomeProducts(pincode?: string, isGlobalMode?: boolean) {
           category: parentCat,
           products: selectedProducts
         };
-      }).filter((section) => section.products.length > 0);
+      }).filter((section: ProductSection) => section.products.length > 0);
 
       return productSections;
     },

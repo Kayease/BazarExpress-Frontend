@@ -403,11 +403,11 @@ export default function LocationModal({
           </div>
         </div>
 
-        {/* Search Results */}
+        {/*  */}
         {searchResults.length > 0 ? (
           <div className="p-6">
             <h3 className="text-sm font-medium text-gray-500 mb-3 flex justify-between items-center">
-              <span>SEARCH RESULTS</span>
+              <span></span>
               <span className="text-xs text-gray-400">{searchResults.length} found</span>
             </h3>
             <div className="space-y-3">

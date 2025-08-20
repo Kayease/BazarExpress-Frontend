@@ -22,6 +22,33 @@ export interface ProductWithWarehouse {
   name: string;
   warehouse?: WarehouseInfo;
   price?: number;
+  unit?: string;
+  image?: string;
+  rating?: number;
+  deliveryTime?: string;
+  description?: string;
+  stock?: number;
+  category?: any;
+  status?: string;
+  brand?: any;
+  sku?: string;
+  mrp?: number;
+  costPrice?: number;
+  priceIncludesTax?: boolean;
+  allowBackorders?: boolean;
+  lowStockThreshold?: number;
+  weight?: number;
+  dimensions?: {
+    l?: string;
+    w?: string;
+    h?: string;
+  };
+  returnable?: boolean;
+  returnWindow?: number;
+  codAvailable?: boolean;
+  galleryImages?: string[];
+  manufacturer?: string;
+  warranty?: string;
   createdAt?: string;
   // Allow for additional product properties
   [key: string]: any;
@@ -142,7 +169,7 @@ export function canAddToCart(product: any, cartItems: any[]): boolean {
   
   // If no cart items have valid warehouse info, allow adding products
   if (validCartItems.length === 0) {
-    console.log('canAddToCart: Allowing - no cart items with valid warehouse info');
+   // console.log('canAddToCart: Allowing - no cart items with valid warehouse info');
     return true;
   }
   

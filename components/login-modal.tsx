@@ -239,7 +239,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
           
           <div className="mb-8 text-center">
             <Image 
-              src="/logo.png" 
+              src="/logo.svg" 
               alt="BazarXpress" 
               width={56}  
               height={56}

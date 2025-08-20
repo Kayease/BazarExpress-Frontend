@@ -2,6 +2,7 @@
 import { WarehouseInfo, ProductWithWarehouse } from './warehouse-validation';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+const USE_NEXTJS_API = true; // Use Next.js API routes for better error handling
 
 export interface PincodeDeliveryCheck {
   success: boolean;
@@ -69,7 +70,8 @@ export interface LocationState {
  */
 export async function checkPincodeDelivery(pincode: string): Promise<PincodeDeliveryCheck> {
   try {
-    const response = await fetch(`${API_BASE_URL}/warehouses/check-pincode`, {
+    const apiUrl = USE_NEXTJS_API ? '/api/warehouses/check-pincode' : `${API_BASE_URL}/warehouses/check-pincode`;
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -103,6 +105,8 @@ export async function getProductsByPincode(
     page?: number;
     limit?: number;
     category?: string;
+    subcategory?: string;
+    parentCategory?: string;
     search?: string;
     mode?: 'auto' | 'global';
   } = {}
@@ -118,6 +122,14 @@ export async function getProductsByPincode(
       queryParams.append('category', options.category);
     }
 
+    if (options.subcategory) {
+      queryParams.append('subcategory', options.subcategory);
+    }
+
+    if (options.parentCategory) {
+      queryParams.append('parentCategory', options.parentCategory);
+    }
+
     if (options.search) {
       queryParams.append('search', options.search);
     }
@@ -126,8 +138,16 @@ export async function getProductsByPincode(
       queryParams.append('mode', options.mode);
     }
 
-    const response = await fetch(`${API_BASE_URL}/warehouses/products-by-pincode?${queryParams}`);
+    const apiUrl = USE_NEXTJS_API ? `/api/warehouses/products-by-pincode?${queryParams}` : `${API_BASE_URL}/warehouses/products-by-pincode?${queryParams}`;
+    console.log('Fetching products from:', apiUrl);
+    const response = await fetch(apiUrl);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
     const data = await response.json();
+    console.log('Products API response:', data);
     return data;
   } catch (error) {
     console.error('Error getting products by pincode:', error);
@@ -154,7 +174,8 @@ export async function getProductsByPincode(
  */
 export async function getDeliveryStatus(warehouseId: string, timezone = 'Asia/Kolkata') {
   try {
-    const response = await fetch(`${API_BASE_URL}/warehouses/delivery-status`, {
+    const apiUrl = USE_NEXTJS_API ? '/api/warehouses/delivery-status' : `${API_BASE_URL}/warehouses/delivery-status`;
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

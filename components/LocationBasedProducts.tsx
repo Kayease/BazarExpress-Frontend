@@ -15,7 +15,7 @@ import {
   Package,
   Store
 } from 'lucide-react';
-import { useLocation } from '@/components/LocationProvider';
+import { useLocation } from '@/components/location-provider';
 import { 
   getProductsByLocation, 
   LocationProductsResponse, 

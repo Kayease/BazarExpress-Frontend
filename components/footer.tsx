@@ -137,7 +137,7 @@ export default function Footer() {
             <div className="flex items-center">
               <Link href="/" className="flex items-center">
                 <Image
-                  src="/logo-footer.png"
+                  src="/logo-footer.svg"
                   alt="BazarXpress"
                   width={100}
                   height={50}

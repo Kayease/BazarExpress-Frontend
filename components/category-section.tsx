@@ -73,7 +73,7 @@ export default function CategorySection() {
                 key={category._id}
                 onClick={() => {
                   // Build URL with location context for pincode-based filtering
-                  let url = `/search?category=${category._id}`;
+                  let url = `/products?category=${category._id}`;
                   
                   // Add pincode parameter if location is detected
                   if (locationState.isLocationDetected && locationState.pincode) {

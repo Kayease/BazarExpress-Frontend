@@ -8,7 +8,7 @@
 
 "use client";
 import React from "react";
-import { Heart, Globe, Store, AlertTriangle, Info } from "lucide-react";
+import { Heart, Globe, Store, AlertTriangle, Info, Star } from "lucide-react";
 import { useProductCardState } from "@/hooks/use-warehouse-validation";
 import toast from "react-hot-toast";
 
@@ -35,6 +35,34 @@ const EnhancedProductCard: React.FC<EnhancedProductCardProps> = ({
   onClick,
   showWarehouseInfo = true
 }) => {
+  // Rating component
+  const renderStars = (rating: number) => {
+    const stars = [];
+    const fullStars = Math.floor(rating);
+    const hasHalfStar = rating % 1 !== 0;
+    
+    for (let i = 0; i < 5; i++) {
+      if (i < fullStars) {
+        stars.push(
+          <Star key={i} className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+        );
+      } else if (i === fullStars && hasHalfStar) {
+        stars.push(
+          <div key={i} className="relative w-3 h-3">
+            <Star className="w-3 h-3 text-gray-300 fill-gray-300 absolute" />
+            <div className="overflow-hidden w-1/2">
+              <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+            </div>
+          </div>
+        );
+      } else {
+        stars.push(
+          <Star key={i} className="w-3 h-3 text-gray-300 fill-gray-300" />
+        );
+      }
+    }
+    return stars;
+  };
   const {
     quantity,
     isInCart,
@@ -68,18 +96,18 @@ const EnhancedProductCard: React.FC<EnhancedProductCardProps> = ({
   const renderAddButton = () => {
     if (buttonState === 'quantity') {
       return (
-        <div className="flex items-center bg-green-700 rounded justify-between" style={{ minWidth: '80px', width: '80px', height: '32px' }}>
+        <div className="flex items-center bg-green-600 rounded-md justify-between" style={{ width: '70px', height: '28px' }}>
           <button
-            className="text-white text-lg focus:outline-none flex-1 text-center h-full flex items-center justify-center"
+            className="text-white text-sm font-semibold focus:outline-none flex-1 text-center h-full flex items-center justify-center hover:bg-green-700 transition-colors rounded-l-md"
             onClick={(e) => {
               e.stopPropagation();
               handleDec && handleDec(product);
             }}
             aria-label="Decrease quantity"
           >-</button>
-          <span className="text-white font-bold text-base select-none text-center flex-1 h-full flex items-center justify-center">{quantity}</span>
+          <span className="text-white font-bold text-sm select-none text-center flex-1 h-full flex items-center justify-center bg-green-600">{quantity}</span>
           <button
-            className="text-white text-lg focus:outline-none flex-1 text-center h-full flex items-center justify-center"
+            className="text-white text-sm font-semibold focus:outline-none flex-1 text-center h-full flex items-center justify-center hover:bg-green-700 transition-colors rounded-r-md"
             onClick={(e) => {
               e.stopPropagation();
               handleInc && handleInc(product);
@@ -92,27 +120,25 @@ const EnhancedProductCard: React.FC<EnhancedProductCardProps> = ({
 
     if (buttonState === 'disabled') {
       return (
-        <div className="relative">
-          <button
-            className="border border-gray-300 text-gray-400 font-medium text-[15px] bg-gray-50 cursor-not-allowed"
-            style={{ minWidth: '80px', width: '80px', height: '32px', fontFamily: 'Sinkin Sans, sans-serif', borderRadius: '4px', boxShadow: 'none' }}
-            onClick={handleAddClick}
-            disabled
-            title={disabledReason}
-          >
-            <div className="flex items-center justify-center gap-1">
-              <AlertTriangle className="w-3 h-3" />
-              <span className="text-xs">BLOCKED</span>
-            </div>
-          </button>
-        </div>
+        <button
+          className="border border-orange-300 text-orange-600 font-medium text-[9px] bg-orange-50 cursor-not-allowed rounded-md"
+          style={{ width: '70px', height: '28px', fontFamily: 'Sinkin Sans, sans-serif' }}
+          onClick={handleAddClick}
+          disabled
+          title={disabledReason}
+        >
+          <div className="flex items-center justify-center gap-0.5">
+            <AlertTriangle className="w-2.5 h-2.5" />
+            <span>BLOCK</span>
+          </div>
+        </button>
       );
     }
 
     return (
       <button
-        className="border border-green-600 text-green-700 font-medium text-[15px] bg-white hover:bg-green-50 transition"
-        style={{ minWidth: '80px', width: '80px', height: '32px', fontFamily: 'Sinkin Sans, sans-serif', borderRadius: '4px', boxShadow: 'none' }}
+        className="border border-green-600 text-green-700 font-semibold text-[11px] bg-white hover:bg-green-50 transition-colors flex items-center justify-center rounded-md"
+        style={{ width: '70px', height: '28px', fontFamily: 'Sinkin Sans, sans-serif' }}
         onClick={handleAddClick}
       >ADD</button>
     );
@@ -124,7 +150,7 @@ const EnhancedProductCard: React.FC<EnhancedProductCardProps> = ({
       className={`min-w-[180px] max-w-[180px] bg-white border rounded-xl flex-shrink-0 flex flex-col relative group cursor-pointer hover:shadow-lg transition ${
         !canAdd && !isInCart ? 'border-orange-200 bg-orange-50/30' : 'border-gray-200'
       }`}
-      style={{ fontFamily: 'Sinkin Sans, sans-serif', boxShadow: 'none' }}
+      style={{ fontFamily: 'Sinkin Sans, sans-serif', boxShadow: 'none', minHeight: '260px' }}
       onClick={onClick}
       tabIndex={0}
       role="button"
@@ -169,50 +195,61 @@ const EnhancedProductCard: React.FC<EnhancedProductCardProps> = ({
         <img src={product.image || "/placeholder.svg"} alt={product.name} className="w-[120px] h-[120px] object-contain" />
       </div>
 
-      <div className="px-3 py-2 flex-1 flex flex-col">
-        {/* Warehouse Information */}
-        {showWarehouseInfo && warehouseName && (
-          <div className="text-[9px] text-gray-400 flex items-center gap-1 mb-1" style={{ fontFamily: 'Sinkin Sans, sans-serif' }}>
-            {isGlobal ? (
-              <>
-                <Globe className="w-2.5 h-2.5" />
-                <span>Global Store</span>
-              </>
-            ) : (
-              <>
-                <Store className="w-2.5 h-2.5" />
-                <span>Local Store</span>
-              </>
-            )}
-            {!canAdd && !isInCart && (
-              <div className="ml-1 flex items-center gap-1">
-                <span>•</span>
-                <AlertTriangle className="w-2.5 h-2.5 text-orange-500" />
-                <span className="text-orange-600">Conflict</span>
-              </div>
-            )}
+      <div className="px-3 py-2 flex-1 flex flex-col justify-between">
+        {/* Top Content */}
+        <div>
+          {/* Warehouse Information */}
+          {showWarehouseInfo && warehouseName && (
+            <div className="text-[9px] text-gray-400 flex items-center gap-1 mb-1" style={{ fontFamily: 'Sinkin Sans, sans-serif' }}>
+              {isGlobal ? (
+                <>
+                  <Globe className="w-2.5 h-2.5" />
+                  <span>Global Store</span>
+                </>
+              ) : (
+                <>
+                  <Store className="w-2.5 h-2.5" />
+                  <span>Local Store</span>
+                </>
+              )}
+              {!canAdd && !isInCart && (
+                <div className="ml-1 flex items-center gap-1">
+                  <span>•</span>
+                  <AlertTriangle className="w-2.5 h-2.5 text-orange-500" />
+                  <span className="text-orange-600">Conflict</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Product Name */}
+          <div className="text-[12px] font-bold text-gray-900 line-clamp-2 mb-1 leading-snug" style={{ fontFamily: 'Sinkin Sans, sans-serif' }}>
+            {product.name}
           </div>
-        )}
 
-        {/* Product Name */}
-        <div className="text-[12px] font-bold text-gray-900 line-clamp-2 mb-4 leading-snug" style={{ fontFamily: 'Sinkin Sans, sans-serif' }}>
-          {product.name}
-        </div>
+          {/* Rating Stars */}
+          <div className="flex items-center gap-1 mb-1">
+            {renderStars(product.rating || 0)}
+            <span className="text-[9px] text-gray-500 ml-1">({product.rating || 0})</span>
+          </div>
 
-        {/* Variant/Weight/Unit */}
-        <div className="text-xs text-gray-500 mb-2 font-normal" style={{ fontFamily: 'Sinkin Sans, sans-serif' }}>
-          {product.unit}
+          {/* Variant/Weight/Unit */}
+          <div className="text-xs text-gray-500 mb-1 font-normal" style={{ fontFamily: 'Sinkin Sans, sans-serif' }}>
+            {product.unit}
+          </div>
         </div>
 
         {/* Bottom Section: Price, MRP, ADD button */}
-        <div className="flex items-end justify-between mt-2">
-          <div>
+        <div className="flex items-end justify-between mt-auto pt-2">
+          <div className="flex flex-col justify-end">
             <div className="text-[15px] font-bold text-gray-900 leading-none mb-1" style={{ fontFamily: 'Sinkin Sans, sans-serif' }}>₹{product.price}</div>
             {hasDiscount && (
               <div className="text-xs text-gray-400 line-through leading-none font-normal" style={{ fontFamily: 'Sinkin Sans, sans-serif' }}>₹{product.mrp}</div>
             )}
           </div>
-          {renderAddButton()}
+          <div className="flex-shrink-0">
+            {renderAddButton()}
+          </div>
         </div>
 
         {/* Warehouse Conflict Info */}

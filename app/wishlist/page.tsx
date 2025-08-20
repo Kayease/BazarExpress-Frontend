@@ -1,16 +1,77 @@
 "use client";
 import { useWishlistContext, useCartContext } from "@/components/app-provider";
 import { Button } from "@/components/ui/button";
-import { Heart, ShoppingCart, ArrowLeft, Trash2, AlertTriangle } from "lucide-react";
+import { Heart, ShoppingCart, ArrowLeft, Trash2, AlertTriangle, Grid3X3, List, Star, TrendingUp, Eye, Clock } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { canAddToCart, getWarehouseConflictInfo } from "@/lib/warehouse-validation";
+import { useLocation } from "@/components/location-provider";
+import { useProductsByLocation } from "@/hooks/use-api";
+import { useEffect, useState, useMemo } from "react";
+import ProductCard from "@/components/product-card";
+import ProductGridSkeleton from "@/components/product-grid-skeleton";
+import { useRecentlyViewed } from "@/hooks/use-recently-viewed";
 
 export default function WishlistPage() {
   const { wishlistItems, removeFromWishlist, isInWishlist } = useWishlistContext();
   const { addToCart, cartItems } = useCartContext();
   const router = useRouter();
+  const { locationState, isGlobalMode } = useLocation();
+  
+  // State for view mode and filters
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [showFilters, setShowFilters] = useState(false);
+  
+  // State for related products
+  const [relatedProducts, setRelatedProducts] = useState<any[]>([]);
+  const [isLoadingRelated, setIsLoadingRelated] = useState(false);
+  
+  // Recently viewed products hook
+  const { recentlyViewed } = useRecentlyViewed();
+
+  // Get products for related products section
+  const { data: locationProducts } = useProductsByLocation(
+    locationState?.pincode || '000000',
+    {
+      mode: isGlobalMode ? 'global' : 'auto',
+      limit: 20,
+      page: 1
+    }
+  );
+
+
+
+  // Generate related products based on wishlist categories
+  useEffect(() => {
+    if (wishlistItems.length > 0 && locationProducts?.products) {
+      setIsLoadingRelated(true);
+      
+      // Get unique categories from wishlist
+      const wishlistCategories = [...new Set(
+        wishlistItems
+          .map(item => {
+            if (typeof item.category === 'object' && item.category?._id) {
+              return item.category._id;
+            }
+            return item.category;
+          })
+          .filter(Boolean)
+      )];
+
+      // Filter products by wishlist categories, excluding wishlist items
+      const wishlistIds = wishlistItems.map(item => item._id || item.id);
+      const related = locationProducts.products
+        .filter(product => {
+          const productCategory = typeof product.category === 'object' ? product.category._id : product.category;
+          return wishlistCategories.includes(productCategory) && !wishlistIds.includes(product._id);
+        })
+        .slice(0, 8); // Show max 8 related products
+
+      setRelatedProducts(related);
+      setIsLoadingRelated(false);
+    }
+  }, [wishlistItems, locationProducts]);
 
   const moveToCart = (item: any) => {
     // Check warehouse validation before moving to cart
@@ -31,10 +92,54 @@ export default function WishlistPage() {
     removeFromWishlist(item.id || item._id, item.variantId);
   };
 
+  // Handle add to cart for related/recently viewed products
+  const handleAddToCart = (product: any) => {
+    if (product.variants && Object.keys(product.variants).length > 0) {
+      const firstVariantKey = Object.keys(product.variants)[0];
+      const firstVariant = product.variants[firstVariantKey];
+      
+      addToCart({ 
+        ...product, 
+        id: product._id, 
+        quantity: 1,
+        variantId: firstVariantKey,
+        variantName: firstVariant.name || firstVariantKey.replace(/::/g, ' '),
+        selectedVariant: firstVariant,
+        price: (firstVariant.price !== undefined ? firstVariant.price : product.price)
+      });
+    } else {
+      addToCart({ ...product, id: product._id, quantity: 1 });
+    }
+  };
+
+  // Handle wishlist click for related/recently viewed products
+  const handleWishlistClick = (product: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    if (product.variants && Object.keys(product.variants).length > 0) {
+      const firstVariantKey = Object.keys(product.variants)[0];
+      const firstVariant = product.variants[firstVariantKey];
+      
+      const productWithVariant = {
+        ...product,
+        variantId: firstVariantKey,
+        variantName: firstVariant.name || firstVariantKey.replace(/::/g, ' '),
+        selectedVariant: firstVariant,
+        price: (firstVariant.price !== undefined ? firstVariant.price : product.price)
+      };
+      
+      // This would need to be implemented in the wishlist context
+      // For now, we'll just show a toast
+      console.log('Add to wishlist:', productWithVariant);
+    } else {
+      console.log('Add to wishlist:', product);
+    }
+  };
+
   if (wishlistItems.length === 0) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
-        <div className="container mx-auto px-4 py-12">
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 py-8">
           {/* Header */}
           <div className="flex items-center gap-4 mb-8">
             <Button
@@ -70,122 +175,162 @@ export default function WishlistPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
-      <div className="container mx-auto px-4 py-8">
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
-        <div className="flex items-center gap-4 mb-8">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => router.back()}
-            className="rounded-full hover:scale-105 transition-transform"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-            <Heart className="h-8 w-8 text-red-500" fill="#ef4444" strokeWidth={0} />
-            My Wishlist
-          </h1>
-          <span className="bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-medium">
-            {wishlistItems.length} {wishlistItems.length === 1 ? 'item' : 'items'}
-          </span>
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-8">
+          <div className="flex items-center gap-4">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => router.back()}
+              className="rounded-full hover:scale-105 transition-transform"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <div className="flex items-center gap-2">
+              <Heart className="h-8 w-8 text-red-500" fill="#ef4444" strokeWidth={0} />
+              <h1 className="text-3xl font-bold text-gray-900">My Wishlist</h1>
+              <span className="bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-medium">
+                {wishlistItems.length} {wishlistItems.length === 1 ? 'item' : 'items'}
+              </span>
+            </div>
+          </div>
+          
+          {/* View Mode Toggle */}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center bg-gray-100 rounded-lg p-1">
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`p-2 rounded-md transition-colors ${viewMode === 'grid' ? 'bg-white shadow-sm text-green-600' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                <Grid3X3 className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={`p-2 rounded-md transition-colors ${viewMode === 'list' ? 'bg-white shadow-sm text-green-600' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                <List className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Wishlist Items Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-          {wishlistItems.map((item) => {
-            const hasDiscount = item.mrp != null && item.mrp > item.price;
-            const discountPercent = hasDiscount ? Math.round((((item.mrp ?? 0) - item.price) / (item.mrp ?? 1)) * 100) : 0;
-            
-            // Warehouse validation
-            const canAddProduct = canAddToCart(item, cartItems);
-            const conflictInfo = getWarehouseConflictInfo(item, cartItems);
-            
-            // Debug logging
-            console.log('Wishlist item validation:', {
-              itemName: item.name,
-              itemWarehouse: item.warehouse,
-              canAddProduct,
-              conflictInfo,
-              cartItemsCount: cartItems.length,
-              cartWarehouses: cartItems.map(ci => ci.warehouse?.name).filter(Boolean)
-            });
-            return (
-              <div key={item.wishlistItemId || `${item.id || item._id}_${item.variantId || 'no-variant'}`} className="min-w-[180px] max-w-[180px] bg-white border border-gray-200 rounded-xl flex flex-col relative group font-sans" style={{ fontFamily: 'Sinkin Sans, sans-serif', boxShadow: 'none' }}>
-                {/* Discount Badge */}
-                {hasDiscount && (
-                  <div className="absolute left-3 top-0 z-10 flex items-center justify-center" style={{ width: '29px', height: '28px' }}>
-                    <svg width="29" height="28" viewBox="0 0 29 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M28.9499 0C28.3999 0 27.9361 1.44696 27.9361 2.60412V27.9718L24.5708 25.9718L21.2055 27.9718L17.8402 25.9718L14.4749 27.9718L11.1096 25.9718L7.74436 27.9718L4.37907 25.9718L1.01378 27.9718V2.6037C1.01378 1.44655 0.549931 0 0 0H28.9499Z" fill="#256fef"></path>
-                    </svg>
-                    <div className="absolute top-0 left-0 w-full h-full flex flex-col items-center justify-center text-center text-[9px] font-extrabold text-white z-20" style={{ pointerEvents: 'none' }}>
-                      {discountPercent}%<br/>OFF
-                    </div>
-                  </div>
-                )}
-                {/* Remove from Wishlist Button */}
-                <button
-                  className="absolute top-2 right-2 z-10 p-1 rounded-full bg-white shadow hover:bg-gray-100"
-                  onClick={() => removeFromWishlist(item.id || item._id, item.variantId)}
-                  aria-label="Remove from wishlist"
-                >
-                  <Trash2 className="w-5 h-5 text-red-500" />
-                </button>
-                {/* Product Image */}
-                <div className="flex justify-center items-center h-32 pt-2">
-                  <Image src={item.image || "/placeholder.svg"} alt={item.name} width={120} height={120} className="w-[120px] h-[120px] object-contain" />
-                </div>
-                <div className="px-3 py-2 flex-1 flex flex-col">
-                  {/* Product Name */}
-                  <div className="text-[12px] font-bold text-gray-900 line-clamp-2 mb-2 leading-snug">
-                    {item.name}
-                  </div>
-                  {/* Variant/Weight/Unit */}
-                  <div className="text-xs text-gray-500 mb-2 font-normal">
-                    {item.variantName && (
-                      <div className="text-xs text-blue-600 font-medium mb-1">
-                        Variant: {item.variantName}
-                      </div>
-                    )}
-                    {item.unit}
-                  </div>
-                  {/* Bottom Section: Price, MRP, Add to Cart button */}
-                  <div className="flex items-end justify-between mt-2">
-                    <div>
-                      <div className="text-[15px] font-bold text-gray-900 leading-none mb-1">₹{item.price}</div>
-                      {hasDiscount && (
-                        <div className="text-xs text-gray-400 line-through leading-none font-normal">₹{item.mrp}</div>
-                      )}
-                    </div>
-                    {canAddProduct ? (
-                      <button
-                        className="border border-green-600 text-green-700 font-medium text-[15px] bg-white hover:bg-green-50 transition rounded h-8 px-3"
-                        onClick={() => moveToCart(item)}
-                      >ADD</button>
-                    ) : (
-                      <button
-                        className="border border-orange-300 text-orange-600 font-medium text-[12px] bg-orange-50 cursor-not-allowed rounded h-8 px-2"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          // Don't call moveToCart for blocked products - just show the conflict
-                        }}
-                        title={conflictInfo.message}
-                      >
-                        <div className="flex items-center justify-center gap-1">
-                          <AlertTriangle className="w-3 h-3" />
-                          <span>BLOCKED</span>
-                        </div>
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <Heart className="h-5 w-5 text-red-500" />
+            Wishlist Items
+          </h2>
+          
+          <div className={`${viewMode === 'grid'
+            ? 'grid gap-3 grid-cols-2 sm:grid-cols-2 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8'
+            : 'space-y-3'
+          }`}>
+            {wishlistItems.map((item) => {
+              const hasDiscount = item.mrp != null && item.mrp > item.price;
+              const discountPercent = hasDiscount ? Math.round((((item.mrp ?? 0) - item.price) / (item.mrp ?? 1)) * 100) : 0;
+              
+              // Warehouse validation
+              const canAddProduct = canAddToCart(item, cartItems);
+              const conflictInfo = getWarehouseConflictInfo(item, cartItems);
+              
+              return (
+                <ProductCard
+                  key={item.wishlistItemId || `${item.id || item._id}_${item.variantId || 'no-variant'}`}
+                  product={item}
+                  isInWishlist={isInWishlist}
+                  handleWishlistClick={(product: any, e: React.MouseEvent) => {
+                    e.stopPropagation();
+                    removeFromWishlist(item.id || item._id, item.variantId);
+                  }}
+                  handleAddToCart={moveToCart}
+                  quantity={0}
+                  locationState={locationState}
+                  isGlobalMode={isGlobalMode}
+                  viewMode={viewMode}
+                  onClick={() => router.push(`/products/${item._id || item.id}`)}
+                />
+              );
+            })}
+          </div>
         </div>
 
+        {/* Related Products Section */}
+        {relatedProducts.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-green-600" />
+                Related Products
+              </h2>
+              <Link href="/products">
+                <Button variant="outline" className="text-sm">
+                  View All
+                </Button>
+              </Link>
+            </div>
+            
+            {isLoadingRelated ? (
+              <ProductGridSkeleton count={8} viewMode={viewMode} />
+            ) : (
+              <div className={`${viewMode === 'grid'
+                ? 'grid gap-3 grid-cols-2 sm:grid-cols-2 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8'
+                : 'space-y-3'
+              }`}>
+                {relatedProducts.map((product) => (
+                  <ProductCard
+                    key={product._id}
+                    product={product}
+                    isInWishlist={isInWishlist}
+                    handleWishlistClick={handleWishlistClick}
+                    handleAddToCart={handleAddToCart}
+                    quantity={0}
+                    locationState={locationState}
+                    isGlobalMode={isGlobalMode}
+                    viewMode={viewMode}
+                    onClick={() => router.push(`/products/${product._id}`)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Recently Viewed Products Section */}
+        {recentlyViewed.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+                <Clock className="h-5 w-5 text-blue-600" />
+                Recently Viewed
+              </h2>
+            </div>
+            
+            <div className={`${viewMode === 'grid'
+              ? 'grid gap-3 grid-cols-2 sm:grid-cols-2 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8'
+              : 'space-y-3'
+            }`}>
+              {recentlyViewed.slice(0, 8).map((product) => (
+                <ProductCard
+                  key={product._id}
+                  product={product}
+                  isInWishlist={isInWishlist}
+                  handleWishlistClick={handleWishlistClick}
+                  handleAddToCart={handleAddToCart}
+                  quantity={0}
+                  locationState={locationState}
+                  isGlobalMode={isGlobalMode}
+                  viewMode={viewMode}
+                  onClick={() => router.push(`/products/${product._id}`)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Continue Shopping */}
-        <div className="flex justify-center mt-12">
+        <div className="flex justify-center">
           <Link href="/search" className="flex">
             <Button className="bg-gradient-to-r from-green-500 to-green-700 hover:from-green-600 hover:to-green-800 text-white px-8 py-4 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 text-lg font-semibold flex items-center gap-2">
               <ShoppingCart className="h-5 w-5 mr-2" />

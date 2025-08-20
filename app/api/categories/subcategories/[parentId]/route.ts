@@ -3,11 +3,11 @@ import { NextRequest, NextResponse } from 'next/server';
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 
 export async function GET(
-  request: NextRequest,
-  { params }: { params: { parentId: string } }
+  request: Request,
+  { params }: { params: Promise<{ parentId: string }> }
 ) {
   try {
-    const { parentId } = params;
+    const { parentId } = await params;
 
     const response = await fetch(`${API_BASE_URL}/categories/subcategories/${parentId}`, {
       method: 'GET',

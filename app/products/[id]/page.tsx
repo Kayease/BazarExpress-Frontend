@@ -34,7 +34,9 @@ import {
 } from "lucide-react";
 import { canAddToCart, getWarehouseConflictInfo } from "@/lib/warehouse-validation";
 import { ReviewModal } from "@/components/ReviewModal";
+import { ProductBreadcrumb } from "@/components/product-breadcrumb";
 import toast from "react-hot-toast";
+import { useRecentlyViewed } from "@/hooks/use-recently-viewed";
 
 interface ProductDimensions {
   l: string;
@@ -131,8 +133,24 @@ export default function ProductDetailsPage() {
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [averageRating, setAverageRating] = useState(0);
   const [totalReviews, setTotalReviews] = useState(0);
+  const [categories, setCategories] = useState<ProductCategory[]>([]);
+  
+  // Recently viewed products hook
+  const { addToRecentlyViewed } = useRecentlyViewed();
 
   const APIURL = process.env.NEXT_PUBLIC_API_URL;
+
+  const fetchCategories = async () => {
+    try {
+      const response = await fetch('/api/categories');
+      if (response.ok) {
+        const categoriesData = await response.json();
+        setCategories(categoriesData);
+      }
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+    }
+  };
 
   const fetchReviews = async (productId: string) => {
     try {
@@ -168,6 +186,9 @@ export default function ProductDetailsPage() {
     
     const fetchProductData = async () => {
       try {
+        // Fetch categories first
+        await fetchCategories();
+        
         const productResponse = await fetch(`${APIURL}/products/${id}`);
         const productData = await productResponse.json();
         
@@ -176,6 +197,22 @@ export default function ProductDetailsPage() {
         }
         
         setProduct(productData);
+        
+        // Add to recently viewed products
+        addToRecentlyViewed(productData);
+        
+        // Auto-select the first variant if the product has variants
+        if (productData.variants && Object.keys(productData.variants).length > 0) {
+          const firstVariantKey = Object.keys(productData.variants)[0];
+          setSelectedVariant(firstVariantKey);
+          
+          // If the first variant has images, reset the main image index to show the first variant image
+          const firstVariant = productData.variants[firstVariantKey];
+          if (firstVariant.images && firstVariant.images.length > 0) {
+            setMainImageIdx(0);
+          }
+        }
+        
         await fetchReviews(productData._id);
         
         if (productData && productData.category) {
@@ -311,9 +348,13 @@ export default function ProductDetailsPage() {
       : [];
   const allImages = variantImages.length > 0 ? variantImages : images;
 
+  // Get the current price and MRP based on selected variant
+  const currentPrice = selectedVariant && variants ? variants[selectedVariant].price : product.price;
+  const currentMrp = selectedVariant && variants ? variants[selectedVariant].mrp : product.mrp;
+  
   const discountPercent =
-    product.mrp > 0 && product.mrp > product.price
-      ? Math.round(((product.mrp - product.price) / product.mrp) * 100)
+    currentMrp > 0 && currentMrp > currentPrice
+      ? Math.round(((currentMrp - currentPrice) / currentMrp) * 100)
       : 0;
 
   const brandName =
@@ -323,6 +364,9 @@ export default function ProductDetailsPage() {
       ? product.brand
       : "Generic Brand";
 
+  // Get the current stock based on selected variant
+  const currentStock = selectedVariant && variants ? variants[selectedVariant].stock : product.stock;
+  
   const canAddProduct = canAddToCart(product, cartItems);
   const conflictInfo = getWarehouseConflictInfo(product, cartItems);
   const categoryName =
@@ -338,58 +382,7 @@ export default function ProductDetailsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="bg-white border-b">
-        <div className="container mx-auto px-4 py-4">
-          <nav className="flex items-center text-sm text-gray-600 gap-2">
-            <button
-              onClick={() => router.push("/")}
-              className="hover:text-green-600 transition-colors"
-            >
-              Home
-            </button>
-            <ChevronRight className="h-4 w-4 text-gray-400" />
-            <button
-              onClick={() => router.push("/products")}
-              className="hover:text-green-600 transition-colors"
-            >
-              Products
-            </button>
-            <ChevronRight className="h-4 w-4 text-gray-400" />
-            {product?.category && (
-              <>
-                <button
-                  onClick={() => {
-                    if (
-                      typeof product.category === "object" &&
-                      product.category !== null &&
-                      "_id" in product.category
-                    ) {
-                      router.push(
-                        `/products?category=${
-                          (product.category as ProductCategory)._id
-                        }`
-                      );
-                    } else {
-                      router.push(`/products?category=${product.category}`);
-                    }
-                  }}
-                  className="hover:text-green-600 transition-colors"
-                >
-                  {typeof product.category === "object" &&
-                  product.category !== null &&
-                  "name" in product.category
-                    ? (product.category as ProductCategory).name
-                    : product.category}
-                </button>
-                <ChevronRight className="h-4 w-4 text-gray-400" />
-              </>
-            )}
-            <span className="text-gray-900 font-medium truncate">
-              {product?.name}
-            </span>
-          </nav>
-        </div>
-      </div>
+      <ProductBreadcrumb product={product} categories={categories} />
 
       <div className="container mx-auto px-4 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
@@ -476,6 +469,7 @@ export default function ProductDetailsPage() {
                         onClick={() => {
                           setSelectedVariant(variantKey);
                           setMainImageIdx(0);
+                          setQuantity(1); // Reset quantity when variant changes
                         }}
                         className={selectedVariant === variantKey ? "bg-green-600 hover:bg-green-700" : ""}
                       >
@@ -514,12 +508,12 @@ export default function ProductDetailsPage() {
 
                   <div className="flex items-center gap-4 flex-wrap">
                     <span className="text-3xl font-bold text-green-600">
-                      ₹{product.price.toLocaleString()}
+                      ₹{currentPrice.toLocaleString()}
                     </span>
-                    {product.mrp > product.price && (
+                    {currentMrp > currentPrice && (
                       <>
                         <span className="text-lg text-gray-400 line-through">
-                          ₹{product.mrp.toLocaleString()}
+                          ₹{currentMrp.toLocaleString()}
                         </span>
                         {discountPercent > 0 && (
                           <Badge className="bg-red-500 hover:bg-red-600">
@@ -573,7 +567,7 @@ export default function ProductDetailsPage() {
                   <div className="space-y-1">
                     <span className="text-gray-500">Price per unit</span>
                     <p className="font-medium">
-                      ₹{(product.price / (product.weight || 1)).toFixed(2)}
+                      ₹{(currentPrice / (product.weight || 1)).toFixed(2)}
                     </p>
                   </div>
                   {product.weight && (
@@ -594,7 +588,7 @@ export default function ProductDetailsPage() {
 
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                {product.stock > 0 ? (
+                {currentStock > 0 ? (
                   <div className="flex items-center gap-2 text-green-700">
                     <Check className="h-5 w-5" />
                     <span className="font-medium">In Stock</span>
@@ -605,9 +599,9 @@ export default function ProductDetailsPage() {
                     <span className="font-medium">Out of Stock</span>
                   </div>
                 )}
-                {product.stock > 0 && (
+                {currentStock > 0 && (
                   <Badge variant="secondary">
-                    {product.stock} available
+                    {currentStock} available
                   </Badge>
                 )}
               </div>
@@ -704,9 +698,9 @@ export default function ProductDetailsPage() {
                         variant="ghost"
                         size="sm"
                         onClick={() =>
-                          setQuantity((q) => Math.min(q + 1, product.stock))
+                          setQuantity((q) => Math.min(q + 1, currentStock))
                         }
-                        disabled={product.stock <= quantity}
+                        disabled={currentStock <= quantity}
                         className="h-10 w-10 p-0"
                       >
                         <Plus className="h-4 w-4" />
@@ -718,18 +712,20 @@ export default function ProductDetailsPage() {
                     {canAddProduct ? (
                       <Button
                         className="flex-1 bg-green-600 hover:bg-green-700 h-12"
-                        disabled={product.stock <= 0 || isItemBeingAdded(product._id, selectedVariant || undefined)}
+                        disabled={currentStock <= 0 || isItemBeingAdded(product._id, selectedVariant || undefined)}
                         onClick={async () => {
                           try {
                             await addToCart({
                               id: product._id,
                               name: product.name,
-                              price: selectedVariant && variants ? variants[selectedVariant].price : product.price,
+                              price: currentPrice,
+                              mrp: currentMrp,
                               image: product.image,
                               category: categoryName,
                               brand: brandName,
                               sku: product.sku,
                               quantity,
+                              stock: currentStock,
                               warehouse: product.warehouse,
                               variants: variants ? Object.keys(variants) : undefined,
                               variantId: selectedVariant,
@@ -786,11 +782,13 @@ export default function ProductDetailsPage() {
                         addToWishlist({
                           id: product._id,
                           name: product.name,
-                          price: selectedVariant && variants ? variants[selectedVariant].price : product.price,
+                          price: currentPrice,
+                          mrp: currentMrp,
                           image: product.image,
                           category: categoryName,
                           brand: brandName,
                           sku: product.sku,
+                          stock: currentStock,
                           warehouse: product.warehouse,
                           // Include variant information
                           variantId: selectedVariant,

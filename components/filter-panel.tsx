@@ -1,15 +1,32 @@
 "use client"
 
 import { X, ChevronDown, ChevronUp } from "lucide-react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useBrands, useCategories } from "@/hooks/use-api"
 
 interface FilterPanelProps {
   isOpen: boolean
   onClose: () => void
   className?: string
+  selectedBrands?: string[]
+  selectedCategories?: string[]
+  onBrandChange?: (brandIds: string[]) => void
+  onCategoryChange?: (categoryIds: string[]) => void
+  onPriceChange?: (priceRange: [number, number]) => void
+  priceRange?: [number, number]
 }
 
-export default function FilterPanel({ isOpen, onClose, className = "" }: FilterPanelProps) {
+export default function FilterPanel({ 
+  isOpen, 
+  onClose, 
+  className = "",
+  selectedBrands = [],
+  selectedCategories = [],
+  onBrandChange,
+  onCategoryChange,
+  onPriceChange,
+  priceRange = [0, 1000]
+}: FilterPanelProps) {
   const [expandedSections, setExpandedSections] = useState({
     category: true,
     price: true,
@@ -24,8 +41,29 @@ export default function FilterPanel({ isOpen, onClose, className = "" }: FilterP
     }))
   }
 
-  const categories = ["Fruits", "Vegetables", "Dairy", "Meat", "Snacks", "Beverages"]
-  const brands = ["Organic Valley", "Fresh Farm", "Green Choice", "Premium Select"]
+  // Fetch categories and brands from API
+  const { data: categories = [], isLoading: categoriesLoading } = useCategories()
+  const { data: brands = [], isLoading: brandsLoading } = useBrands()
+
+  const handleBrandToggle = (brandId: string) => {
+    if (!onBrandChange) return
+    
+    const newSelectedBrands = selectedBrands.includes(brandId)
+      ? selectedBrands.filter(id => id !== brandId)
+      : [...selectedBrands, brandId]
+    
+    onBrandChange(newSelectedBrands)
+  }
+
+  const handleCategoryToggle = (categoryId: string) => {
+    if (!onCategoryChange) return
+    
+    const newSelectedCategories = selectedCategories.includes(categoryId)
+      ? selectedCategories.filter(id => id !== categoryId)
+      : [...selectedCategories, categoryId]
+    
+    onCategoryChange(newSelectedCategories)
+  }
 
   return (
     <aside
@@ -50,15 +88,28 @@ export default function FilterPanel({ isOpen, onClose, className = "" }: FilterP
           </button>
           {expandedSections.category && (
             <div className="space-y-2">
-              {categories.map((category) => (
-                <label key={category} className="flex items-center">
-                  <input
-                    type="checkbox"
-                    className="rounded border-border-primary text-brand-accent focus:ring-brand-accent"
-                  />
-                  <span className="ml-2 text-text-secondary">{category}</span>
-                </label>
-              ))}
+              {categoriesLoading ? (
+                <div className="space-y-2">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="flex items-center">
+                      <div className="w-4 h-4 bg-gray-200 rounded animate-pulse"></div>
+                      <div className="ml-2 h-4 bg-gray-200 rounded w-20 animate-pulse"></div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                categories.map((category) => (
+                  <label key={category._id} className="flex items-center">
+                    <input
+                      type="checkbox"
+                      className="rounded border-border-primary text-brand-accent focus:ring-brand-accent"
+                      checked={selectedCategories.includes(category._id)}
+                      onChange={() => handleCategoryToggle(category._id)}
+                    />
+                    <span className="ml-2 text-text-secondary">{category.name}</span>
+                  </label>
+                ))
+              )}
             </div>
           )}
         </div>
@@ -134,21 +185,41 @@ export default function FilterPanel({ isOpen, onClose, className = "" }: FilterP
           </button>
           {expandedSections.brand && (
             <div className="space-y-2">
-              {brands.map((brand) => (
-                <label key={typeof brand === 'object' && brand !== null ? brand._id || brand.name : brand} className="flex items-center">
-                  <input
-                    type="checkbox"
-                    className="rounded border-border-primary text-brand-accent focus:ring-brand-accent"
-                  />
-                  <span className="ml-2 text-text-secondary">{typeof brand === 'object' && brand !== null ? brand.name : brand}</span>
-                </label>
-              ))}
+              {brandsLoading ? (
+                <div className="space-y-2">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="flex items-center">
+                      <div className="w-4 h-4 bg-gray-200 rounded animate-pulse"></div>
+                      <div className="ml-2 h-4 bg-gray-200 rounded w-24 animate-pulse"></div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                brands.map((brand) => (
+                  <label key={brand._id} className="flex items-center">
+                    <input
+                      type="checkbox"
+                      className="rounded border-border-primary text-brand-accent focus:ring-brand-accent"
+                      checked={selectedBrands.includes(brand._id)}
+                      onChange={() => handleBrandToggle(brand._id)}
+                    />
+                    <span className="ml-2 text-text-secondary">{brand.name}</span>
+                  </label>
+                ))
+              )}
             </div>
           )}
         </div>
 
         {/* Clear Filters */}
-        <button className="w-full bg-surface-tertiary text-text-primary py-2 rounded-lg hover:bg-surface-hover transition">
+        <button 
+          className="w-full bg-surface-tertiary text-text-primary py-2 rounded-lg hover:bg-surface-hover transition"
+          onClick={() => {
+            onBrandChange?.([])
+            onCategoryChange?.([])
+            onPriceChange?.([0, 1000])
+          }}
+        >
           Clear All Filters
         </button>
       </div>

@@ -32,7 +32,7 @@ export function useWarehouseConflict() {
         return;
       }    // Don't check for conflicts if cart is still loading or empty
     if (isLoadingCart || cartItems.length === 0) {
-      console.log('Skipping warehouse conflict check - cart loading or empty');
+      //console.log('Skipping warehouse conflict check - cart loading or empty');
       return;
     }
 

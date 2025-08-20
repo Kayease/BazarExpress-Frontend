@@ -392,6 +392,16 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
     }
   }, [variants]);
 
+  // When variants exist, sync product selling price with the first variant's price
+  useEffect(() => {
+    const keys = Object.keys(variants);
+    if (keys.length > 0) {
+      const firstKey = keys[0];
+      const firstVariantPrice = (variants[firstKey]?.price ?? '') as string;
+      setProduct((prev: any) => ({ ...prev, price: firstVariantPrice }));
+    }
+  }, [variants]);
+
   // Auto-generate SEO fields
   const generateSEOFields = (productData: any, categoriesData: any[], brandsData: any[]) => {
     const { name, description, category, brand, price } = productData;
@@ -1039,11 +1049,13 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                   type="number"
                   value={product.price ?? ""}
                   onChange={(e) => setProduct({ ...product, price: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                  className={`w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary ${Object.keys(variants).length > 0 ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                   placeholder="0.00"
                   min="0"
                   step="0.01"
                   required
+                  readOnly={Object.keys(variants).length > 0}
+                  title={Object.keys(variants).length > 0 ? 'Selling price is controlled by the first variant' : ''}
                 />
               </div>
               <div>
@@ -1355,7 +1367,7 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Selling Price</label>
-                          <input type="number" value={product.price} onChange={e => setProduct({ ...product, price: e.target.value })} className="w-full border border-gray-300 rounded-lg p-3" placeholder="0.00" />
+                          <input type="number" value={product.price} onChange={e => setProduct({ ...product, price: e.target.value })} className={`w-full border border-gray-300 rounded-lg p-3 ${Object.keys(variants).length > 0 ? 'bg-gray-100 cursor-not-allowed' : ''}`} placeholder="0.00" readOnly={Object.keys(variants).length > 0} title={Object.keys(variants).length > 0 ? 'Selling price is controlled by the first variant' : ''} />
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Tax</label>

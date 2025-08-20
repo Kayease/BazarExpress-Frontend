@@ -86,7 +86,7 @@ export default function HeroSection() {
       console.log('Navigating to category:', categoryId, 'with location:', locationState.pincode);
       
       // Build URL with location context for pincode-based filtering
-      let url = `/search?category=${categoryId}`;
+      let url = `/products?category=${categoryId}`;
       
       // Add pincode parameter if location is detected
       if (locationState.isLocationDetected && locationState.pincode) {
