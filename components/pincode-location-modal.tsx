@@ -72,16 +72,16 @@ export function PincodeLocationModal({ isOpen, onClose, showOnMount = false }: P
 
   return (
     <Dialog open={modalOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-md mx-4">
+      <DialogContent className="w-[95vw] max-w-md mx-auto p-4 sm:p-6 max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-lg font-semibold">
-            <MapPin className="h-5 w-5 text-brand-primary" />
-            Select Your Location
+          <DialogTitle className="flex items-center gap-2 text-base sm:text-lg font-semibold">
+            <MapPin className="h-4 w-4 sm:h-5 sm:w-5 text-brand-primary flex-shrink-0" />
+            <span>Select Your Location</span>
           </DialogTitle>
         </DialogHeader>
         
-        <div className="space-y-4">
-          <p className="text-sm text-text-secondary">
+        <div className="space-y-3 sm:space-y-4">
+          <p className="text-sm text-text-secondary px-1">
             We need your location to show you the best products and delivery options available in your area.
           </p>
 
@@ -89,7 +89,7 @@ export function PincodeLocationModal({ isOpen, onClose, showOnMount = false }: P
           <Button
             onClick={handleDetectLocation}
             disabled={isLoading}
-            className="w-full flex items-center gap-2 border-2 border-brand-primary text-brand-primary hover:bg-brand-primary hover:text-white font-semibold py-2.5 px-4 rounded-lg transition-all duration-200 transform hover:scale-[1.02] disabled:transform-none disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-2 border-2 border-brand-primary text-brand-primary hover:bg-brand-primary hover:text-white font-semibold py-2.5 px-3 sm:px-4 rounded-lg transition-all duration-200 transform hover:scale-[1.02] disabled:transform-none disabled:opacity-50 text-sm sm:text-base"
             variant="outline"
           >
             {isLoading ? (
@@ -97,8 +97,26 @@ export function PincodeLocationModal({ isOpen, onClose, showOnMount = false }: P
             ) : (
               <Navigation className="h-4 w-4" />
             )}
-            {isLoading ? 'Detecting Location...' : 'Use Current Location'}
+            <span className="whitespace-nowrap">
+              {isLoading ? 'Detecting Location...' : 'Use Current Location'}
+            </span>
           </Button>
+          
+          {/* Show timeout info when detecting */}
+          {isLoading && (
+            <p className="text-xs text-gray-500 text-center px-2">
+              This will take a few seconds. If it takes too long, you can enter your pincode manually below.
+            </p>
+          )}
+          
+          {/* Show error message if detection failed */}
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-600 text-center">
+                {error}
+              </p>
+            </div>
+          )}
 
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
@@ -122,7 +140,7 @@ export function PincodeLocationModal({ isOpen, onClose, showOnMount = false }: P
                   setInputError('');
                 }}
                 maxLength={6}
-                className={inputError ? 'border-red-500' : ''}
+                className={`text-sm sm:text-base ${inputError ? 'border-red-500' : ''}`}
               />
               {inputError && (
                 <p className="text-sm text-red-500 mt-1">{inputError}</p>
@@ -132,17 +150,17 @@ export function PincodeLocationModal({ isOpen, onClose, showOnMount = false }: P
             <Button
               type="submit"
               disabled={isLoading || pincodeInput.length !== 6}
-              className="w-full bg-gradient-to-r from-brand-primary to-brand-primary/90 hover:from-brand-primary/90 hover:to-brand-primary text-white font-semibold py-2.5 px-4 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 transform hover:scale-[1.02] disabled:transform-none disabled:opacity-50"
+              className="w-full bg-gradient-to-r from-brand-primary to-brand-primary/90 hover:from-brand-primary/90 hover:to-brand-primary text-white font-semibold py-2.5 px-3 sm:px-4 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 transform hover:scale-[1.02] disabled:transform-none disabled:opacity-50 text-sm sm:text-base"
             >
               {isLoading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Checking Delivery...
+                  <span>Checking Delivery...</span>
                 </>
               ) : (
                 <>
                   <MapPin className="h-4 w-4 mr-2" />
-                  Check Delivery
+                  <span>Check Delivery</span>
                 </>
               )}
             </Button>
@@ -158,9 +176,9 @@ export function PincodeLocationModal({ isOpen, onClose, showOnMount = false }: P
           {/* Current location display */}
           {locationState.isLocationDetected && (
             <div className="p-3 bg-green-50 border border-green-200 rounded-md">
-              <div className="flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-green-600" />
-                <div>
+              <div className="flex items-start gap-2">
+                <MapPin className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-green-800">
                     Location Detected: {locationState.pincode}
                   </p>

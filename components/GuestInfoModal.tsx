@@ -79,51 +79,51 @@ export default function GuestInfoModal({ isOpen, onClose, onInfoSubmit }: GuestI
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md z-[999]">
+      <DialogContent className="w-[95vw] max-w-md mx-auto p-4 sm:p-6 z-[999] max-h-[90vh] overflow-y-auto">
         <DialogHeader className="text-center">
-          <DialogTitle className="text-2xl font-bold text-gray-900 flex items-center justify-center gap-2">
-            <Gift className="w-6 h-6 text-brand-primary" />
-            Welcome to BazarXpress!
+          <DialogTitle className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center justify-center gap-2 flex-wrap">
+            <Gift className="w-5 h-5 sm:w-6 sm:h-6 text-brand-primary flex-shrink-0" />
+            <span className="text-center">Welcome to BazarXpress!</span>
           </DialogTitle>
-          <p className="text-gray-600 mt-2">
+          <p className="text-sm sm:text-base text-gray-600 mt-2 px-2">
             Get exclusive offers and track your shopping journey
           </p>
         </DialogHeader>
 
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
           {/* Benefits Section */}
-          <div className="bg-gradient-to-r from-brand-primary/10 to-brand-primary/5 rounded-lg p-4">
-            <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-              <Shield className="w-4 h-4 text-brand-primary" />
-              Why share your phone number?
+          <div className="bg-gradient-to-r from-brand-primary/10 to-brand-primary/5 rounded-lg p-3 sm:p-4">
+            <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2 text-sm sm:text-base">
+              <Shield className="w-4 h-4 text-brand-primary flex-shrink-0" />
+              <span>Why share your phone number?</span>
             </h3>
-            <div className="grid grid-cols-1 gap-2 text-sm text-gray-700">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-brand-primary rounded-full"></div>
+            <div className="grid grid-cols-1 gap-2 text-xs sm:text-sm text-gray-700">
+              <div className="flex items-start gap-2">
+                <div className="w-2 h-2 bg-brand-primary rounded-full mt-1.5 flex-shrink-0"></div>
                 <span>Get exclusive offers and discounts</span>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-brand-primary rounded-full"></div>
+              <div className="flex items-start gap-2">
+                <div className="w-2 h-2 bg-brand-primary rounded-full mt-1.5 flex-shrink-0"></div>
                 <span>Track your abandoned cart items</span>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-brand-primary rounded-full"></div>
+              <div className="flex items-start gap-2">
+                <div className="w-2 h-2 bg-brand-primary rounded-full mt-1.5 flex-shrink-0"></div>
                 <span>Personalized product recommendations</span>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-brand-primary rounded-full"></div>
+              <div className="flex items-start gap-2">
+                <div className="w-2 h-2 bg-brand-primary rounded-full mt-1.5 flex-shrink-0"></div>
                 <span>Faster checkout process</span>
               </div>
             </div>
           </div>
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
             {/* Phone Number - Required */}
             <div className="space-y-2">
-              <Label htmlFor="phone" className="text-sm font-medium text-gray-700">
-                <Phone className="inline w-4 h-4 mr-2" />
-                Phone Number *
+              <Label htmlFor="phone" className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                <Phone className="w-4 h-4" />
+                <span>Phone Number *</span>
               </Label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -134,7 +134,7 @@ export default function GuestInfoModal({ isOpen, onClose, onInfoSubmit }: GuestI
                   type="tel"
                   value={phone}
                   onChange={(e) => handlePhoneChange(e.target.value)}
-                  className={`pl-12 ${error ? 'border-red-500' : ''}`}
+                  className={`pl-12 text-sm sm:text-base ${error ? 'border-red-500' : ''}`}
                   placeholder="Enter your mobile number"
                   maxLength={10}
                   required
@@ -152,7 +152,7 @@ export default function GuestInfoModal({ isOpen, onClose, onInfoSubmit }: GuestI
             <Button
               type="submit"
               disabled={isSubmitting || !phone.trim()}
-              className="w-full bg-brand-primary hover:bg-brand-primary-dark text-white py-3 text-lg font-semibold"
+              className="w-full bg-brand-primary hover:bg-brand-primary-dark text-white py-2.5 sm:py-3 text-base sm:text-lg font-semibold"
             >
               {isSubmitting ? 'Saving...' : 'Get Started'}
             </Button>
@@ -170,8 +170,8 @@ export default function GuestInfoModal({ isOpen, onClose, onInfoSubmit }: GuestI
           </form>
 
           {/* Privacy Notice */}
-          <div className="text-xs text-gray-500 text-center border-t pt-4">
-            <p>
+          <div className="text-xs text-gray-500 text-center border-t pt-3 sm:pt-4">
+            <p className="px-2">
               By continuing, you agree to our{' '}
               <a href="/terms" className="text-brand-primary hover:underline">
                 Terms of Service
@@ -185,7 +185,7 @@ export default function GuestInfoModal({ isOpen, onClose, onInfoSubmit }: GuestI
 
           {/* Debug Section - Only show in development */}
           {process.env.NODE_ENV === 'development' && (
-            <div className="border-t pt-4">
+            <div className="border-t pt-3 sm:pt-4">
               <details className="text-xs text-gray-500">
                 <summary className="cursor-pointer hover:text-gray-700">Debug Info</summary>
                 <div className="mt-2 space-y-1 text-left">

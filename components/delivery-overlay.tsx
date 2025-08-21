@@ -100,41 +100,41 @@ export function DeliveryOverlay({ isOpen, onClose }: DeliveryOverlayProps) {
       : (overlayMessage || 'Delivery is currently unavailable in your area.');
 
   return (
-    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/30 p-4">
-      <div className="bg-white rounded-lg shadow-lg max-w-sm w-full overflow-hidden">
+    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/30 p-3 sm:p-4">
+      <div className="bg-white rounded-lg shadow-lg w-full max-w-sm mx-auto overflow-hidden max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="p-5 text-center border-b">
-          <div className={`inline-flex items-center justify-center p-3 rounded-full ${isDisabled ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'} mb-3`}>
-            <AlertTriangle className="w-6 h-6" />
+        <div className="p-4 sm:p-5 text-center border-b">
+          <div className={`inline-flex items-center justify-center p-2.5 sm:p-3 rounded-full ${isDisabled ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'} mb-2.5 sm:mb-3`}>
+            <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
-          <h2 className="text-xl font-bold text-gray-900 mb-1">Store Unavailable</h2>
-          <div className="flex items-center justify-center gap-1.5 text-sm text-gray-600">
-            <MapPin className="w-3.5 h-3.5" />
+          <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-1">Store Unavailable</h2>
+          <div className="flex items-center justify-center gap-1.5 text-xs sm:text-sm text-gray-600">
+            <MapPin className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
             <span>PIN: {locationState.pincode}</span>
           </div>
         </div>
 
         {/* Content */}
-        <div className="p-5 space-y-4">
+        <div className="p-4 sm:p-5 space-y-3 sm:space-y-4">
           {/* Status alert */}
-          <div className={`rounded-md p-3 flex items-start gap-2 text-sm ${
+          <div className={`rounded-md p-3 flex items-start gap-2 text-xs sm:text-sm ${
             isDisabled ? 'bg-red-50 text-red-800' : 'bg-orange-50 text-orange-800'
           }`}>
             <AlertTriangle className={`flex-shrink-0 mt-0.5 ${isDisabled ? 'text-red-500' : 'text-orange-500'}`} />
-            <p>{statusMessage}</p>
+            <p className="break-words">{statusMessage}</p>
           </div>
 
           {/* Warehouse details */}
           {warehouse && (
-            <div className="space-y-3">
+            <div className="space-y-2.5 sm:space-y-3">
               {/* Store info */}
-              <div className="flex items-start gap-3">
-                <div className="bg-blue-100 p-1.5 rounded-md text-blue-800">
+              <div className="flex items-start gap-2.5 sm:gap-3">
+                <div className="bg-blue-100 p-1.5 rounded-md text-blue-800 flex-shrink-0">
                   <Store className="w-4 h-4" />
                 </div>
-                <div>
-                  <h3 className="font-medium text-gray-900">{warehouse.name}</h3>
-                  <p className="text-xs text-gray-600 mt-0.5">{warehouse.address}</p>
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-medium text-gray-900 text-sm sm:text-base">{warehouse.name}</h3>
+                  <p className="text-xs text-gray-600 mt-0.5 break-words">{warehouse.address}</p>
                 </div>
               </div>
 
@@ -142,8 +142,8 @@ export function DeliveryOverlay({ isOpen, onClose }: DeliveryOverlayProps) {
               <div className="space-y-2">
                 {/* Working hours */}
                 {warehouse.deliverySettings && !warehouse.deliverySettings.is24x7Delivery && warehouse.deliverySettings.deliveryHours && (
-                  <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-md text-sm">
-                    <Clock className="text-blue-600 w-4 h-4 flex-shrink-0" />
+                  <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-md text-xs sm:text-sm">
+                    <Clock className="text-blue-600 w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
                     <span className="text-gray-500">Hours:</span>
                     <span className="font-medium">
                       {formatTime(warehouse.deliverySettings.deliveryHours.start)} - {formatTime(warehouse.deliverySettings.deliveryHours.end)}
@@ -153,8 +153,8 @@ export function DeliveryOverlay({ isOpen, onClose }: DeliveryOverlayProps) {
 
                 {/* Working days */}
                 {warehouse.deliverySettings && !warehouse.deliverySettings.is24x7Delivery && warehouse.deliverySettings.deliveryDays && warehouse.deliverySettings.deliveryDays.length > 0 && (
-                  <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-md text-sm">
-                    <Calendar className="text-blue-600 w-4 h-4 flex-shrink-0" />
+                  <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-md text-xs sm:text-sm">
+                    <Calendar className="text-blue-600 w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
                     <span className="text-gray-500">Days:</span>
                     <div className="flex flex-wrap gap-1">
                       {warehouse.deliverySettings.deliveryDays.map((day: string) => (
@@ -173,9 +173,9 @@ export function DeliveryOverlay({ isOpen, onClose }: DeliveryOverlayProps) {
           <div className="space-y-2 pt-2">
             <Button
               onClick={handleSwitchToGlobal}
-              className="w-full h-10 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium"
+              className="w-full h-9 sm:h-10 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-medium"
             >
-              <Store className="mr-2 w-4 h-4" />
+              <Store className="mr-2 w-3.5 h-3.5 sm:w-4 sm:h-4" />
               Switch to Global Store
             </Button>
             
@@ -183,7 +183,7 @@ export function DeliveryOverlay({ isOpen, onClose }: DeliveryOverlayProps) {
               <Button
                 onClick={handleClose}
                 variant="outline"
-                className="w-full h-10 text-sm font-medium border-gray-300 hover:bg-gray-50"
+                className="w-full h-9 sm:h-10 text-xs sm:text-sm font-medium border-gray-300 hover:bg-gray-50"
               >
                 {isOutsideHours && nextOpeningInfo && warehouse?.deliverySettings?.isDeliveryEnabled
                   ? `Order for ${nextOpeningInfo.nextDeliveryDay}`

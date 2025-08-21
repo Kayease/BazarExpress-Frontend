@@ -47,7 +47,7 @@ export default function Navbar() {
   const router = useRouter();
   
   // Get location context
-  const { locationState, deliveryMessage, isGlobalMode, showLocationModal, setShowLocationModal } = useLocation();
+  const { locationState, deliveryMessage, isGlobalMode, showLocationModal, setShowLocationModal, isLoading } = useLocation();
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
@@ -232,14 +232,18 @@ export default function Navbar() {
                   <div className="text-md font-extrabold text-green-600">
                     {locationState.isLocationDetected ? 
                       deliveryMessage : 
-                      "Detecting location..."
+                      isLoading ? 
+                        "Detecting location..." : 
+                        "Select location"
                     }
                   </div>
                   <div className="flex items-center text-xs text-gray-500 max-w-[200px] truncate">
                     <span className="truncate">
                       {locationState.isLocationDetected ? 
                         `PIN: ${locationState.pincode}` : 
-                        "Please wait..."
+                        isLoading ? 
+                          "Please wait..." : 
+                          "Click to set"
                       }
                     </span>
                     <ChevronDown size={14} className="ml-1 flex-shrink-0" />
@@ -430,7 +434,7 @@ export default function Navbar() {
 
                 {/* Wishlist Button */}
                 <Link
-                  href="/wishlist"
+                  href="/account?tab=wishlist"
                   className="flex items-center px-3 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors relative"
               >
                 <Heart
@@ -538,7 +542,7 @@ export default function Navbar() {
 
                   {/* Wishlist */}
                   <Link
-                    href="/wishlist"
+                    href="/account?tab=wishlist"
                     className="w-full flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg"
                     onClick={() => setIsMobileMenuOpen(false)}
                   >

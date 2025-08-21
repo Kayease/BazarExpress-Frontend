@@ -35,6 +35,12 @@ export interface Product {
     stock: number;
   }>;
   createdAt: string;
+  // Additional properties for cart/wishlist operations
+  variantId?: string;
+  variantName?: string;
+  selectedVariant?: any;
+  id?: string; // Used in cart operations
+  quantity?: number;
 }
 
 export type ViewMode = "grid" | "list";

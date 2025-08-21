@@ -68,6 +68,8 @@ export function LocationProvider({ children }: LocationProviderProps) {
 
   // Initialize location on mount
   useEffect(() => {
+    let fallbackTimer: NodeJS.Timeout;
+    
     const initializeLocation = async () => {
       // Clean up old location data that might conflict
       localStorage.removeItem('userLocation'); // Remove old navbar location data
@@ -107,9 +109,22 @@ export function LocationProvider({ children }: LocationProviderProps) {
           // Mark that we've attempted auto-detection to avoid repeated prompts
           localStorage.setItem('hasAttemptedAutoDetection', 'true');
           
+          // Set a fallback timer to show location modal if geolocation takes too long
+          fallbackTimer = setTimeout(() => {
+            console.log('LocationProvider - Fallback timer triggered, showing location modal');
+            setIsLoading(false);
+            setShowLocationModal(true);
+          }, 10000); // 10 seconds fallback
+          
           try {
             setIsLoading(true);
             const pincode = await getPincodeFromGeolocation();
+            
+            // Clear the fallback timer since we got a response
+            if (fallbackTimer) {
+              clearTimeout(fallbackTimer);
+              fallbackTimer = null;
+            }
             
             if (pincode) {
               const deliveryCheck = await checkPincodeDelivery(pincode);
@@ -128,6 +143,11 @@ export function LocationProvider({ children }: LocationProviderProps) {
             }
           } catch (err) {
             console.error('Error with automatic location detection:', err);
+            // Clear the fallback timer since we got an error
+            if (fallbackTimer) {
+              clearTimeout(fallbackTimer);
+              fallbackTimer = null;
+            }
             // Show location modal as fallback after automatic detection fails
             setTimeout(() => setShowLocationModal(true), 2000);
           } finally {
@@ -138,6 +158,13 @@ export function LocationProvider({ children }: LocationProviderProps) {
     };
 
     initializeLocation();
+    
+    // Cleanup function to clear any pending timeouts
+    return () => {
+      if (fallbackTimer) {
+        clearTimeout(fallbackTimer);
+      }
+    };
   }, []);
 
   const updateLocationState = (deliveryCheck: PincodeDeliveryCheck) => {
@@ -194,22 +221,58 @@ export function LocationProvider({ children }: LocationProviderProps) {
   };
 
   const detectLocation = async () => {
+    let detectionTimeout: NodeJS.Timeout;
+    let showModalTimeout: NodeJS.Timeout;
+    
     try {
       setIsLoading(true);
       setError(null);
       
+      // Set a timeout for the entire detection process
+      detectionTimeout = setTimeout(() => {
+        console.log('LocationProvider - Detection timeout triggered');
+        setIsLoading(false);
+        setError('Location detection timed out. Please enter your pincode manually.');
+        setShowLocationModal(true);
+      }, 15000); // 15 seconds total timeout
+      
+      // Also set a shorter timeout to show the modal if geolocation is taking too long
+      showModalTimeout = setTimeout(() => {
+        console.log('LocationProvider - Show modal timeout triggered');
+        setShowLocationModal(true);
+      }, 8000); // Show modal after 8 seconds even if still loading
+      
       const pincode = await getPincodeFromGeolocation();
+      
+      // Clear both timeouts since we got a response
+      if (detectionTimeout) {
+        clearTimeout(detectionTimeout);
+        detectionTimeout = null;
+      }
+      if (showModalTimeout) {
+        clearTimeout(showModalTimeout);
+        showModalTimeout = null;
+      }
       
       if (pincode) {
         await setUserPincode(pincode);
         // Modal will be closed by setUserPincode if successful
       } else {
         setError('Could not detect your pincode. Please enter it manually.');
+        setShowLocationModal(true);
       }
     } catch (err) {
       setError('Location access denied or unavailable');
       console.error('Error detecting location:', err);
+      setShowLocationModal(true);
     } finally {
+      // Clear any remaining timeouts
+      if (detectionTimeout) {
+        clearTimeout(detectionTimeout);
+      }
+      if (showModalTimeout) {
+        clearTimeout(showModalTimeout);
+      }
       setIsLoading(false);
     }
   };

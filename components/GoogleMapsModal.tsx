@@ -290,38 +290,45 @@ export default function GoogleMapsModal({ isOpen, onClose, onLocationSelect }: G
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
-            <div className="bg-white rounded-lg shadow-lg w-full max-w-2xl mx-4 p-6 relative">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 p-3 sm:p-4">
+            <div className="bg-white rounded-lg shadow-lg w-full max-w-2xl mx-auto relative max-h-[90vh] overflow-y-auto">
+                <div className="p-4 sm:p-6">
                 <div className="flex items-center justify-between mb-4">
-                    <div className="text-lg font-semibold">Select Warehouse Location</div>
-                    <button onClick={onClose} className="text-2xl text-gray-400 hover:text-red-500">&times;</button>
+                        <div className="text-base sm:text-lg font-semibold">Select Warehouse Location</div>
+                        <button onClick={onClose} className="text-xl sm:text-2xl text-gray-400 hover:text-red-500 transition-colors">&times;</button>
                 </div>
-                <div className="mb-4 flex gap-2">
+                    
+                    <div className="mb-4 flex flex-col sm:flex-row gap-2 sm:gap-2">
                     <input
                         ref={inputRef}
                         type="text"
-                        className="w-full border border-gray-300 rounded-lg p-2"
+                            className="w-full border border-gray-300 rounded-lg p-2 text-sm sm:text-base"
                         placeholder="Search location..."
                     />
                     <button
                         type="button"
-                        className="bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors"
+                            className="bg-green-600 hover:bg-green-700 text-white font-semibold px-3 sm:px-4 py-2 rounded-lg transition-colors text-sm sm:text-base whitespace-nowrap"
                         onClick={handleUseMyLocation}
                     >
                         Use My Location
                     </button>
                 </div>
-                <div className="mb-4" style={{ height: 400, borderRadius: 8, overflow: 'hidden' }}>
+                    
+                    <div className="mb-4" style={{ height: '300px', borderRadius: 8, overflow: 'hidden' }}>
                     <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
                 </div>
+                    
                 <div className="mb-4">
-                    <div className="font-medium">Selected Address:</div>
-                    <div className="text-gray-700 text-sm mt-1 min-h-[24px]">{selectedAddress || (loading ? "Loading..." : "No address selected.")}</div>
+                        <div className="font-medium text-sm sm:text-base">Selected Address:</div>
+                        <div className="text-gray-700 text-xs sm:text-sm mt-1 min-h-[24px] break-words">{selectedAddress || (loading ? "Loading..." : "No address selected.")}</div>
+                    </div>
+                    
+                    {error && <div className="text-red-500 mb-2 text-sm">{error}</div>}
+                    
+                    <div className="flex flex-col sm:flex-row gap-2 sm:gap-2 justify-end">
+                        <button onClick={onClose} className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-2 px-4 sm:px-6 rounded-lg transition-colors text-sm sm:text-base order-2 sm:order-1">Cancel</button>
+                        <button onClick={handleConfirm} disabled={loading || !selectedAddress} className="bg-brand-primary hover:bg-brand-primary-dark text-white font-semibold py-2 px-4 sm:px-6 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base order-1 sm:order-2">Confirm Location</button>
                 </div>
-                {error && <div className="text-red-500 mb-2">{error}</div>}
-                <div className="flex gap-2 justify-end">
-                    <button onClick={onClose} className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-2 px-6 rounded-lg transition-colors">Cancel</button>
-                    <button onClick={handleConfirm} disabled={loading || !selectedAddress} className="bg-brand-primary hover:bg-brand-primary-dark text-white font-semibold py-2 px-6 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed">Confirm Location</button>
                 </div>
             </div>
         </div>

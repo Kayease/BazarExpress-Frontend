@@ -9,7 +9,7 @@ interface ProductGridProps {
   onAddToCart: (product: Product) => void;
   onUpdateCart: (id: string, quantity: number, variantId?: string) => void;
   onAddToWishlist: (product: Product) => void;
-  isInWishlist: (product: Product) => boolean;
+  isInWishlist: (id: string) => boolean;
   cartItems: any[]; // TODO: Type this properly
 }
 
@@ -44,12 +44,46 @@ function ProductGrid({
           <ProductCard
             key={`${product._id}-${variantId || 'default'}`}
             product={product}
-            isInWishlist={isInWishlist(product)}
-            handleWishlistClick={(e) => {
-              e.stopPropagation();
-              onAddToWishlist(product);
+            isInWishlist={(id) => isInWishlist(id)}
+            handleWishlistClick={(product, e) => {
+              if (e) e.stopPropagation();
+              // Check if product has variants and include the first variant by default
+              if (product.variants && Object.keys(product.variants).length > 0) {
+                const firstVariantKey = Object.keys(product.variants)[0];
+                const firstVariant = product.variants[firstVariantKey];
+                
+                const productWithVariant = {
+                  ...product,
+                  variantId: firstVariantKey,
+                  variantName: firstVariant.name || firstVariantKey.replace(/::/g, ' '),
+                  selectedVariant: firstVariant,
+                  price: (firstVariant.price !== undefined ? firstVariant.price : product.price)
+                };
+                
+                onAddToWishlist(productWithVariant);
+              } else {
+                onAddToWishlist(product);
+              }
             }}
-            handleAddToCart={() => onAddToCart(product)}
+            handleAddToCart={() => {
+              // Check if product has variants and include the first variant by default
+              if (product.variants && Object.keys(product.variants).length > 0) {
+                const firstVariantKey = Object.keys(product.variants)[0];
+                const firstVariant = product.variants[firstVariantKey];
+                
+                const productWithVariant = {
+                  ...product,
+                  variantId: firstVariantKey,
+                  variantName: firstVariant.name || firstVariantKey.replace(/::/g, ' '),
+                  selectedVariant: firstVariant,
+                  price: (firstVariant.price !== undefined ? firstVariant.price : product.price)
+                };
+                
+                onAddToCart(productWithVariant);
+              } else {
+                onAddToCart(product);
+              }
+            }}
             handleInc={() => onUpdateCart(product._id, quantity + 1, variantId)}
             handleDec={() => onUpdateCart(product._id, Math.max(0, quantity - 1), variantId)}
             quantity={quantity}

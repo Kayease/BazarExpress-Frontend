@@ -239,8 +239,8 @@ export async function getPincodeFromGeolocation(): Promise<string | null> {
           reject(new Error(errorMessage));
         }, 
         {
-          enableHighAccuracy: true,
-          timeout: 8000, // Reduced timeout for faster fallback
+          enableHighAccuracy: false, // Changed to false for faster response
+          timeout: 5000, // Reduced timeout from 8000ms to 5000ms for faster fallback
           maximumAge: 300000 // 5 minutes
         }
       );
@@ -250,24 +250,38 @@ export async function getPincodeFromGeolocation(): Promise<string | null> {
 
     // Use a reverse geocoding service to get pincode
     // You can use Google Maps API, OpenStreetMap Nominatim, or any other service
-    const response = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`
-    );
-
-    if (!response.ok) {
-      throw new Error(`Reverse geocoding failed: ${response.status}`);
-    }
-
-    const data = await response.json();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout for API call
     
-    if (data && data.address) {
-      const pincode = data.address.postcode;
-      if (pincode && isValidPincode(pincode)) {
-        return pincode;
-      }
-    }
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`,
+        { signal: controller.signal }
+      );
+      
+      clearTimeout(timeoutId);
 
-    throw new Error('No valid pincode found in location data');
+      if (!response.ok) {
+        throw new Error(`Reverse geocoding failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (data && data.address) {
+        const pincode = data.address.postcode;
+        if (pincode && isValidPincode(pincode)) {
+          return pincode;
+        }
+      }
+
+      throw new Error('No valid pincode found in location data');
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      if (fetchError.name === 'AbortError') {
+        throw new Error('Reverse geocoding request timed out');
+      }
+      throw fetchError;
+    }
   } catch (error) {
     console.error('Error getting pincode from geolocation:', error);
     return null;

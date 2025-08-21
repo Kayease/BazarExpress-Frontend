@@ -268,25 +268,25 @@ function CategorySidebar({
   };
 
   return (
-    <div className="w-32 flex-shrink-0">
+    <div className="w-20 sm:w-24 md:w-28 lg:w-32 flex-shrink-0">
       <div className="bg-white rounded-lg shadow-sm border overflow-hidden sticky top-6" style={{ height: 'calc(100vh - 160px)' }}>
         {/* Header */}
-        <div className="p-3 border-b bg-gray-50 flex-shrink-0">
+        <div className="p-2 sm:p-3 border-b bg-gray-50 flex-shrink-0">
           <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-gray-900 text-sm">Categories</h2>
+            <h2 className="font-semibold text-gray-900 text-xs sm:text-sm">Categories</h2>
           </div>
         </div>
         
         {/* Categories Grid - Scrollable */}
-        <div className="p-3 overflow-y-auto flex-1" style={{ height: 'calc(100vh - 220px)' }}>
+        <div className="p-2 sm:p-3 overflow-y-auto flex-1" style={{ height: 'calc(100vh - 220px)' }}>
           {sidebarMode === 'parent' ? (
             /* Parent Categories - Images Only */
-            <div className="space-y-3">
+            <div className="space-y-2 sm:space-y-3">
               {/* All Categories Option */}
               <div className="flex flex-col items-center">
                 <button
                   onClick={handleAllCategoriesClick}
-                  className={`w-full h-20 rounded-lg transition-all duration-200 flex flex-col items-center justify-center relative ${
+                  className={`w-full h-16 sm:h-20 rounded-lg transition-all duration-200 flex flex-col items-center justify-center relative ${
                     !selectedCategory
                       ? 'bg-purple-50' 
                       : 'bg-white hover:bg-gray-50'
@@ -296,10 +296,10 @@ function CategorySidebar({
                   {!selectedCategory && (
                     <div className="absolute right-0 top-0 bottom-0 w-1 bg-purple-500 rounded-l-lg"></div>
                   )}
-                  <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center mb-1">
-                    <Grid3X3 className="h-6 w-6 text-white" />
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 rounded-lg bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center mb-1">
+                    <Grid3X3 className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-white" />
                   </div>
-                  <span className="text-[10px] text-gray-600 text-center font-medium leading-tight">All Categories</span>
+                  <span className="text-[8px] sm:text-[10px] text-gray-600 text-center font-medium leading-tight">All Categories</span>
                 </button>
               </div>
 
@@ -308,7 +308,7 @@ function CategorySidebar({
                 <div key={cat._id} className="flex flex-col items-center">
                   <button
                     onClick={() => handleParentCategoryClick(cat)}
-                    className={`w-full h-20 rounded-lg transition-all duration-200 flex flex-col items-center justify-center relative ${
+                    className={`w-full h-16 sm:h-20 rounded-lg transition-all duration-200 flex flex-col items-center justify-center relative ${
                       selectedCategory === cat._id
                         ? 'bg-purple-50' 
                         : 'bg-white hover:bg-gray-50'
@@ -319,7 +319,7 @@ function CategorySidebar({
                       <div className="absolute right-0 top-0 bottom-0 w-1 bg-purple-500 rounded-l-lg"></div>
                     )}
                     {cat.thumbnail ? (
-                      <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 mb-1">
+                      <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 rounded-lg overflow-hidden bg-gray-100 mb-1">
                         <Image
                           src={cat.thumbnail}
                           alt={cat.name}
@@ -329,13 +329,13 @@ function CategorySidebar({
                         />
                       </div>
                     ) : (
-                      <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-gray-300 to-gray-400 flex items-center justify-center mb-1">
-                        <span className="text-white font-bold text-lg">
+                      <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 rounded-lg bg-gradient-to-br from-gray-300 to-gray-400 flex items-center justify-center mb-1">
+                        <span className="text-white font-bold text-sm sm:text-lg">
                           {cat.name.charAt(0).toUpperCase()}
                         </span>
                       </div>
                     )}
-                    <span className="text-[10px] text-gray-600 text-center font-medium leading-tight px-1">
+                    <span className="text-[8px] sm:text-[10px] text-gray-600 text-center font-medium leading-tight px-1">
                       {cat.name}
                     </span>
                   </button>
@@ -344,18 +344,18 @@ function CategorySidebar({
             </div>
           ) : (
             /* Subcategories - Images Only */
-            <div className="space-y-3">
+            <div className="space-y-2 sm:space-y-3">
               {/* Back Button */}
               <div className="flex flex-col items-center">
                 <button
                   onClick={handleBackToParentCategories}
-                  className="w-full h-20 rounded-lg transition-all duration-200 flex flex-col items-center justify-center relative bg-white hover:bg-gray-50"
+                  className="w-full h-16 sm:h-20 rounded-lg transition-all duration-200 flex flex-col items-center justify-center relative bg-white hover:bg-gray-50"
                   title="Back to Categories"
                 >
-                  <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-gray-400 to-gray-600 flex items-center justify-center mb-1">
-                    <ArrowLeft className="h-6 w-6 text-white" />
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 rounded-lg bg-gradient-to-br from-gray-400 to-gray-600 flex items-center justify-center mb-1">
+                    <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-white" />
                   </div>
-                  <span className="text-[10px] text-gray-600 text-center font-medium leading-tight">Back</span>
+                  <span className="text-[8px] sm:text-[10px] text-gray-600 text-center font-medium leading-tight">Back</span>
                 </button>
               </div>
 
@@ -363,7 +363,7 @@ function CategorySidebar({
               <div className="flex flex-col items-center">
                 <button
                   onClick={handleAllSubcategoryClick}
-                  className={`w-full h-20 rounded-lg transition-all duration-200 flex flex-col items-center justify-center relative ${
+                  className={`w-full h-16 sm:h-20 rounded-lg transition-all duration-200 flex flex-col items-center justify-center relative ${
                     !selectedSubcategory
                       ? 'bg-purple-50' 
                       : 'bg-white hover:bg-gray-50'
@@ -373,10 +373,10 @@ function CategorySidebar({
                   {!selectedSubcategory && (
                     <div className="absolute right-0 top-0 bottom-0 w-1 bg-purple-500 rounded-l-lg"></div>
                   )}
-                  <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center mb-1">
-                    <Grid3X3 className="h-6 w-6 text-white" />
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 rounded-lg bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center mb-1">
+                    <Grid3X3 className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-white" />
                   </div>
-                  <span className="text-[10px] text-gray-600 text-center font-medium leading-tight">All Subcategories</span>
+                  <span className="text-[8px] sm:text-[10px] text-gray-600 text-center font-medium leading-tight">All Subcategories</span>
                 </button>
               </div>
 
@@ -385,7 +385,7 @@ function CategorySidebar({
                 <div key={subcat._id} className="flex flex-col items-center">
                   <button
                     onClick={() => handleSubcategoryClick(subcat)}
-                    className={`w-full h-20 rounded-lg transition-all duration-200 flex flex-col items-center justify-center relative ${
+                    className={`w-full h-16 sm:h-20 rounded-lg transition-all duration-200 flex flex-col items-center justify-center relative ${
                       selectedSubcategory === subcat._id
                         ? 'bg-purple-50' 
                         : 'bg-white hover:bg-gray-50'
@@ -396,7 +396,7 @@ function CategorySidebar({
                       <div className="absolute right-0 top-0 bottom-0 w-1 bg-purple-500 rounded-l-lg"></div>
                     )}
                     {subcat.thumbnail ? (
-                      <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 mb-1">
+                      <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 rounded-lg overflow-hidden bg-gray-100 mb-1">
                         <Image
                           src={subcat.thumbnail}
                           alt={subcat.name}
@@ -406,13 +406,13 @@ function CategorySidebar({
                         />
                       </div>
                     ) : (
-                      <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-gray-300 to-gray-400 flex items-center justify-center mb-1">
-                        <span className="text-white font-bold text-lg">
+                      <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 rounded-lg bg-gradient-to-br from-gray-300 to-gray-400 flex items-center justify-center mb-1">
+                        <span className="text-white font-bold text-sm sm:text-lg">
                           {subcat.name.charAt(0).toUpperCase()}
                         </span>
                       </div>
                     )}
-                    <span className="text-[10px] text-gray-600 text-center font-medium leading-tight px-1">
+                    <span className="text-[8px] sm:text-[10px] text-gray-600 text-center font-medium leading-tight px-1">
                       {subcat.name}
                     </span>
                   </button>

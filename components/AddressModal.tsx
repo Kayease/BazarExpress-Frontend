@@ -380,32 +380,32 @@ export default function AddressModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/20 overflow-y-auto">
-      <div className="w-full max-w-4xl mx-2 sm:mx-4 bg-white rounded-lg shadow-xl overflow-hidden h-auto max-h-[95vh] p-0 my-2 sm:my-4">
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/20 overflow-y-auto p-2 sm:p-4">
+      <div className="w-full max-w-4xl mx-auto bg-white rounded-lg shadow-xl overflow-hidden h-auto max-h-[95vh] p-0 my-2 sm:my-4">
         <div className="flex flex-col">
           {/* Header */}
-          <div className="p-3 border-b flex justify-between items-center sticky top-0 bg-white z-10">
-            <h3 className="text-base sm:text-lg font-semibold">
+          <div className="p-3 sm:p-4 border-b flex justify-between items-center sticky top-0 bg-white z-10">
+            <h3 className="text-sm sm:text-base lg:text-lg font-semibold min-w-0 flex-1">
               {selectedAddress ? "Edit Address" : "Enter complete address"}
             </h3>
             <button 
               onClick={handleClose}
-              className="text-gray-500 hover:text-gray-700"
+              className="text-gray-500 hover:text-gray-700 ml-2 flex-shrink-0"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
           </div>
           
           {/* Main Content - Two Column Layout */}
-          <div className="flex flex-col md:flex-row">
+          <div className="flex flex-col lg:flex-row">
             {/* Map Area - Left Column */}
-            <div className="p-3 md:w-1/2 border-b md:border-b-0 md:border-r border-gray-100">
-              <div className="flex gap-2">
+            <div className="p-3 sm:p-4 lg:w-1/2 border-b lg:border-b-0 lg:border-r border-gray-100">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <div className="flex-1">
                   <input
                     ref={inputRef}
                     type="text"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-green-500 text-xs sm:text-sm"
+                    className="w-full border border-gray-300 rounded-lg px-2 sm:px-3 py-1.5 sm:py-2 focus:outline-none focus:ring-1 focus:ring-green-500 text-xs sm:text-sm"
                     placeholder="Search location..."
                   />
                 </div>
@@ -413,25 +413,26 @@ export default function AddressModal({
                   type="button"
                   onClick={handleUseMyLocation}
                   disabled={isGettingLocation}
-                  className="px-2 sm:px-3 py-1.5 sm:py-2 bg-gray-50 border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-2 sm:px-3 py-1.5 sm:py-2 bg-gray-50 border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm"
                 >
                   {isGettingLocation ? (
-                    <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 animate-spin" />
+                    <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 lg:w-5 lg:h-5 text-green-600 animate-spin" />
                   ) : (
-                    <MapPin className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" />
+                    <MapPin className="w-3 h-3 sm:w-4 sm:h-4 lg:w-5 lg:h-5 text-green-600" />
                   )}
+                  <span className="hidden sm:inline">Location</span>
                 </button>
               </div>
-              <div className="w-full h-60 sm:h-80 rounded-lg overflow-hidden border border-gray-200 bg-white my-3">
+              <div className="w-full h-48 sm:h-60 lg:h-80 rounded-lg overflow-hidden border border-gray-200 bg-white my-2 sm:my-3">
                 <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
               </div>
               <div className="w-full bg-gray-50 rounded-lg p-2 sm:p-3 flex items-center gap-2 sm:gap-3 mb-2 border border-gray-200">
                 <div className="flex-shrink-0 bg-green-100 rounded-full p-1.5 sm:p-2">
-                  <MapPin className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" />
+                  <MapPin className="w-3 h-3 sm:w-4 sm:h-4 lg:w-5 lg:h-5 text-green-600" />
                 </div>
-                <div>
+                <div className="min-w-0 flex-1">
                   <div className="text-xs text-gray-500">Delivering your order to</div>
-                  <div className="font-semibold text-gray-700 text-xs sm:text-sm truncate max-w-[200px] sm:max-w-[250px]">
+                  <div className="font-semibold text-gray-700 text-xs sm:text-sm truncate max-w-[150px] sm:max-w-[200px] lg:max-w-[250px]">
                     {addressForm.area || "-"}
                   </div>
                 </div>
@@ -439,18 +440,18 @@ export default function AddressModal({
             </div>
 
             {/* Form Area - Right Column */}
-            <div className="p-3 sm:p-4 md:w-1/2 overflow-y-auto max-h-[60vh] md:max-h-[70vh]">
+            <div className="p-3 sm:p-4 lg:w-1/2 overflow-y-auto max-h-[50vh] sm:max-h-[60vh] lg:max-h-[70vh]">
               <form className="flex flex-col gap-2" onSubmit={handleSubmit}>
                 <div className="flex flex-wrap gap-2 sm:gap-3">
                   <div className="w-full mb-1">
                     <label className="block text-xs font-medium text-gray-700">Save address as *</label>
                   </div>
-                  <div className="flex flex-wrap gap-2 w-full">
+                  <div className="flex flex-wrap gap-1.5 sm:gap-2 w-full">
                     {["Home", "Office", "Hotel", "Other"].map((type) => (
                       <button
                         key={type}
                         type="button"
-                        className={`px-2 sm:px-4 py-1 sm:py-1.5 rounded-lg border text-xs sm:text-sm flex-1 ${
+                        className={`px-2 sm:px-3 lg:px-4 py-1 sm:py-1.5 rounded-lg border text-xs sm:text-sm flex-1 min-w-0 ${
                           addressForm.type === type 
                             ? "border-green-500 bg-green-50 text-green-600" 
                             : "border-gray-200 text-gray-600"
@@ -462,7 +463,7 @@ export default function AddressModal({
                           {type === "Office" && <Briefcase className="w-3 h-3 sm:w-4 sm:h-4" />}
                           {type === "Hotel" && <Hotel className="w-3 h-3 sm:w-4 sm:h-4" />}
                           {type === "Other" && <MapPinOff className="w-3 h-3 sm:w-4 sm:h-4" />}
-                          <span>{type}</span>
+                          <span className="truncate">{type}</span>
                         </div>
                       </button>
                     ))}

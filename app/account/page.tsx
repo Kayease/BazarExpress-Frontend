@@ -614,7 +614,7 @@ export default function Profile() {
                         Add some products to get started!
                       </p>
                       <Link
-                        href="/search"
+                        href="/products"
                         className="inline-flex items-center bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
                       >
                         <ArrowRight className="w-4 h-4 mr-2" />
@@ -749,7 +749,7 @@ export default function Profile() {
                         Save your favorite products for later!
                       </p>
                       <Link
-                        href="/search"
+                        href="/products"
                         className="inline-flex items-center bg-gradient-to-r from-red-500 to-pink-500 text-white px-6 py-3 rounded-xl hover:shadow-lg transition-all duration-200"
                       >
                         <ArrowRight className="w-4 h-4 mr-2" />
@@ -985,7 +985,7 @@ export default function Profile() {
                         first purchase.
                       </p>
                       <Link
-                        href="/"
+                        href="/products"
                         className="inline-flex items-center bg-gradient-to-r from-brand-primary to-brand-primary-dark text-white px-6 py-3 rounded-xl hover:shadow-lg transition-all duration-200"
                       >
                         <ArrowRight className="w-4 h-4 mr-2" />

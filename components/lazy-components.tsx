@@ -45,8 +45,8 @@ const CategorySectionFallback = () => (
   <div className="py-12">
     <div className="max-w-7xl mx-auto px-4">
       <Skeleton className="h-8 w-48 mb-6" />
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-        {[1, 2, 3, 4, 5, 6].map((i) => (
+      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 2xl:grid-cols-12 gap-4">
+        {Array.from({ length: 20 }).map((_, i) => (
           <div key={i} className="text-center">
             <Skeleton className="h-20 w-20 rounded-full mx-auto mb-2" />
             <Skeleton className="h-4 w-16 mx-auto" />
@@ -58,11 +58,22 @@ const CategorySectionFallback = () => (
 );
 
 const HeroSectionFallback = () => (
-  <div className="relative h-96 bg-gradient-to-r from-green-400 to-blue-500">
-    <div className="absolute inset-0 flex items-center justify-center">
-      <div className="text-center text-white">
-        <Skeleton className="h-12 w-96 mb-4 bg-white/20" />
-        <Skeleton className="h-6 w-64 mx-auto bg-white/20" />
+  <div className="py-4 bg-white">
+    <div className="max-w-7xl mx-auto px-4">
+      <div className="w-full h-32 sm:h-40 md:h-56 lg:h-64 bg-gray-200 animate-pulse rounded-xl mb-6 flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="w-48 h-6 bg-gray-300 rounded animate-pulse mx-auto"></div>
+          <div className="w-32 h-4 bg-gray-300 rounded animate-pulse mx-auto"></div>
+        </div>
+      </div>
+      
+      {/* Special Banner Tiles Skeleton */}
+      <div className="grid grid-cols-3 md:grid-cols-3 gap-4">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="aspect-[16/9] bg-gray-200 rounded-xl animate-pulse flex items-center justify-center">
+            <div className="w-16 h-4 bg-gray-300 rounded animate-pulse"></div>
+          </div>
+        ))}
       </div>
     </div>
   </div>

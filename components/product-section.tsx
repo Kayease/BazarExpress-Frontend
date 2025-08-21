@@ -499,8 +499,8 @@ export default function ProductSection({
   }
 
   return (
-    <section className="py-12 ">
-      <div className="max-w-7xl mx-auto px-4">
+    <section className="py-8 sm:py-12">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6">
         {productSections.length > 0 ? (
           productSections.map(section => {
             // Debug: Log all product IDs in this section
@@ -513,16 +513,16 @@ export default function ProductSection({
               console.warn('Duplicate product IDs found in section', section.category.name, duplicateIds);
             }
             return (
-              <div className="mb-12" key={section.category._id}>
-                <div className="flex justify-between items-center mb-4">
-                  <div className="text-2xl font-extrabold">{section.category.name}</div>
-                  <Link href={`/search?category=${section.category._id}`} className="text-green-600 font-medium hover:underline">See all</Link>
+              <div className="mb-8 sm:mb-12" key={section.category._id}>
+                <div className="flex justify-between items-center mb-4 px-2 sm:px-0">
+                  <div className="text-xl sm:text-2xl font-extrabold">{section.category.name}</div>
+                  <Link href={`/products?category=${section.category._id}`} className="text-green-600 font-medium hover:underline text-sm sm:text-base">See all</Link>
                 </div>
                 <div className="relative">
-                  {/* Left Button */}
+                  {/* Left Button - Hidden on mobile, visible on larger screens */}
                   {scrollPositions[section.category._id] > 0 && (
                     <button
-                      className="absolute left-[-28px] top-1/2 -translate-y-1/2 z-20 bg-white border border-gray-200 rounded-full shadow p-1 flex items-center justify-center hover:bg-gray-100"
+                      className="hidden lg:flex absolute left-[-28px] top-1/2 -translate-y-1/2 z-20 bg-white border border-gray-200 rounded-full shadow p-1 items-center justify-center hover:bg-gray-100"
                       style={{ width: 32, height: 32 }}
                       onClick={() => scrollByAmount(section.category._id, -220)}
                       aria-label="Scroll left"
@@ -530,22 +530,47 @@ export default function ProductSection({
                       <ChevronLeft className="w-5 h-5" />
                     </button>
                   )}
-                  {/* Right Button */}
+                  
+                  {/* Right Button - Hidden on mobile, visible on larger screens */}
                   <button
-                    className="absolute right-[-28px] top-1/2 -translate-y-1/2 z-20 bg-white border border-gray-200 rounded-full shadow p-1 flex items-center justify-center hover:bg-gray-100"
+                    className="hidden lg:flex absolute right-[-28px] top-1/2 -translate-y-1/2 z-20 bg-white border border-gray-200 rounded-full shadow p-1 items-center justify-center hover:bg-gray-100"
                     style={{ width: 32, height: 32, display: section.products.length * 190 > (scrollRefs.current[section.category._id]?.clientWidth || 0) + (scrollRefs.current[section.category._id]?.scrollLeft || 0) ? 'flex' : 'none' }}
                     onClick={() => scrollByAmount(section.category._id, 220)}
                     aria-label="Scroll right"
                   >
                     <ChevronRight className="w-5 h-5" />
                   </button>
+                  
+                  {/* Mobile Navigation Dots - Only visible on mobile and tablet */}
+                  <div className="lg:hidden flex justify-center mt-4 space-x-2">
+                    {Array.from({ length: Math.ceil(section.products.length / 2) }).map((_, index) => (
+                      <button
+                        key={index}
+                        className={`w-2 h-2 rounded-full transition-colors ${
+                          index === Math.floor((scrollRefs.current[section.category._id]?.scrollLeft || 0) / 200) 
+                            ? 'bg-green-600' 
+                            : 'bg-gray-300'
+                        }`}
+                        onClick={() => {
+                          const scrollAmount = index * 200;
+                          scrollRefs.current[section.category._id]?.scrollTo({
+                            left: scrollAmount,
+                            behavior: 'smooth'
+                          });
+                        }}
+                        aria-label={`Go to slide ${index + 1}`}
+                      />
+                    ))}
+                  </div>
+                  
                   <div
                     className="overflow-x-auto scrollbar-hide"
                     ref={el => { scrollRefs.current[section.category._id] = el; }}
                     onScroll={() => handleScroll(section.category._id)}
                     style={{ scrollBehavior: 'smooth' }}
                   >
-                    <div className="flex gap-4 pb-2">
+                    <div className="flex gap-3 sm:gap-4 pb-2 px-4 sm:px-6 lg:px-0">
+                      {/* Remove the left padding that was causing uneven spacing */}
                       {section.products.map(product => {
                         // Handle potentially undefined price safely
                         const productPrice = product.price || 0;
@@ -604,7 +629,7 @@ export default function ProductSection({
                         return (
                           <div 
                             key={product._id} 
-                            className={`min-w-[180px] max-w-[180px] bg-white border rounded-xl flex-shrink-0 flex flex-col relative group cursor-pointer hover:shadow-lg transition-shadow ${
+                            className={`min-w-[160px] sm:min-w-[180px] max-w-[160px] sm:max-w-[180px] bg-white border rounded-xl flex-shrink-0 flex flex-col relative group cursor-pointer hover:shadow-lg transition-shadow ${
                               !canAddProduct && !isInCart ? 'border-orange-200 bg-orange-50/30' : 'border-gray-200'
                             }`}
                             style={{ fontFamily: 'Sinkin Sans, sans-serif', boxShadow: 'none', minHeight: '260px' }}
@@ -732,6 +757,7 @@ export default function ProductSection({
                           </div>
                         );
                       })}
+                      {/* Remove the right padding to ensure balanced spacing */}
                     </div>
                   </div>
                 </div>

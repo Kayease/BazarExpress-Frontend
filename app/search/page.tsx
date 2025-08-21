@@ -655,7 +655,7 @@ function SearchPage() {
 
         {/* Products Grid/List */}
         {productsLoading || showSkeletonOnTyping ? (
-          <ProductGridSkeleton count={20} viewMode={filters.viewMode} />
+          <ProductGridSkeleton count={14} viewMode={filters.viewMode} />
         ) : sortedProducts.length === 0 && searchQuery ? (
           <div className="text-center py-16">
             <div className="max-w-md mx-auto">

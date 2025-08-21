@@ -281,8 +281,8 @@ export default function ProductsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-full mx-auto px-2 py-6">
-        <div className="flex gap-3">
+      <div className="max-w-full mx-auto px-2 sm:px-4 py-4 sm:py-6">
+        <div className="flex gap-2 sm:gap-3">
           {/* Category Sidebar */}
           <CategorySidebar
             selectedCategory={category}
@@ -292,7 +292,7 @@ export default function ProductsPage() {
           />
 
           {/* Main Content */}
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <ProductHeader
               category={category}
               subcategory={subcategory}
@@ -348,7 +348,7 @@ export default function ProductsPage() {
                 onAddToCart={addToCart}
                 onUpdateCart={updateCartItem}
                 onAddToWishlist={addToWishlist}
-                isInWishlist={(product) => isProductInWishlist(product._id)}
+                isInWishlist={(id) => isProductInWishlist(id)}
                 cartItems={cartItems}
               />
 

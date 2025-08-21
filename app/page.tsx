@@ -13,6 +13,7 @@ import {
 import DataPreloader from "@/components/data-preloader";
 import PerformanceMonitorComponent from "@/components/performance-monitor";
 import OrderSuccessModal from "@/components/OrderSuccessModal";
+import HomePageSkeleton from "@/components/HomePageSkeleton";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -90,6 +91,11 @@ export default function Home() {
       });
     }
   };
+
+  // Show skeleton loading while location is being fetched
+  if (isLoading || !locationState.isLocationDetected) {
+    return <HomePageSkeleton />;
+  }
 
   return (
     <DataPreloader>

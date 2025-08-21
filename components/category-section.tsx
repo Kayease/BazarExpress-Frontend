@@ -38,17 +38,17 @@ export default function CategorySection() {
 
   return (
     <section className="pt-2 pb-6 sm:py-6 bg-white">
-      <div className="max-w-7xl mx-auto px-4">
+      <div className="max-w-7xl mx-auto px-2 sm:px-4 md:px-6">
         <h2 className="text-xl font-bold mb-3 sm:hidden">Shop by Category</h2>
         {loading ? (
-          <div className="grid grid-cols-[repeat(auto-fit,_minmax(150px,_1fr))] gap-2">
-            {Array.from({ length: 16 }).map((_, i) => (
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-1 sm:gap-2 md:gap-3 lg:gap-4">
+            {Array.from({ length: 14 }).map((_, i) => (
               <div
                 key={i}
-                className="flex flex-col items-center space-y-2"
+                className="flex flex-col items-center space-y-1 sm:space-y-2"
               >
-                <div className="w-[150px] h-[150px] bg-gray-200 animate-pulse rounded" />
-                <div className="w-20 h-4 bg-gray-200 animate-pulse rounded" />
+                <div className="w-full aspect-square bg-gray-200 animate-pulse rounded-lg" />
+                <div className="w-10 sm:w-12 md:w-16 lg:w-20 h-2 sm:h-3 md:h-4 bg-gray-200 animate-pulse rounded" />
               </div>
             ))}
           </div>
@@ -67,7 +67,7 @@ export default function CategorySection() {
             <p className="text-gray-600">No categories available to display.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-8 xl:grid-cols-10 gap-4">
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-1 sm:gap-2 md:gap-3 lg:gap-4">
             {categories.map((category) => (
               <button
                 key={category._id}
@@ -89,7 +89,7 @@ export default function CategorySection() {
                 }}
                 className="flex flex-col items-center"
               >
-                <div className="w-[150px] h-[150px] overflow-hidden">
+                <div className="w-full aspect-square overflow-hidden rounded-lg">
                   {category.thumbnail ? (
                     <img
                       src={category.thumbnail}
@@ -103,6 +103,13 @@ export default function CategorySection() {
                     </div>
                   )}
                 </div>
+                {/*
+                 <span className="text-[10px] sm:text-xs md:text-sm text-center mt-1 sm:mt-2 font-medium text-gray-700 line-clamp-2 px-1">
+                  {category.name}
+                </span>
+                */}
+                
+
               </button>
             ))}
           </div>
