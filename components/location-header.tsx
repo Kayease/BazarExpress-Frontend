@@ -36,7 +36,7 @@ export function LocationHeader() {
   if (!locationState.isLocationDetected) {
     return (
       <>
-        <div className="bg-brand-primary text-white py-2 px-4">
+        <div className="bg-purple-600 text-white py-2 px-4">
           <div className="max-w-7xl mx-auto flex items-center justify-between">
             <div className="flex items-center gap-2">
               <MapPin className="w-4 h-4" />
@@ -46,7 +46,7 @@ export function LocationHeader() {
               onClick={handleLocationClick}
               variant="ghost"
               size="sm"
-              className="text-white hover:bg-white/20"
+              className="text-white hover:bg-purple-500/20"
             >
               Select Location
             </Button>
@@ -74,7 +74,7 @@ export function LocationHeader() {
               size="sm"
               className="flex items-center gap-2 hover:bg-gray-100"
             >
-              <MapPin className="w-4 h-4 text-brand-primary" />
+              <MapPin className="w-4 h-4 text-purple-600" />
               <div className="text-left">
                 <div className="text-sm font-medium">
                   PIN: {locationState.pincode}
@@ -112,7 +112,7 @@ export function LocationHeader() {
                 onClick={handleModeSwitch}
                 variant="outline"
                 size="sm"
-                className="text-xs"
+                className="text-xs border-purple-600 text-purple-600 hover:bg-purple-50"
               >
                 {isGlobalMode ? (
                   <>

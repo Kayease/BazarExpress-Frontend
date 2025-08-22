@@ -173,8 +173,8 @@ export default function AddressModal({
       
       setIsMapInitialized(true);
       
-      // Only fetch address if we don't have initial location or if it's from selected address
-      if (!hasInitialLocation || selectedAddress) {
+      // Fetch address for selected address or default location
+      if (selectedAddress) {
         fetchAddress(center.lat, center.lng, true);
       }
       
@@ -217,31 +217,34 @@ export default function AddressModal({
 
   // Get current location when modal opens
   useEffect(() => {
-    if (isOpen && !selectedAddress && !hasInitialLocation) {
+    if (isOpen && !selectedAddress) {
       if (!navigator.geolocation) return;
       
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const lat = position.coords.latitude;
-          const lng = position.coords.longitude;
-          
-          setAddressForm((prev) => ({ ...prev, lat, lng }));
-          setHasInitialLocation(true);
-          
-          if (mapInstance.current && window.google && window.google.maps) {
-            mapInstance.current.setCenter({ lat, lng });
-            mapInstance.current.setZoom(16);
-            markerInstance.current.setPosition({ lat, lng });
-            fetchAddress(lat, lng, true);
+      // Small delay to ensure map is initialized
+      const timer = setTimeout(() => {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            
+            setAddressForm((prev) => ({ ...prev, lat, lng }));
+            
+            if (mapInstance.current && window.google && window.google.maps) {
+              mapInstance.current.setCenter({ lat, lng });
+              mapInstance.current.setZoom(16);
+              markerInstance.current.setPosition({ lat, lng });
+              fetchAddress(lat, lng, true);
+            }
+          },
+          (error) => {
+            console.log('Geolocation error:', error);
           }
-        },
-        (error) => {
-          console.log('Geolocation error:', error);
-          setHasInitialLocation(true); // Set to true even on error to prevent retries
-        }
-      );
+        );
+      }, 500); // 500ms delay to ensure map is ready
+      
+      return () => clearTimeout(timer);
     }
-  }, [isOpen, selectedAddress, hasInitialLocation]);
+  }, [isOpen, selectedAddress]);
 
   // Position Google Places autocomplete dropdown
   useEffect(() => {
@@ -321,8 +324,8 @@ export default function AddressModal({
     e.preventDefault();
     
     // Validate required fields
-    if ((!addressForm.building && !addressForm.area) || !addressForm.city || !addressForm.state || !addressForm.pincode) {
-      toast.error('Please fill in all required fields (at least building or area, city, state, and pincode)');
+    if ((!addressForm.building && !addressForm.area) || !addressForm.city || !addressForm.state || !addressForm.pincode || !addressForm.name) {
+      toast.error('Please fill in all required fields (building/area, city, state, pincode, and name)');
       return;
     }
     
@@ -380,32 +383,29 @@ export default function AddressModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[1000] bg-black/20 overflow-y-auto">
-      <div className="min-h-full flex items-start sm:items-center justify-center p-2 sm:p-4">
-        <div className="w-full max-w-4xl mx-auto bg-white rounded-lg shadow-xl overflow-hidden my-2 sm:my-4 max-h-[98vh] sm:max-h-[95vh] flex flex-col">
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/20 overflow-y-auto p-2 sm:p-4">
+      <div className="w-full max-w-4xl bg-white rounded-lg shadow-xl overflow-hidden flex flex-col h-[95vh] sm:h-auto sm:max-h-[95vh]">
+        <div className="flex flex-col h-full">
           {/* Header */}
-          <div className="p-3 sm:p-4 border-b flex justify-between items-center sticky top-0 bg-white z-10">
-            <h3 className="text-sm sm:text-base lg:text-lg font-semibold min-w-0 flex-1">
-              {selectedAddress ? "Edit Address" : "Enter complete address"}
-            </h3>
+          <div className="p-3 border-b flex justify-between items-center bg-white z-10 flex-shrink-0">
+            <h3 className="text-base sm:text-lg font-semibold">{selectedAddress ? "Edit Address" : "Enter complete address"}</h3>
             <button 
               onClick={handleClose}
-              className="text-gray-500 hover:text-gray-700 ml-2 flex-shrink-0"
-            >
-              <X className="w-4 h-4 sm:w-5 sm:h-5" />
+              className="text-gray-500 hover:text-gray-700 p-1">
+              <X className="w-5 h-5" />
             </button>
           </div>
           
           {/* Main Content - Two Column Layout */}
-          <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
+          <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
             {/* Map Area - Left Column */}
-            <div className="p-3 sm:p-4 lg:w-1/2 border-b lg:border-b-0 lg:border-r border-gray-100 flex-shrink-0">
-              <div className="flex flex-col sm:flex-row gap-2">
+            <div className="p-3 md:w-1/2 border-b md:border-b-0 md:border-r border-gray-100 flex flex-col">
+              <div className="flex gap-2 mb-3">
                 <div className="flex-1">
                   <input
                     ref={inputRef}
                     type="text"
-                    className="w-full border border-gray-300 rounded-lg px-2 sm:px-3 py-1.5 sm:py-2 focus:outline-none focus:ring-1 focus:ring-green-500 text-xs sm:text-sm"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-brand-primary text-xs sm:text-sm"
                     placeholder="Search location..."
                   />
                 </div>
@@ -413,162 +413,165 @@ export default function AddressModal({
                   type="button"
                   onClick={handleUseMyLocation}
                   disabled={isGettingLocation}
-                  className="px-2 sm:px-3 py-1.5 sm:py-2 bg-gray-50 border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm"
+                  className="px-2 sm:px-3 py-1.5 sm:py-2 bg-gray-50 border border-gray-300 rounded-lg hover:bg-gray-100 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isGettingLocation ? (
-                    <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 lg:w-5 lg:h-5 text-green-600 animate-spin" />
+                    <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 text-brand-primary animate-spin" />
                   ) : (
-                    <MapPin className="w-3 h-3 sm:w-4 sm:h-4 lg:w-5 lg:h-5 text-green-600" />
+                    <MapPin className="w-4 h-4 sm:w-5 sm:h-5 text-brand-primary" />
                   )}
-                  <span className="hidden sm:inline">Location</span>
                 </button>
               </div>
-              <div className="w-full h-48 sm:h-60 lg:h-80 rounded-lg overflow-hidden border border-gray-200 bg-white my-2 sm:my-3">
+              
+              {/* Map Container - Takes remaining space */}
+              <div className="flex-1 min-h-[200px] sm:min-h-0 rounded-lg overflow-hidden border border-gray-200 bg-white mb-3">
                 <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
               </div>
-              <div className="w-full bg-gray-50 rounded-lg p-2 sm:p-3 flex items-center gap-2 sm:gap-3 mb-2 border border-gray-200">
-                <div className="flex-shrink-0 bg-green-100 rounded-full p-1.5 sm:p-2">
-                  <MapPin className="w-3 h-3 sm:w-4 sm:h-4 lg:w-5 lg:h-5 text-green-600" />
+              
+              {/* Location Info - Fixed at bottom */}
+              <div className="w-full bg-gray-50 rounded-lg p-2 sm:p-3 flex items-center gap-2 sm:gap-3 border border-gray-200 flex-shrink-0">
+                <div className="flex-shrink-0 bg-brand-primary/10 rounded-full p-1.5 sm:p-2">
+                  <MapPin className="w-4 h-4 sm:w-5 sm:h-5 text-brand-primary" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="text-xs text-gray-500">Delivering your order to</div>
-                  <div className="font-semibold text-gray-700 text-xs sm:text-sm truncate max-w-[150px] sm:max-w-[200px] lg:max-w-[250px]">
-                    {addressForm.area || "-"}
-                  </div>
+                  <div className="font-semibold text-gray-700 text-xs sm:text-sm truncate">{addressForm.area || "-"}</div>
                 </div>
               </div>
             </div>
 
             {/* Form Area - Right Column */}
-            <div className="lg:w-1/2 flex flex-col flex-1 min-h-0">
-              <div className="p-3 sm:p-4 overflow-y-auto flex-1">
-                <form id="address-form" className="flex flex-col gap-2" onSubmit={handleSubmit}>
-                <div className="flex flex-wrap gap-2 sm:gap-3">
-                  <div className="w-full mb-1">
-                    <label className="block text-xs font-medium text-gray-700">Save address as *</label>
+            <div className="p-3 sm:p-4 md:w-1/2 flex flex-col overflow-hidden">
+              <div className="flex-1 overflow-y-auto min-h-0">
+                <form id="address-form" className="flex flex-col gap-2 pb-4" onSubmit={handleSubmit}>
+                  <div className="flex flex-wrap gap-2 sm:gap-3">
+                    <div className="w-full mb-1">
+                      <label className="block text-xs font-medium text-gray-700">Save address as *</label>
+                    </div>
+                    <div className="flex flex-wrap gap-2 w-full">
+                      {["Home", "Office", "Hotel", "Other"].map((type) => (
+                        <button
+                          key={type}
+                          type="button"
+                          className={`px-2 sm:px-4 py-1 sm:py-1.5 rounded-lg border text-xs sm:text-sm flex-1 ${addressForm.type === type ? "border-brand-primary bg-brand-primary/10 text-brand-primary" : "border-gray-200 text-gray-600"}`}
+                          onClick={() => setAddressForm((prev) => ({ ...prev, type: type as Address['type'] }))}
+                        >
+                          <div className="flex items-center justify-center gap-1 sm:gap-2">
+                            {type === "Home" && <Home className="w-3 h-3 sm:w-4 sm:h-4" />}
+                            {type === "Office" && <Briefcase className="w-3 h-3 sm:w-4 sm:h-4" />}
+                            {type === "Hotel" && <Hotel className="w-3 h-3 sm:w-4 sm:h-4" />}
+                            {type === "Other" && <MapPinOff className="w-3 h-3 sm:w-4 sm:h-4" />}
+                            <span>{type}</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-1.5 sm:gap-2 w-full">
-                    {["Home", "Office", "Hotel", "Other"].map((type) => (
-                      <button
-                        key={type}
-                        type="button"
-                        className={`px-2 sm:px-3 lg:px-4 py-1 sm:py-1.5 rounded-lg border text-xs sm:text-sm flex-1 min-w-0 ${
-                          addressForm.type === type 
-                            ? "border-green-500 bg-green-50 text-green-600" 
-                            : "border-gray-200 text-gray-600"
-                        }`}
-                        onClick={() => setAddressForm((prev) => ({ ...prev, type: type as Address['type'] }))}
-                      >
-                        <div className="flex items-center justify-center gap-1 sm:gap-2">
-                          {type === "Home" && <Home className="w-3 h-3 sm:w-4 sm:h-4" />}
-                          {type === "Office" && <Briefcase className="w-3 h-3 sm:w-4 sm:h-4" />}
-                          {type === "Hotel" && <Hotel className="w-3 h-3 sm:w-4 sm:h-4" />}
-                          {type === "Other" && <MapPinOff className="w-3 h-3 sm:w-4 sm:h-4" />}
-                          <span className="truncate">{type}</span>
-                        </div>
-                      </button>
-                    ))}
+                  
+                  <div className="mb-1.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
+                      <div className="sm:col-span-2">
+                        <label className="block text-xs font-medium text-gray-700 mb-0.5">Flat / House no / Building name *</label>
+                        <input
+                          type="text"
+                          name="building"
+                          value={addressForm.building || ""}
+                          onChange={e => setAddressForm(prev => ({ ...prev, building: e.target.value }))}
+                          className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary text-xs sm:text-sm"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-0.5">Floor (optional)</label>
+                        <input
+                          type="text"
+                          name="floor"
+                          value={addressForm.floor || ""}
+                          onChange={e => setAddressForm(prev => ({ ...prev, floor: e.target.value }))}
+                          className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary text-xs sm:text-sm"
+                        />
+                      </div>
+                    </div>
                   </div>
-                </div>
-                
-                <div className="mb-1.5">
-                  <label className="block text-xs font-medium text-gray-700 mb-0.5">Flat / House no / Building name *</label>
-                  <input
-                    type="text"
-                    name="building"
-                    value={addressForm.building || ""}
-                    onChange={e => setAddressForm(prev => ({ ...prev, building: e.target.value }))}
-                    className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-500 text-xs sm:text-sm"
-                    required
-                  />
-                </div>
-                
-                <div className="mb-1.5">
-                  <label className="block text-xs font-medium text-gray-700 mb-0.5">Floor (optional)</label>
-                  <input
-                    type="text"
-                    name="floor"
-                    value={addressForm.floor || ""}
-                    onChange={e => setAddressForm(prev => ({ ...prev, floor: e.target.value }))}
-                    className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-500 text-xs sm:text-sm"
-                  />
-                </div>
-                
-                <div className="mb-1.5">
-                  <label className="block text-xs font-medium text-gray-700 mb-0.5">Area / Sector / Locality *</label>
-                  <input
-                    type="text"
-                    name="area"
-                    value={addressForm.area || ""}
-                    className="w-full px-3 py-1.5 border border-gray-300 rounded-lg bg-gray-100 focus:outline-none focus:ring-1 focus:ring-green-500 text-xs sm:text-sm"
-                    required
-                    readOnly
-                  />
-                </div>
-                
-                <div className="mb-1.5">
-                  <label className="block text-xs font-medium text-gray-700 mb-0.5">Nearby landmark (optional)</label>
-                  <input
-                    type="text"
-                    name="landmark"
-                    value={addressForm.landmark || ""}
-                    onChange={e => setAddressForm(prev => ({ ...prev, landmark: e.target.value }))}
-                    className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-500 text-xs sm:text-sm"
-                  />
-                </div>
-                
-                <div className="mb-1.5">
-                  <label className="block text-xs font-medium text-gray-700 mb-0.5">Your name *</label>
-                  <input
-                    type="text"
-                    name="name"
-                    value={addressForm.name || ""}
-                    onChange={e => setAddressForm(prev => ({ ...prev, name: e.target.value }))}
-                    className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-500 text-xs sm:text-sm"
-                    required
-                  />
-                </div>
-                
-                <div className="mb-1.5">
-                  <label className="block text-xs font-medium text-gray-700 mb-0.5">Your phone number (optional)</label>
-                  <input
-                    type="tel"
-                    name="phone"
-                    value={addressForm.phone || ""}
-                    onChange={e => setAddressForm(prev => ({ ...prev, phone: e.target.value }))}
-                    pattern="[0-9]{10}"
-                    className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-500 text-xs sm:text-sm"
-                  />
-                </div>
-                
-                <div className="mb-1.5">
-                  <label className="block text-xs font-medium text-gray-700 mb-0.5">Address label (optional)</label>
-                  <input
-                    type="text"
-                    name="addressLabel"
-                    value={addressForm.addressLabel || ""}
-                    onChange={e => setAddressForm(prev => ({ ...prev, addressLabel: e.target.value }))}
-                    className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-500 text-xs sm:text-sm"
-                    placeholder="e.g., Near main gate, Opposite pharmacy, etc."
-                  />
-                </div>
-                
-                <div className="mb-1.5">
-                  <label className="block text-xs font-medium text-gray-700 mb-0.5">Additional delivery instructions (optional)</label>
-                  <textarea
-                    name="additionalInstructions"
-                    value={addressForm.additionalInstructions || ""}
-                    onChange={e => setAddressForm(prev => ({ ...prev, additionalInstructions: e.target.value }))}
-                    className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-500 text-xs sm:text-sm"
-                    placeholder="E.g., Ring bell twice, call before delivery, etc."
-                    rows={2}
-                  />
-                </div>
+                  
+                  <div className="mb-1.5">
+                    <label className="block text-xs font-medium text-gray-700 mb-0.5">Area / Sector / Locality *</label>
+                    <input
+                      type="text"
+                      name="area"
+                      value={addressForm.area || ""}
+                      className="w-full px-3 py-1.5 border border-gray-300 rounded-lg bg-gray-100 focus:outline-none focus:ring-1 focus:ring-brand-primary text-xs sm:text-sm"
+                      required
+                      readOnly
+                    />
+                  </div>
+                  
+                  <div className="mb-1.5">
+                    <label className="block text-xs font-medium text-gray-700 mb-0.5">Nearby landmark (optional)</label>
+                    <input
+                      type="text"
+                      name="landmark"
+                      value={addressForm.landmark || ""}
+                      onChange={e => setAddressForm(prev => ({ ...prev, landmark: e.target.value }))}
+                      className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary text-xs sm:text-sm"
+                    />
+                  </div>
+                  
+                  <div className="mb-1.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-0.5">Your name *</label>
+                        <input
+                          type="text"
+                          name="name"
+                          value={addressForm.name || ""}
+                          onChange={e => setAddressForm(prev => ({ ...prev, name: e.target.value }))}
+                          className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary text-xs sm:text-sm"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-0.5">Your phone number (optional)</label>
+                        <input
+                          type="tel"
+                          name="phone"
+                          value={addressForm.phone || ""}
+                          onChange={e => setAddressForm(prev => ({ ...prev, phone: e.target.value }))}
+                          pattern="[0-9]{10}"
+                          className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary text-xs sm:text-sm"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="mb-1.5">
+                    <label className="block text-xs font-medium text-gray-700 mb-0.5">Address label (optional)</label>
+                    <input
+                      type="text"
+                      name="addressLabel"
+                      value={addressForm.addressLabel || ""}
+                      onChange={e => setAddressForm(prev => ({ ...prev, addressLabel: e.target.value }))}
+                      className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary text-xs sm:text-sm"
+                      placeholder="e.g., Near main gate, Opposite pharmacy, etc."
+                    />
+                  </div>
+                  
+                  <div className="mb-1.5">
+                    <label className="block text-xs font-medium text-gray-700 mb-0.5">Additional delivery instructions (optional)</label>
+                    <textarea
+                      name="additionalInstructions"
+                      value={addressForm.additionalInstructions || ""}
+                      onChange={e => setAddressForm(prev => ({ ...prev, additionalInstructions: e.target.value }))}
+                      className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary text-xs sm:text-sm"
+                      placeholder="E.g., Ring bell twice, call before delivery, etc."
+                      rows={2}
+                    />
+                  </div>
                 </form>
               </div>
               
               {/* Fixed Save/Update Button */}
-              <div className="p-3 sm:p-4 bg-white border-t border-gray-100 flex-shrink-0">
+              <div className="bg-white pt-3 pb-3 border-t border-gray-100 flex-shrink-0">
                 <div className="flex gap-2 sm:gap-3">
                   <button
                     type="button"
@@ -581,11 +584,7 @@ export default function AddressModal({
                     type="submit"
                     form="address-form"
                     disabled={isSubmitting}
-                    className={`flex-1 px-3 sm:px-5 py-2 sm:py-2.5 text-white rounded-lg font-medium text-xs sm:text-sm ${
-                      isSubmitting 
-                        ? 'bg-gray-400 cursor-not-allowed' 
-                        : 'bg-green-600 hover:bg-green-700'
-                    }`}
+                    className={`flex-1 px-3 sm:px-5 py-2 sm:py-2.5 text-white rounded-lg font-medium text-xs sm:text-sm ${isSubmitting ? 'bg-gray-400 cursor-not-allowed' : 'bg-brand-primary hover:bg-brand-primary-dark'}`}
                   >
                     {isSubmitting ? "Saving..." : (selectedAddress ? "Update Address" : "Save Address")}
                   </button>

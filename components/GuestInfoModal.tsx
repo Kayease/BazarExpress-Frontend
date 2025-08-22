@@ -182,29 +182,6 @@ export default function GuestInfoModal({ isOpen, onClose, onInfoSubmit }: GuestI
               </a>
             </p>
           </div>
-
-          {/* Debug Section - Only show in development */}
-          {process.env.NODE_ENV === 'development' && (
-            <div className="border-t pt-3 sm:pt-4">
-              <details className="text-xs text-gray-500">
-                <summary className="cursor-pointer hover:text-gray-700">Debug Info</summary>
-                <div className="mt-2 space-y-1 text-left">
-                  <p>Current Guest Info: {localStorage.getItem('guest_info') || 'None'}</p>
-                  <p>Modal Shown: {localStorage.getItem('guest_modal_shown') || 'No'}</p>
-                  <button
-                    onClick={() => {
-                      localStorage.removeItem('guest_info');
-                      localStorage.removeItem('guest_modal_shown');
-                      window.location.reload();
-                    }}
-                    className="text-red-500 hover:text-red-700 underline"
-                  >
-                    Reset Guest Info
-                  </button>
-                </div>
-              </details>
-            </div>
-          )}
         </div>
       </DialogContent>
     </Dialog>

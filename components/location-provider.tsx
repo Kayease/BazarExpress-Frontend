@@ -68,7 +68,7 @@ export function LocationProvider({ children }: LocationProviderProps) {
 
   // Initialize location on mount
   useEffect(() => {
-    let fallbackTimer: NodeJS.Timeout;
+    let fallbackTimer: NodeJS.Timeout | null = null;
     
     const initializeLocation = async () => {
       // Clean up old location data that might conflict
@@ -173,6 +173,16 @@ export function LocationProvider({ children }: LocationProviderProps) {
       setPreviousLocation(locationState);
     }
     
+    // Convert the matched warehouse to the expected WarehouseInfo type
+    const matchedWarehouse = deliveryCheck.matchedWarehouse ? {
+      _id: deliveryCheck.matchedWarehouse._id,
+      name: deliveryCheck.matchedWarehouse.name,
+      deliverySettings: {
+        deliveryHours: deliveryCheck.matchedWarehouse.deliverySettings.deliveryHours,
+        is24x7Delivery: !deliveryCheck.matchedWarehouse.deliverySettings.deliveryHours // If no delivery hours, assume 24/7
+      }
+    } : null;
+    
     const newState: LocationState = {
       pincode: deliveryCheck.pincode,
       isLocationDetected: true,
@@ -180,7 +190,7 @@ export function LocationProvider({ children }: LocationProviderProps) {
       deliveryMessage: deliveryCheck.deliveryStatus?.shortMessage || 'May take few days',
       showOverlay: deliveryCheck.mode === 'custom-disabled',
       overlayMessage: deliveryCheck.deliveryStatus?.message || deliveryCheck.matchedWarehouse?.deliverySettings?.disabledMessage || 'Delivery is currently unavailable in your area',
-      matchedWarehouse: deliveryCheck.matchedWarehouse,
+      matchedWarehouse: matchedWarehouse,
       isGlobalMode: deliveryCheck.mode === 'global' || !deliveryCheck.hasCustomWarehouse
     };
 
@@ -221,8 +231,8 @@ export function LocationProvider({ children }: LocationProviderProps) {
   };
 
   const detectLocation = async () => {
-    let detectionTimeout: NodeJS.Timeout;
-    let showModalTimeout: NodeJS.Timeout;
+    let detectionTimeout: NodeJS.Timeout | null = null;
+    let showModalTimeout: NodeJS.Timeout | null = null;
     
     try {
       setIsLoading(true);

@@ -185,8 +185,7 @@ export function LocationBasedProducts({
         </p>
         <Button 
           onClick={() => setShowLocationModal(true)}
-
-          className="bg-green-600 hover:bg-green-700"
+          className="bg-brand-primary hover:bg-brand-primary-dark"
         >
           <MapPin className="h-4 w-4 mr-2" />
           Select Location
@@ -227,24 +226,24 @@ export function LocationBasedProducts({
     <div className="space-y-6">
       {/* Location Header */}
 
-      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+      <div className="bg-brand-primary/10 border border-brand-primary/20 rounded-lg p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <CheckCircle className="h-5 w-5 text-green-600" />
+            <CheckCircle className="h-5 w-5 text-brand-primary" />
             <div>
-              <p className="font-medium text-green-800">
+              <p className="font-medium text-brand-primary-dark">
                 Delivering to: {locationState?.pincode || 'Unknown'}
               </p>
-              <p className="text-sm text-green-600">
+              <p className="text-sm text-brand-primary">
                 {totalProducts} product(s) available
               </p>
             </div>
           </div>
           <Button
             onClick={() => setShowLocationModal(true)}
-
             variant="outline"
             size="sm"
+            className="border-brand-primary text-brand-primary hover:bg-brand-primary hover:text-white"
           >
             Change
           </Button>
@@ -264,7 +263,7 @@ export function LocationBasedProducts({
       {/* Loading State */}
       {isLoading && (
         <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-green-600" />
+          <Loader2 className="h-8 w-8 animate-spin text-brand-primary" />
           <span className="ml-2 text-gray-600">Loading products...</span>
         </div>
       )}
@@ -294,7 +293,7 @@ export function LocationBasedProducts({
                   className="object-cover"
                 />
                 {product.deliveryInfo?.isFreeDeliveryZone && (
-                  <div className="absolute top-2 left-2 bg-green-600 text-white text-xs px-2 py-1 rounded">
+                  <div className="absolute top-2 left-2 bg-brand-primary text-white text-xs px-2 py-1 rounded">
                     Free Delivery
                   </div>
                 )}
@@ -307,7 +306,7 @@ export function LocationBasedProducts({
                 </h3>
                 
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-lg font-bold text-green-600">
+                  <span className="text-lg font-bold text-brand-primary">
                     ₹{product.price}
                   </span>
                   <span className="text-sm text-gray-500">
@@ -336,7 +335,7 @@ export function LocationBasedProducts({
                 {/* Add to Cart Button */}
                 <Button
                   onClick={() => handleAddToCart(product)}
-                  className="w-full bg-green-600 hover:bg-green-700"
+                  className="w-full bg-brand-primary hover:bg-brand-primary-dark"
                   size="sm"
                   disabled={product.stock === 0}
                 >

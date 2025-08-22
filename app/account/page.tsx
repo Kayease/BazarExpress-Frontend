@@ -458,7 +458,7 @@ export default function Profile() {
                       <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 w-full sm:w-auto">
                         <button
                           onClick={handleSave}
-                          className="flex items-center justify-center space-x-2 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 w-full sm:w-auto"
+                          className="flex items-center justify-center space-x-2 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 w-full sm:w-auto"
                         >
                           <Save className="h-4 w-4" />
                           <span>Save</span>
@@ -599,7 +599,7 @@ export default function Profile() {
                       </p>
                       <Link
                         href="/products"
-                        className="inline-flex items-center bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm sm:text-base"
+                        className="inline-flex items-center bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors text-sm sm:text-base"
                       >
                         <ArrowRight className="w-4 h-4 mr-2" />
                         Continue Shopping
@@ -633,14 +633,14 @@ export default function Profile() {
                                     {item.name}
                                   </h3>
                                   {item.variantName && (
-                                    <p className="text-xs text-blue-600 font-medium">
+                                    <p className="text-xs text-purple-400 font-medium">
                                       Variant: {item.variantName}
                                     </p>
                                   )}
                                   <p className="text-xs text-gray-600">
                                     {item.unit || item.category}
                                   </p>
-                                  <p className="text-sm font-bold text-green-600">
+                                  <p className="text-sm font-bold text-purple-600">
                                     ₹{item.price} x {item.quantity} = ₹{item.price * item.quantity}
                                   </p>
                                 </div>
@@ -708,7 +708,7 @@ export default function Profile() {
                                   {item.name}
                                 </h3>
                                 {item.variantName && (
-                                  <p className="text-xs text-blue-600 font-medium">
+                                  <p className="text-xs text-purple-400 font-medium">
                                     Variant: {item.variantName}
                                   </p>
                                 )}
@@ -765,17 +765,17 @@ export default function Profile() {
                           </div>
                         ))}
                       </div>
-                      <div className="bg-green-50 rounded-lg p-3 sm:p-4 border border-green-200">
+                      <div className="bg-purple-50 rounded-lg p-3 sm:p-4 border border-purple-200">
                         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-3 space-y-2 sm:space-y-0">
                           <div className="text-center sm:text-left">
                             <p className="text-sm text-gray-600">Total Items: {cartCount}</p>
-                            <p className="text-base sm:text-lg font-bold text-green-700">
+                            <p className="text-base sm:text-lg font-bold text-purple-700">
                               Total Amount: ₹{Math.round(cartTotal)}
                             </p>
                           </div>
                           <Link
                             href="/payment"
-                            className="bg-green-600 text-white px-4 sm:px-6 py-2.5 sm:py-2.5 rounded-lg hover:bg-green-700 transition-colors font-medium text-center text-sm sm:text-base w-full sm:w-auto"
+                            className="bg-purple-600 text-white px-4 sm:px-6 py-2.5 sm:py-2.5 rounded-lg hover:bg-purple-700 transition-colors font-medium text-center text-sm sm:text-base w-full sm:w-auto"
                           >
                             Proceed to Checkout
                           </Link>
@@ -810,7 +810,7 @@ export default function Profile() {
                       </p>
                       <Link
                         href="/products"
-                        className="inline-flex items-center bg-gradient-to-r from-red-500 to-pink-500 text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl hover:shadow-lg transition-all duration-200 text-sm sm:text-base"
+                        className="inline-flex items-center bg-gradient-to-r from-purple-600 to-purple-500 text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl hover:shadow-lg transition-all duration-200 text-sm sm:text-base"
                       >
                         <ArrowRight className="w-4 h-4 mr-2" />
                         Browse Products
@@ -843,7 +843,7 @@ export default function Profile() {
                                   {item.name}
                                 </h3>
                                 {item.variantName && (
-                                  <p className="text-xs text-blue-600 font-medium mb-1">
+                                  <p className="text-xs text-purple-600 font-medium mb-1">
                                     Variant: {item.variantName}
                                   </p>
                                 )}
@@ -868,7 +868,7 @@ export default function Profile() {
                                   </span>
                                 </div>
                                 <div className="mb-1">
-                                  <span className="text-sm font-bold text-brand-primary">
+                                  <span className="text-sm font-bold text-purple-600">
                                     ₹{item.price}
                                   </span>
                                   {item.mrp && item.mrp > item.price && (
@@ -891,7 +891,7 @@ export default function Profile() {
                                     addToCart(cartItem);
                                     removeFromWishlistContext(item.id || item._id, item.variantId);
                                   }}
-                                  className="flex items-center justify-center bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 transition-colors text-xs"
+                                  className="flex items-center justify-center bg-purple-600 text-white px-3 py-1.5 rounded-lg hover:bg-purple-700 transition-colors text-xs"
                                 >
                                   <ShoppingCart className="w-3 h-3 mr-1" />
                                   Add
@@ -925,7 +925,7 @@ export default function Profile() {
                                 {item.name}
                               </h3>
                               {item.variantName && (
-                                <p className="text-sm text-blue-600 font-medium">
+                                <p className="text-sm text-variant-400 font-medium">
                                   Variant: {item.variantName}
                                 </p>
                               )}
@@ -953,7 +953,7 @@ export default function Profile() {
                             <div className="flex items-center space-x-4 flex-shrink-0">
                               <div className="text-right">
                                 <div className="mb-1">
-                                  <span className="text-base font-bold text-brand-primary">
+                                  <span className="text-base font-bold text-purple-600">
                                     ₹{item.price}
                                   </span>
                                   {item.mrp && item.mrp > item.price && (
@@ -976,7 +976,7 @@ export default function Profile() {
                                     addToCart(cartItem);
                                     removeFromWishlistContext(item.id || item._id, item.variantId);
                                   }}
-                                  className="flex items-center bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 transition-colors text-sm"
+                                  className="flex items-center bg-purple-600 text-white px-3 py-1.5 rounded-lg hover:bg-purple-700 transition-colors text-sm"
                                 >
                                   <ShoppingCart className="w-3 h-3 mr-1" />
                                   Add

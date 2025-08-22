@@ -522,8 +522,12 @@ export default function ProductSection({
                   {/* Left Button - Hidden on mobile, visible on larger screens */}
                   {scrollPositions[section.category._id] > 0 && (
                     <button
-                      className="hidden lg:flex absolute left-[-28px] top-1/2 -translate-y-1/2 z-20 bg-white border border-gray-200 rounded-full shadow p-1 items-center justify-center hover:bg-gray-100"
-                      style={{ width: 32, height: 32 }}
+                      className="hidden lg:block absolute left-[-28px] top-1/2 -translate-y-1/2 z-20 bg-white border border-gray-200 rounded-full shadow p-1 hover:bg-gray-100"
+                      style={{ 
+                        width: 32, 
+                        height: 32,
+                        display: 'none' // Initially hidden, overridden by lg:block
+                      }}
                       onClick={() => scrollByAmount(section.category._id, -220)}
                       aria-label="Scroll left"
                     >
@@ -533,8 +537,12 @@ export default function ProductSection({
                   
                   {/* Right Button - Hidden on mobile, visible on larger screens */}
                   <button
-                    className="hidden lg:flex absolute right-[-28px] top-1/2 -translate-y-1/2 z-20 bg-white border border-gray-200 rounded-full shadow p-1 items-center justify-center hover:bg-gray-100"
-                    style={{ width: 32, height: 32, display: section.products.length * 190 > (scrollRefs.current[section.category._id]?.clientWidth || 0) + (scrollRefs.current[section.category._id]?.scrollLeft || 0) ? 'flex' : 'none' }}
+                    className="hidden lg:block absolute right-[-28px] top-1/2 -translate-y-1/2 z-20 bg-white border border-gray-200 rounded-full shadow p-1 hover:bg-gray-100"
+                    style={{ 
+                      width: 32, 
+                      height: 32,
+                      display: 'none' // Initially hidden, overridden by lg:block at larger screens
+                    }}
                     onClick={() => scrollByAmount(section.category._id, 220)}
                     aria-label="Scroll right"
                   >

@@ -18,7 +18,8 @@ module.exports = {
             },
             colors: {
                 brand: {
-                    primary: "hsl(275, 56%, 60%)", // Soft Violet (from top-right wing)
+                   // primary: "hsl(275, 56%, 60%)", // Soft Violet (from top-right wing)
+                    primary: "#9333ea", // Soft Violet (from top-right wing)
                     'primary-dark': "hsl(275, 56%, 40%)", // Darker shade of primary
                     secondary: "hsl(186, 43%, 45%)", // Teal Green (from top-left wing)
                     accent: "hsl(269, 45%, 50%)", // Rich Purple (bottom wings)

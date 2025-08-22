@@ -100,7 +100,7 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
         {/* Header */}
         <div className="flex items-center justify-between p-4 bg-white border-b border-gray-100 flex-shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+            <div className="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center">
               <ShoppingCart className="h-4 w-4 text-white" />
             </div>
             <div>
@@ -131,7 +131,7 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
                   router.push('/search');
                   onClose();
                 }}
-                className="px-6 py-2.5 bg-green-500 text-white rounded-lg font-medium hover:bg-green-600 transition-colors"
+                className="px-6 py-2.5 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors"
               >
                 Start Shopping
               </button>
@@ -194,7 +194,7 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
                       
                       <div className="mt-auto flex justify-between items-end pt-2">
                         <div>
-                          <div className="text-sm font-bold text-green-600">₹{(item.price * item.quantity).toLocaleString()}</div>
+                          <div className="text-sm font-bold text-purple-600">₹{(item.price * item.quantity).toLocaleString()}</div>
                           <div className="text-xs text-gray-400">₹{item.price} each</div>
                         </div>
                         
@@ -233,7 +233,7 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
             {user?.defaultAddress && (
               <div className="mb-3 p-2 bg-gray-50 rounded-lg">
                 <div className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-green-600" />
+                  <MapPin className="h-4 w-4 text-purple-600" />
                   <div className="flex-1">
                     <div className="text-xs font-medium text-gray-900">Delivering to:</div>
                     <div className="text-xs text-gray-600 truncate">
@@ -257,14 +257,14 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
                   <div className="font-bold text-lg text-gray-900">Total</div>
                   <div className="text-xs text-gray-500">{cartItems.length} items</div>
                 </div>
-                <div className="text-xl font-bold text-green-600">
+                <div className="text-xl font-bold text-purple-600">
                   ₹{cartTotal}
                 </div>
               </div>
             </div>
             
             <button
-              className="w-full bg-green-500 text-white font-bold py-3.5 rounded-lg hover:bg-green-600 transition-colors flex items-center justify-center mt-4"
+              className="w-full bg-purple-600 text-white font-bold py-3.5 rounded-lg hover:bg-purple-700 transition-colors flex items-center justify-center mt-4"
               onClick={handleProceed}
             >
               {isLoggedIn ? (

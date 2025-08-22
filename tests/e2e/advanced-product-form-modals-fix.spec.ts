@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL ;
 
 // Test account credentials (these should exist in your test database)
 const testCredentials = {

@@ -86,7 +86,7 @@ function CategorySidebar({
       setLoadingCategories(true);
       logDebug('Fetching parent categories');
       
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ;
       const response = await fetch(`${apiUrl}/categories`);
       
       if (response.ok) {
@@ -112,7 +112,7 @@ function CategorySidebar({
     try {
       logDebug('Fetching subcategories', { parentId });
       
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ;
       const response = await fetch(`${apiUrl}/categories/subcategories/${parentId}`);
       
       if (response.ok) {

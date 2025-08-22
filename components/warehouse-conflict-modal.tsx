@@ -78,14 +78,14 @@ const WarehouseConflictModal: React.FC<WarehouseConflictModalProps> = ({
         className="relative bg-white rounded-xl sm:rounded-2xl shadow-2xl w-full max-w-md mx-auto overflow-hidden warehouse-conflict-modal max-h-[90vh] overflow-y-auto"
         role="alertdialog">
         {/* Header - No close button */}
-        <div className="bg-gradient-to-r from-orange-500 to-red-500 px-4 sm:px-6 py-3 sm:py-4 text-white">
+        <div className="bg-gradient-to-r from-brand-primary to-brand-primary-dark px-4 sm:px-6 py-3 sm:py-4 text-white">
           <div className="flex items-center space-x-2 sm:space-x-3">
             <AlertTriangle className="h-5 w-5 sm:h-6 sm:w-6 flex-shrink-0" />
             <div className="min-w-0 flex-1">
               <h2 className="text-base sm:text-lg font-bold" id="modal-title">
                 {isLocationChange ? "Location Changed" : "Different Store Detected"}
               </h2>
-              <p className="text-orange-100 text-xs sm:text-sm">Action required - Choose an option below</p>
+              <p className="text-white/80 text-xs sm:text-sm">Action required - Choose an option below</p>
             </div>
           </div>
         </div>
@@ -95,21 +95,21 @@ const WarehouseConflictModal: React.FC<WarehouseConflictModalProps> = ({
           {/* Problem Explanation */}
           <div className="text-center">
             <div 
-              className="bg-orange-50 border border-orange-200 rounded-lg p-3 sm:p-4 mb-3 sm:mb-4"
+              className="bg-brand-primary/10 border border-brand-primary/20 rounded-lg p-3 sm:p-4 mb-3 sm:mb-4"
               id="modal-description"
             >
               {isLocationChange ? (
                 <div className="space-y-2">
-                  <p className="text-xs sm:text-sm text-orange-800">
+                  <p className="text-xs sm:text-sm text-brand-primary-dark">
                     You've changed your location to <strong>"{newWarehouse.name}"</strong> but your cart has items from <strong>"{currentWarehouse}"</strong>.
                   </p>
-                  <div className="flex items-center justify-center gap-2 text-xs text-orange-700">
+                  <div className="flex items-center justify-center gap-2 text-xs text-brand-primary">
                     <MapPin className="h-3 w-3" />
                     <span>Different warehouse detected</span>
                   </div>
                 </div>
               ) : (
-                <p className="text-xs sm:text-sm text-orange-800">
+                <p className="text-xs sm:text-sm text-brand-primary-dark">
                   <strong>"{conflictingProduct}"</strong> is from a different warehouse than your current cart items from <strong>"{currentWarehouse}"</strong>.
                 </p>
               )}
@@ -125,12 +125,12 @@ const WarehouseConflictModal: React.FC<WarehouseConflictModalProps> = ({
               <div className="border border-gray-200 rounded-lg p-3">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center space-x-2 mb-1">
-                      <ShoppingCart className="h-4 w-4 text-gray-600 flex-shrink-0" />
-                      <span className="font-medium text-gray-900 text-sm sm:text-base">
-                        {isLocationChange ? "Clear Cart & Shop Here" : "Clear Cart & Continue"}
-                      </span>
-                    </div>
+                                      <div className="flex items-center space-x-2 mb-1">
+                    <ShoppingCart className="h-4 w-4 text-brand-primary flex-shrink-0" />
+                    <span className="font-medium text-gray-900 text-sm sm:text-base">
+                      {isLocationChange ? "Clear Cart & Shop Here" : "Clear Cart & Continue"}
+                    </span>
+                  </div>
                     <p className="text-xs text-gray-600">
                       {isLocationChange 
                         ? `Remove current items and shop from ${newWarehouse.name}`
@@ -140,8 +140,7 @@ const WarehouseConflictModal: React.FC<WarehouseConflictModalProps> = ({
                   </div>
                   <Button
                     onClick={onClearCart}
-                    variant="outline"
-                    className="text-sm px-3 sm:px-4 py-2 w-full sm:w-auto"
+                    className="text-sm px-3 sm:px-4 py-2 w-full sm:w-auto bg-brand-primary hover:bg-brand-primary-dark text-white border-brand-primary"
                   >
                     Clear
                   </Button>
@@ -161,8 +160,7 @@ const WarehouseConflictModal: React.FC<WarehouseConflictModalProps> = ({
                   </div>
                   <Button
                     onClick={onContinueShopping}
-                    variant="ghost"
-                    className="text-sm px-3 sm:px-4 py-2 w-full sm:w-auto"
+                    className="text-sm px-3 sm:px-4 py-2 w-full sm:w-auto bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300"
                   >
                     {isLocationChange ? "Go Back" : "Continue"}
                   </Button>

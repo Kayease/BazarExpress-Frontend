@@ -9,9 +9,6 @@ import {
   Menu,
   X,
   ChevronDown,
-  Gift,
-  HelpCircle,
-  Shield,
   LayoutDashboard,
   LogOut as LogOutIcon,
   Heart,
@@ -59,6 +56,7 @@ export default function Navbar() {
   const [wishlistAnimation, setWishlistAnimation] = useState(false);
   const [currentSearchPlaceholder, setCurrentSearchPlaceholder] = useState(0);
   const [typingTimeout, setTypingTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [recentSearches, setRecentSearches] = useState<{ query: string; timestamp: number; count: number }[]>([]);
 
   const searchPlaceholders = [
     "Search \"milk\"",
@@ -72,6 +70,22 @@ export default function Navbar() {
     "Search \"egg\"",
     "Search \"chips\""
   ];
+
+  // Load latest search history when the mobile search modal opens
+  useEffect(() => {
+    if (!showSearchModal) return;
+    try {
+      const saved = localStorage.getItem('searchHistory');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) setRecentSearches(parsed);
+      } else {
+        setRecentSearches([]);
+      }
+    } catch (e) {
+      console.warn('Error reading searchHistory:', e);
+    }
+  }, [showSearchModal]);
 
   // Rotate search placeholders
   useEffect(() => {
@@ -230,7 +244,7 @@ export default function Navbar() {
                   onClick={() => setShowLocationModal(true)}
                   className="flex flex-col text-left"
                 >
-                  <div className="text-md font-extrabold text-green-600">
+                  <div className="text-md font-extrabold text-purple-600">
                     {locationState.isLocationDetected ? 
                       deliveryMessage : 
                       isLoading ? 
@@ -481,7 +495,7 @@ export default function Navbar() {
                   onClick={() => setIsCartOpen(true)}
                   className={`flex items-center px-4 py-2 rounded-lg transition-colors ${
                     cartItemCount > 0
-                      ? "bg-green-500 text-white hover:bg-green-600"
+                      ? "bg-purple-600 text-white hover:bg-purple-700"
                       : "bg-gray-100 text-gray-500 hover:bg-gray-200"
                   }`}
               >
@@ -513,7 +527,7 @@ export default function Navbar() {
                     setIsLoginOpen(true);
                     setIsMobileMenuOpen(false);
                   }}
-                  className="w-full flex items-center justify-center space-x-2 bg-green-500 text-white px-4 py-3 rounded-lg hover:bg-green-600 transition duration-200"
+                  className="w-full flex items-center justify-center space-x-2 bg-purple-600 text-white px-4 py-3 rounded-lg hover:bg-purple-700 transition duration-200"
                 >
                   <User size={18} />
                   <span className="font-medium">Login</span>
@@ -628,7 +642,7 @@ export default function Navbar() {
 
       {/* Mobile Sticky Cart Bar */}
       {cartItemCount > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 bg-green-600 text-white p-4 z-50 md:hidden">
+        <div className="fixed bottom-0 left-0 right-0 bg-purple-600 text-white p-4 z-50 md:hidden">
           <button
             onClick={() => setIsCartOpen(true)}
             className="w-full flex items-center justify-between"
@@ -642,7 +656,7 @@ export default function Navbar() {
                 ₹{Math.round(cartTotal)}
               </span>
             </div>
-            <span className="font-medium bg-white text-green-600 px-4 py-2 rounded">
+            <span className="font-medium bg-white text-purple-600 px-4 py-2 rounded">
               View Cart
             </span>
           </button>
@@ -710,35 +724,59 @@ export default function Navbar() {
                 </div>
               </div>
                 <div className="mt-4">
-                  <h3 className="text-sm font-medium text-gray-500 mb-2">Popular Searches</h3>
+                  <h3 className="text-sm font-medium text-gray-500 mb-2">
+                    {recentSearches.length > 0 ? 'Recent Searches' : 'Popular Searches'}
+                  </h3>
                   <div className="flex flex-wrap gap-2">
-                  {searchPlaceholders.map((placeholder, index) => (
-                      <button
-                      key={index}
-                        onClick={() => {
-                        const query = placeholder.replace('Search "', '').replace('"', '');
-                        
-                        // Build URL with location context for pincode-based filtering
-                        let url = `/search?q=${encodeURIComponent(query)}`;
-                        
-                        // Add pincode parameter if location is detected
-                        if (locationState.isLocationDetected && locationState.pincode) {
-                          url += `&pincode=${locationState.pincode}`;
-                        }
-                        
-                        // Add delivery mode for proper warehouse filtering
-                        if (isGlobalMode) {
-                          url += `&mode=global`;
-                        }
-                        
-                        router.push(url);
-                        setShowSearchModal(false);
-                      }}
-                        className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-full text-sm hover:bg-gray-200 transition-colors"
-                      >
-                      {placeholder.replace('Search "', '').replace('"', '')}
-                      </button>
-                    ))}
+                    {recentSearches.length > 0 ? (
+                      recentSearches.slice(0, 6).map((item, index) => (
+                        <button
+                          key={`${item.query}-${index}`}
+                          onClick={() => {
+                            const query = item.query;
+                            // Build URL with location context for pincode-based filtering
+                            let url = `/search?q=${encodeURIComponent(query)}`;
+                            // Add pincode parameter if location is detected
+                            if (locationState.isLocationDetected && locationState.pincode) {
+                              url += `&pincode=${locationState.pincode}`;
+                            }
+                            // Add delivery mode for proper warehouse filtering
+                            if (isGlobalMode) {
+                              url += `&mode=global`;
+                            }
+                            router.push(url);
+                            setShowSearchModal(false);
+                          }}
+                          className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-full text-sm hover:bg-gray-200 transition-colors"
+                        >
+                          {item.query}
+                        </button>
+                      ))
+                    ) : (
+                      searchPlaceholders.map((placeholder, index) => (
+                        <button
+                          key={index}
+                          onClick={() => {
+                            const query = placeholder.replace('Search "', '').replace('"', '');
+                            // Build URL with location context for pincode-based filtering
+                            let url = `/search?q=${encodeURIComponent(query)}`;
+                            // Add pincode parameter if location is detected
+                            if (locationState.isLocationDetected && locationState.pincode) {
+                              url += `&pincode=${locationState.pincode}`;
+                            }
+                            // Add delivery mode for proper warehouse filtering
+                            if (isGlobalMode) {
+                              url += `&mode=global`;
+                            }
+                            router.push(url);
+                            setShowSearchModal(false);
+                          }}
+                          className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-full text-sm hover:bg-gray-200 transition-colors"
+                        >
+                          {placeholder.replace('Search "', '').replace('"', '')}
+                        </button>
+                      ))
+                    )}
                   </div>
                 </div>
             </div>

@@ -171,20 +171,9 @@ export default function OrderDetailModal({ isOpen, onClose, order }: OrderDetail
       promoCode: order.promoCode
     };
     
-    // For mobile, trigger direct download
-    if (window.innerWidth < 768) {
-      // Create a temporary link to trigger download
-      const link = document.createElement('a');
-      link.href = `/api/invoice/download?orderId=${order.orderId}`;
-      link.download = `invoice-${order.orderId}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } else {
-      // For larger displays, show modal
-      setInvoiceOrderData(invoiceData);
-      setShowInvoiceModal(true);
-    }
+    // Always use the InvoiceModal for consistent behavior across all devices
+    setInvoiceOrderData(invoiceData);
+    setShowInvoiceModal(true);
   };
 
   return (
@@ -389,7 +378,7 @@ export default function OrderDetailModal({ isOpen, onClose, order }: OrderDetail
         </div>
       </div>
       
-      {/* Invoice Modal - Only for larger displays */}
+      {/* Invoice Modal */}
       {showInvoiceModal && invoiceOrderData && (
         <InvoiceModal
           isOpen={showInvoiceModal}

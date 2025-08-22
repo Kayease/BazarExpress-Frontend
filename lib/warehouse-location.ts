@@ -1,7 +1,7 @@
 // Warehouse-based location and delivery service
 import { WarehouseInfo, ProductWithWarehouse } from './warehouse-validation';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ;
 const USE_NEXTJS_API = true; // Use Next.js API routes for better error handling
 
 export interface PincodeDeliveryCheck {

@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL ;
 
 /**
  * E2E Test: Order Status Change and Delivery Boy Assignment

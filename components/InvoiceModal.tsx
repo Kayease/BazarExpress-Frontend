@@ -389,49 +389,51 @@ export default function InvoiceModal({ isOpen, onClose, orderData }: InvoiceModa
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[999]">
-      <div className="bg-white rounded-lg w-full max-w-6xl max-h-[90vh] overflow-y-auto flex flex-col">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 z-[999]">
+      <div className="bg-white rounded-lg w-full max-w-6xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto flex flex-col">
         {/* Header with actions */}
-        <div className="flex justify-between items-center p-4 border-b border-gray-200 print:hidden">
-          <h2 className="text-xl font-semibold text-gray-900">Tax Invoice</h2>
+        <div className="flex justify-between items-center p-3 sm:p-4 border-b border-gray-200 print:hidden">
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Tax Invoice</h2>
           <div className="flex items-center gap-2">
             <Button
               onClick={handleDownload}
               variant="outline"
               size="sm"
               disabled={isGeneratingPDF}
+              className="text-xs sm:text-sm"
             >
               {isGeneratingPDF ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2 animate-spin" />
               ) : (
-                <Download className="h-4 w-4 mr-2" />
+                <Download className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
               )}
-              {isGeneratingPDF ? 'Generating...' : 'Download PDF'}
+              <span className="hidden sm:inline">{isGeneratingPDF ? 'Generating...' : 'Download PDF'}</span>
+              <span className="sm:hidden">{isGeneratingPDF ? '...' : 'PDF'}</span>
             </Button>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+              className="text-gray-400 hover:text-gray-600 transition-colors p-1"
             >
-              <X className="h-5 w-5" />
+              <X className="h-4 w-4 sm:h-5 sm:w-5" />
             </button>
           </div>
         </div>
 
         {/* Invoice Content - Modified container */}
-        <div className="flex-1 overflow-auto p-4 print:p-0">
+        <div className="flex-1 overflow-auto p-2 sm:p-4 print:p-0">
           <div
             ref={invoiceRef}
             className="bg-white mx-auto"
             style={{
               fontFamily: 'Arial, sans-serif',
-              fontSize: '10px',
-              lineHeight: '1.3',
-              width: '794px', // Standard A4 width in pixels at 96dpi
-              maxWidth: '100%',
+              fontSize: '8px',
+              lineHeight: '1.2',
+              width: '100%',
+              maxWidth: '794px',
               margin: '0 auto',
-              padding: '30px',
+              padding: '10px',
               boxSizing: 'border-box',
-              minHeight: '1123px' // A4 height in pixels
+              minHeight: 'auto'
             }}
           >
             {/* Print-specific styles */}
@@ -479,6 +481,44 @@ export default function InvoiceModal({ isOpen, onClose, orderData }: InvoiceModa
                   }
                 }
                 
+                /* Mobile responsive styles */
+                @media (max-width: 768px) {
+                  #invoice-content {
+                    font-size: 6px !important;
+                    padding: 5px !important;
+                  }
+                  #invoice-content table {
+                    font-size: 6px !important;
+                    table-layout: auto !important;
+                  }
+                  #invoice-content td, #invoice-content th {
+                    padding: 2px !important;
+                    font-size: 6px !important;
+                    word-wrap: break-word !important;
+                    white-space: normal !important;
+                  }
+                  #invoice-content .header-section {
+                    flex-direction: column !important;
+                    gap: 5px !important;
+                  }
+                  #invoice-content .business-customer-section {
+                    flex-direction: column !important;
+                    gap: 10px !important;
+                  }
+                  #invoice-content .qr-section {
+                    width: 100% !important;
+                    margin-top: 10px !important;
+                  }
+                  #invoice-content img {
+                    max-width: 100% !important;
+                    height: auto !important;
+                  }
+                  #invoice-content .logo-section img {
+                    height: 30px !important;
+                    width: auto !important;
+                  }
+                }
+                
                 /* PDF generation specific styles */
                 .pdf-container {
                   display: flex;
@@ -496,8 +536,8 @@ export default function InvoiceModal({ isOpen, onClose, orderData }: InvoiceModa
               <div style={{ width: '100%', maxWidth: '794px', margin: '0 auto' }}>
               {/* Header */}
               <div className="no-break" style={{ border: '2px solid #000', marginBottom: '10px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', borderBottom: '1px solid #000' }}>
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                <div className="header-section" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', borderBottom: '1px solid #000' }}>
+                  <div className="logo-section" style={{ display: 'flex', alignItems: 'center' }}>
                     <img
                       src="/logo.svg"
                       alt={invoiceSettings.businessName}
@@ -519,7 +559,7 @@ export default function InvoiceModal({ isOpen, onClose, orderData }: InvoiceModa
                 </div>
 
                 {/* Business and Customer Info */}
-                <div style={{ display: 'flex' }}>
+                <div className="business-customer-section" style={{ display: 'flex' }}>
                   <div style={{ flex: '1', padding: '10px', borderRight: '1px solid #000' }}>
                     <h3 style={{ fontSize: '10px', fontWeight: 'bold', margin: '0 0 5px 0', color: '#000' }}>Sold By:</h3>
                     <div style={{ fontSize: '9px', lineHeight: '1.3' }}>
@@ -544,7 +584,7 @@ export default function InvoiceModal({ isOpen, onClose, orderData }: InvoiceModa
                     </div>
                   </div>
 
-                  <div style={{ width: '100px', padding: '10px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                  <div className="qr-section" style={{ width: '100px', padding: '10px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                     <div style={{ width: '70px', height: '70px', border: '1px solid #000', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f9f9f9' }}>
                       <img
                         src={generateQRCode(orderData.orderId)}
