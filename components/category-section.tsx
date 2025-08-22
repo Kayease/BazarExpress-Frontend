@@ -108,8 +108,6 @@ export default function CategorySection() {
                   {category.name}
                 </span>
                 */}
-                
-
               </button>
             ))}
           </div>

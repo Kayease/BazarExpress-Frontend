@@ -162,7 +162,7 @@ export default function WishlistPage() {
               <Heart className="h-24 w-24 text-gray-300 mx-auto mb-6" />
               <h2 className="text-2xl font-bold text-gray-800 mb-4">Your wishlist is empty</h2>
               <p className="text-gray-500 mb-8">Save items you love for later by clicking the heart icon.</p>
-              <Link href="/search">
+              <Link href="/products">
                 <Button className="bg-gradient-to-r from-red-500 to-pink-600 hover:from-red-600 hover:to-pink-700 text-white px-8 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105">
                   Start Shopping
                 </Button>

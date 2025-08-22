@@ -434,7 +434,7 @@ export default function Navbar() {
 
                 {/* Wishlist Button */}
                 <Link
-                  href="/account?tab=wishlist"
+                  href="/wishlist"
                   className="flex items-center px-3 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors relative"
               >
                 <Heart
@@ -542,7 +542,7 @@ export default function Navbar() {
 
                   {/* Wishlist */}
                   <Link
-                    href="/account?tab=wishlist"
+                    href="/wishlist"
                     className="w-full flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg"
                     onClick={() => setIsMobileMenuOpen(false)}
                   >

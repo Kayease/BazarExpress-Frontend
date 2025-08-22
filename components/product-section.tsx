@@ -541,8 +541,8 @@ export default function ProductSection({
                     <ChevronRight className="w-5 h-5" />
                   </button>
                   
-                  {/* Mobile Navigation Dots - Only visible on mobile and tablet */}
-                  <div className="lg:hidden flex justify-center mt-4 space-x-2">
+                  {/* Mobile Navigation Dots - Hidden on mobile, only visible on tablet */}
+                  <div className="hidden md:flex lg:hidden justify-center mt-4 space-x-2">
                     {Array.from({ length: Math.ceil(section.products.length / 2) }).map((_, index) => (
                       <button
                         key={index}
