@@ -14,7 +14,7 @@ import toast from "react-hot-toast";
 
 interface EnhancedProductCardProps {
   product: any;
-  isInWishlist?: (id: string) => boolean;
+  isInWishlist?: (id: string, variantId?: string) => boolean;
   handleWishlistClick?: (product: any, e: React.MouseEvent) => void;
   handleAdd?: (product: any) => void;
   handleInc?: (product: any) => void;
@@ -185,9 +185,9 @@ const EnhancedProductCard: React.FC<EnhancedProductCardProps> = ({
           e.stopPropagation();
           handleWishlistClick && handleWishlistClick(product, e);
         }}
-        aria-label={isInWishlist && isInWishlist(product._id) ? 'Remove from wishlist' : 'Add to wishlist'}
+        aria-label={isInWishlist && isInWishlist(product._id, product.variantId || (product.variants && Object.keys(product.variants).length > 0 ? Object.keys(product.variants)[0] : undefined)) ? 'Remove from wishlist' : 'Add to wishlist'}
       >
-        <Heart className={`w-5 h-5 transition-colors duration-200 ${isInWishlist && isInWishlist(product._id) ? 'text-red-500 fill-red-500' : 'text-gray-400 fill-none'}`} />
+        <Heart className={`w-5 h-5 transition-colors duration-200 ${isInWishlist && isInWishlist(product._id, product.variantId || (product.variants && Object.keys(product.variants).length > 0 ? Object.keys(product.variants)[0] : undefined)) ? 'text-red-500 fill-red-500' : 'text-gray-400 fill-none'}`} />
       </button>
 
       {/* Product Image */}
@@ -222,10 +222,17 @@ const EnhancedProductCard: React.FC<EnhancedProductCardProps> = ({
             </div>
           )}
 
-          {/* Product Name */}
-          <div className="text-[12px] font-bold text-gray-900 line-clamp-2 mb-1 leading-snug" style={{ fontFamily: 'Sinkin Sans, sans-serif' }}>
-            {product.name}
-          </div>
+                     {/* Product Name */}
+           <div className="text-[12px] font-bold text-gray-900 line-clamp-2 mb-1 leading-snug" style={{ fontFamily: 'Sinkin Sans, sans-serif' }}>
+             {product.name}
+           </div>
+           
+           {/* Variant Name */}
+           {product.variantName && (
+             <div className="text-[9px] text-blue-600 font-medium mb-1 leading-tight">
+               {product.variantName}
+             </div>
+           )}
 
           {/* Rating Stars */}
           <div className="flex items-center gap-1 mb-1">

@@ -17,6 +17,10 @@ export const queryKeys = {
     params?.subcategory || 'none',
     params?.parentCategory || 'none',
     params?.search || 'none',
+    params?.brand || 'none',
+    params?.sort || 'none',
+    params?.minPrice || 'none',
+    params?.maxPrice || 'none',
     params?.mode || 'auto',
     params?.page || 1,
     params?.forceRefresh || 0
@@ -87,6 +91,10 @@ export function useProductsByLocation(
     parentCategory?: string;
     search?: string;
     mode?: string;
+    brand?: string[];
+    sort?: string;
+    minPrice?: number;
+    maxPrice?: number;
     forceRefresh?: number;
   }
 ) {
@@ -99,6 +107,10 @@ export function useProductsByLocation(
     category: params?.category,
     parentCategory: params?.parentCategory,
     showAllProducts: !params?.category && !params?.parentCategory,
+    brand: params?.brand,
+    sort: params?.sort,
+    minPrice: params?.minPrice,
+    maxPrice: params?.maxPrice,
     forceRefresh: params?.forceRefresh
   });
   
@@ -112,6 +124,10 @@ export function useProductsByLocation(
         subcategory: params?.subcategory,
         parentCategory: params?.parentCategory,
         search: params?.search,
+        brand: params?.brand,
+        sort: params?.sort,
+        minPrice: params?.minPrice,
+        maxPrice: params?.maxPrice,
         mode: (params?.mode === 'global' ? 'global' : 'auto') as 'auto' | 'global'
       };
       

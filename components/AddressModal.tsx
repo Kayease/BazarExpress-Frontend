@@ -380,9 +380,9 @@ export default function AddressModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/20 overflow-y-auto p-2 sm:p-4">
-      <div className="w-full max-w-4xl mx-auto bg-white rounded-lg shadow-xl overflow-hidden h-auto max-h-[95vh] p-0 my-2 sm:my-4">
-        <div className="flex flex-col">
+    <div className="fixed inset-0 z-[1000] bg-black/20 overflow-y-auto">
+      <div className="min-h-full flex items-start sm:items-center justify-center p-2 sm:p-4">
+        <div className="w-full max-w-4xl mx-auto bg-white rounded-lg shadow-xl overflow-hidden my-2 sm:my-4 max-h-[98vh] sm:max-h-[95vh] flex flex-col">
           {/* Header */}
           <div className="p-3 sm:p-4 border-b flex justify-between items-center sticky top-0 bg-white z-10">
             <h3 className="text-sm sm:text-base lg:text-lg font-semibold min-w-0 flex-1">
@@ -397,9 +397,9 @@ export default function AddressModal({
           </div>
           
           {/* Main Content - Two Column Layout */}
-          <div className="flex flex-col lg:flex-row">
+          <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
             {/* Map Area - Left Column */}
-            <div className="p-3 sm:p-4 lg:w-1/2 border-b lg:border-b-0 lg:border-r border-gray-100">
+            <div className="p-3 sm:p-4 lg:w-1/2 border-b lg:border-b-0 lg:border-r border-gray-100 flex-shrink-0">
               <div className="flex flex-col sm:flex-row gap-2">
                 <div className="flex-1">
                   <input
@@ -440,8 +440,9 @@ export default function AddressModal({
             </div>
 
             {/* Form Area - Right Column */}
-            <div className="p-3 sm:p-4 lg:w-1/2 overflow-y-auto max-h-[50vh] sm:max-h-[60vh] lg:max-h-[70vh]">
-              <form className="flex flex-col gap-2" onSubmit={handleSubmit}>
+            <div className="lg:w-1/2 flex flex-col flex-1 min-h-0">
+              <div className="p-3 sm:p-4 overflow-y-auto flex-1">
+                <form id="address-form" className="flex flex-col gap-2" onSubmit={handleSubmit}>
                 <div className="flex flex-wrap gap-2 sm:gap-3">
                   <div className="w-full mb-1">
                     <label className="block text-xs font-medium text-gray-700">Save address as *</label>
@@ -563,31 +564,33 @@ export default function AddressModal({
                     rows={2}
                   />
                 </div>
-                
-                {/* Sticky Save/Update Button */}
-                <div className="sticky -bottom-4 bg-white pt-3 pb-3 z-10 mt-2 sm:mt-4 border-t border-gray-100">
-                  <div className="flex gap-2 sm:gap-3">
-                    <button
-                      type="button"
-                      onClick={handleClose}
-                      className="px-3 sm:px-5 py-2 sm:py-2.5 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 text-xs sm:text-sm"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isSubmitting}
-                      className={`flex-1 px-3 sm:px-5 py-2 sm:py-2.5 text-white rounded-lg font-medium text-xs sm:text-sm ${
-                        isSubmitting 
-                          ? 'bg-gray-400 cursor-not-allowed' 
-                          : 'bg-green-600 hover:bg-green-700'
-                      }`}
-                    >
-                      {isSubmitting ? "Saving..." : (selectedAddress ? "Update Address" : "Save Address")}
-                    </button>
-                  </div>
+                </form>
+              </div>
+              
+              {/* Fixed Save/Update Button */}
+              <div className="p-3 sm:p-4 bg-white border-t border-gray-100 flex-shrink-0">
+                <div className="flex gap-2 sm:gap-3">
+                  <button
+                    type="button"
+                    onClick={handleClose}
+                    className="px-3 sm:px-5 py-2 sm:py-2.5 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 text-xs sm:text-sm"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    form="address-form"
+                    disabled={isSubmitting}
+                    className={`flex-1 px-3 sm:px-5 py-2 sm:py-2.5 text-white rounded-lg font-medium text-xs sm:text-sm ${
+                      isSubmitting 
+                        ? 'bg-gray-400 cursor-not-allowed' 
+                        : 'bg-green-600 hover:bg-green-700'
+                    }`}
+                  >
+                    {isSubmitting ? "Saving..." : (selectedAddress ? "Update Address" : "Save Address")}
+                  </button>
                 </div>
-              </form>
+              </div>
             </div>
           </div>
         </div>

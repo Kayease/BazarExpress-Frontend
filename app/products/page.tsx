@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCartContext, useWishlistContext } from "@/components/app-provider";
 import { useRecentlyViewed } from "@/hooks/use-recently-viewed";
@@ -14,7 +14,6 @@ import { useCategories } from "./hooks/useCategories";
 // Components
 import CategorySidebar from "./components/CategorySidebar";
 import ProductHeader from "./components/ProductHeader";
-import ProductFilters from "./components/ProductFilters";
 import ProductGrid from "./components/ProductGrid";
 import { ProductLoadingState } from "./components/ProductLoadingState";
 
@@ -46,7 +45,7 @@ export default function ProductsPage() {
 
   // UI state
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
-  const [showFilters, setShowFilters] = useState(false);
+  // Removed showFilters state since filters are now inline
 
   // Context hooks
   const { addToCart, cartItems, updateCartItem } = useCartContext();
@@ -240,14 +239,56 @@ export default function ProductsPage() {
     setMaxPrice(max.toString());
   }, [minPrice, maxPrice, setMinPrice, setMaxPrice]);
 
-  // Reset filters
+  // Reset filters (only brand, sort, and price - keep category/subcategory)
   const resetFilters = useCallback(() => {
-    logDebug('Resetting filters');
+    logDebug('Resetting filters only (keeping category/subcategory)');
+    logDebug('Before reset - brand state:', brand);
+    
+    // Force reset all filter states
     setBrand(undefined);
     setSort('relevance');
     setMinPrice('10');
     setMaxPrice('100000');
-  }, [setBrand, setSort, setMinPrice, setMaxPrice]);
+    
+    logDebug('After reset - brand state set to undefined');
+    
+    // Force URL update to ensure brand parameter is removed
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('brand');
+    params.delete('sort');
+    params.delete('minPrice');
+    params.delete('maxPrice');
+    
+    // Keep category and subcategory
+    if (category) params.set('category', category);
+    if (subcategory) params.set('subcategory', subcategory);
+    
+    const newUrl = `/products${params.toString() ? `?${params.toString()}` : ''}`;
+    router.replace(newUrl);
+    
+    logDebug('Forced URL update to:', newUrl);
+    
+    // Force a small delay to ensure state updates are processed
+    setTimeout(() => {
+      logDebug('After delay - brand state should be:', undefined);
+      // Double-check if the state was actually updated
+      if (brand !== undefined) {
+        logDebug('Warning: Brand state was not reset properly, forcing again');
+        setBrand(undefined);
+      }
+    }, 100);
+  }, [setBrand, setSort, setMinPrice, setMaxPrice, brand, searchParams, router, category, subcategory]);
+
+  // Reset everything including category and subcategory
+  const resetAllFilters = useCallback(() => {
+    logDebug('Resetting all filters including category/subcategory)');
+    setBrand(undefined);
+    setSort('relevance');
+    setMinPrice('10');
+    setMaxPrice('100000');
+    setCategory(undefined);
+    setSubcategory(undefined);
+  }, [setBrand, setSort, setMinPrice, setMaxPrice, setCategory, setSubcategory]);
 
   // Handle product click
   const handleProductClick = useCallback((product: any) => {
@@ -263,6 +304,16 @@ export default function ProductsPage() {
     parseInt(minPrice || '10') > 10 || 
     parseInt(maxPrice || '100000') < 100000
   );
+  
+  // Debug logging for filters
+  console.log('Products page filter state:', {
+    brand,
+    sort,
+    minPrice,
+    maxPrice,
+    hasActiveFilters,
+    selectedBrands: brand?.split(',') || []
+  });
 
   // Infinite scroll
   useEffect(() => {
@@ -278,6 +329,11 @@ export default function ProductsPage() {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, [loadMore]);
+
+  // Memoize props to prevent unnecessary re-renders of ProductHeader
+  const selectedBrands = useMemo(() => brand?.split(',') || [], [brand]);
+  const priceRange = useMemo(() => [parseInt(minPrice || '10'), parseInt(maxPrice || '100000')] as [number, number], [minPrice, maxPrice]);
+  const productsCount = useMemo(() => products.length, [products.length]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -298,16 +354,22 @@ export default function ProductsPage() {
               subcategory={subcategory}
               viewMode={viewMode}
               onViewModeChange={setViewMode}
-              showFilters={showFilters}
-              onToggleFilters={() => setShowFilters(!showFilters)}
               hasActiveFilters={hasActiveFilters}
               onResetFilters={resetFilters}
-              productsCount={products.length}
+              productsCount={productsCount}
               categoryName={categoryName}
               subcategoryName={subcategoryName}
+              brands={brands}
+              selectedBrands={selectedBrands}
+              onBrandChange={handleBrandChange}
+              sortBy={sort || 'relevance'}
+              onSortChange={handleSortChange}
+              priceRange={priceRange}
+              onPriceRangeChange={handlePriceRangeChange}
             />
 
-                {showFilters && (
+            {/* Remove the old filter system since it's now inline */}
+            {/* {showFilters && (
               <ProductFilters
                 brands={brands}
                 selectedBrands={brand?.split(',') || []}
@@ -317,7 +379,7 @@ export default function ProductsPage() {
                 priceRange={[parseInt(minPrice || '10'), parseInt(maxPrice || '100000')]}
                 onPriceRangeChange={handlePriceRangeChange}
               />
-            )}
+            )} */}
 
             <ProductLoadingState
               isLoading={isLoading && products.length === 0}
@@ -336,9 +398,7 @@ export default function ProductsPage() {
               }}
               onBrowseAll={() => {
                 logDebug('Browsing all products');
-                setCategory(undefined);
-                setSubcategory(undefined);
-                resetFilters();
+                resetAllFilters();
               }}
             >
               <ProductGrid
@@ -348,7 +408,7 @@ export default function ProductsPage() {
                 onAddToCart={addToCart}
                 onUpdateCart={updateCartItem}
                 onAddToWishlist={addToWishlist}
-                isInWishlist={(id) => isProductInWishlist(id)}
+                isInWishlist={isProductInWishlist}
                 cartItems={cartItems}
               />
 

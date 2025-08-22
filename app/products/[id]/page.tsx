@@ -737,7 +737,7 @@ export default function ProductDetailsPage() {
                             const variantText = selectedVariant && variants && variants[selectedVariant] 
                               ? ` (${variants[selectedVariant].name || selectedVariant.replace(/::/g, ' ')})` 
                               : '';
-                            toast.success(`${product.name}${variantText} added to cart`);
+                        //    toast.success(`${product.name}${variantText} added to cart`);
                           } catch (error: any) {
                             if (error.isVariantRequired) {
                               toast.error(`Please select a variant for ${product.name} before adding to cart`);

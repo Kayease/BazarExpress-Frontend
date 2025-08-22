@@ -3,7 +3,6 @@
 import React, { useState } from 'react';
 import Image from 'next/image';
 import { X, Package, MapPin, CreditCard, Calendar, Truck, CheckCircle, Download } from 'lucide-react';
-import { calculateProductTax, isInterStateTransaction } from '@/lib/tax-calculation';
 import InvoiceModal from './InvoiceModal';
 
 interface OrderItem {
@@ -29,7 +28,6 @@ interface OrderItem {
   taxAmount?: number;
   hsnCode?: string;
   hsn?: string;
-  // Variant information
   variantId?: string;
   variantName?: string;
   selectedVariant?: any;
@@ -142,123 +140,6 @@ export default function OrderDetailModal({ isOpen, onClose, order }: OrderDetail
 
   if (!isOpen || !order) return null;
 
-  // Calculate correct tax for each item based on priceIncludesTax
-  const calculateItemTax = (item: OrderItem) => {
-    if (!item.tax || !item.tax.percentage) {
-      return {
-        basePrice: item.price * item.quantity,
-        taxAmount: 0,
-        displayPrice: item.price * item.quantity
-      };
-    }
-
-    const isInterState = order.taxCalculation?.isInterState || false;
-    const taxInfo = {
-      price: item.price,
-      priceIncludesTax: item.priceIncludesTax || false,
-      tax: {
-        id: item.tax._id || item.tax.id || '',
-        name: item.tax.name,
-        percentage: item.tax.percentage
-      },
-      quantity: item.quantity
-    };
-
-    const taxResult = calculateProductTax(taxInfo, isInterState);
-    
-    return {
-      basePrice: taxResult.basePrice,
-      taxAmount: taxResult.taxAmount,
-      displayPrice: taxResult.totalPrice
-    };
-  };
-
-  // Calculate correct order summary totals
-  const calculateOrderSummary = () => {
-    let totalMRP = 0;
-    let totalSellingPrice = 0;
-    let totalTaxAmount = 0;
-    let totalCGST = 0;
-    let totalSGST = 0;
-    let totalIGST = 0;
-    let subtotalBeforeTax = 0;
-
-    order.items.forEach(item => {
-      // Calculate MRP total (use MRP if available, otherwise use price as fallback)
-      const itemMRP = (item.mrp || item.price) * item.quantity;
-      totalMRP += itemMRP;
-      
-      // Calculate selling price total
-      const itemSellingPrice = item.price * item.quantity;
-      totalSellingPrice += itemSellingPrice;
-      
-      // Calculate tax amount and base price (before tax)
-      if (item.tax && item.tax.percentage) {
-        let taxPerItem = 0;
-        let basePricePerItem = 0;
-        
-        if (item.priceIncludesTax) {
-          // Tax is included in price, so extract it: base_price = price / (1 + tax_rate)
-          const taxRate = item.tax.percentage / 100;
-          basePricePerItem = item.price / (1 + taxRate);
-          taxPerItem = item.price - basePricePerItem;
-        } else {
-          // Tax is excluded, so base price is the selling price
-          basePricePerItem = item.price;
-          taxPerItem = (item.price * item.tax.percentage) / 100;
-        }
-        
-        const itemTotalTax = taxPerItem * item.quantity;
-        totalTaxAmount += itemTotalTax;
-        
-        const itemSubtotal = basePricePerItem * item.quantity;
-        subtotalBeforeTax += itemSubtotal;
-        
-        // Check if interstate or intrastate
-        const isInterState = order.taxCalculation?.isInterState || false;
-        
-        if (isInterState) {
-          totalIGST += itemTotalTax;
-        } else {
-          // Split into CGST and SGST (half each)
-          const cgstAmount = itemTotalTax / 2;
-          const sgstAmount = itemTotalTax / 2;
-          totalCGST += cgstAmount;
-          totalSGST += sgstAmount;
-        }
-      } else {
-        // No tax, so subtotal is same as selling price
-        subtotalBeforeTax += itemSellingPrice;
-      }
-    });
-
-    // Calculate save amount (MRP - Selling Price)
-    const saveAmount = totalMRP - totalSellingPrice;
-    
-    // Promocode discount
-    const promocodeDiscount = order.promoCode?.discountAmount || 0;
-    
-    // Final total calculation
-    let finalTotal = subtotalBeforeTax + totalTaxAmount - promocodeDiscount + (order.pricing.deliveryCharge || 0) + (order.pricing.codCharge || 0);
-
-    return {
-      totalMRP,
-      totalSellingPrice,
-      subtotalBeforeTax,
-      saveAmount,
-      promocodeDiscount,
-      taxAmount: totalTaxAmount,
-      totalCGST,
-      totalSGST,
-      totalIGST,
-      deliveryCharge: order.pricing.deliveryCharge || 0,
-      codCharge: order.pricing.codCharge || 0,
-      total: finalTotal
-    };
-  };
-
-  const orderSummary = calculateOrderSummary();
-
   // Handle download invoice
   const handleDownloadInvoice = () => {
     const invoiceData = {
@@ -280,7 +161,6 @@ export default function OrderDetailModal({ isOpen, onClose, order }: OrderDetail
         taxRate: item.taxRate || item.tax?.percentage || 18,
         taxAmount: item.taxAmount,
         hsnCode: item.hsnCode || item.hsn || '-',
-        // Include variant information
         variantId: item.variantId,
         variantName: item.variantName,
         selectedVariant: item.selectedVariant
@@ -291,83 +171,96 @@ export default function OrderDetailModal({ isOpen, onClose, order }: OrderDetail
       promoCode: order.promoCode
     };
     
-    setInvoiceOrderData(invoiceData);
-    setShowInvoiceModal(true);
+    // For mobile, trigger direct download
+    if (window.innerWidth < 768) {
+      // Create a temporary link to trigger download
+      const link = document.createElement('a');
+      link.href = `/api/invoice/download?orderId=${order.orderId}`;
+      link.download = `invoice-${order.orderId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else {
+      // For larger displays, show modal
+      setInvoiceOrderData(invoiceData);
+      setShowInvoiceModal(true);
+    }
   };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[999]">
       <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-brand-primary to-brand-primary-dark text-white rounded-t-2xl">
+        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 bg-gradient-to-r from-brand-primary to-brand-primary-dark text-white rounded-t-2xl">
           <div className="flex justify-between items-center">
             <div>
-              <h3 className="text-xl font-bold">Order Details</h3>
-              <p className="text-white/80">#{order.orderId}</p>
+              <h3 className="text-lg sm:text-xl font-bold">Order Details</h3>
+              <p className="text-white/80 text-sm sm:text-base">#{order.orderId}</p>
             </div>
             <div className="flex items-center space-x-2">
               <button
                 onClick={handleDownloadInvoice}
-                className="flex items-center space-x-2 bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg transition-colors"
+                className="flex items-center space-x-2 bg-white/10 hover:bg-white/20 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg transition-colors text-sm"
               >
-                <Download className="h-4 w-4" />
-                <span>Preview Invoice</span>
+                <Download className="h-3 w-3 sm:h-4 sm:w-4" />
+                <span className="hidden sm:inline">Invoice</span>
+                <span className="sm:hidden">Download</span>
               </button>
               <button
                 onClick={onClose}
-                className="text-white/80 hover:text-white p-2 hover:bg-white/10 rounded-lg transition-colors"
+                className="text-white/80 hover:text-white p-1.5 sm:p-2 hover:bg-white/10 rounded-lg transition-colors"
               >
-                <X className="h-5 w-5" />
+                <X className="h-4 w-4 sm:h-5 sm:w-5" />
               </button>
             </div>
           </div>
         </div>
         
-        <div className="p-6 space-y-6">
+        <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
           {/* Order Status and Info */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-gray-50 rounded-xl p-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
+            <div className="bg-gray-50 rounded-xl p-3 sm:p-4">
               <div className="flex items-center space-x-2 mb-2">
                 {getStatusIcon(order.status)}
                 <span className="text-sm font-medium text-gray-600">Status</span>
               </div>
-              <span className={`inline-flex items-center px-3 py-1 text-sm font-medium rounded-full ${getStatusColor(order.status)}`}>
+              <span className={`inline-flex items-center px-2 sm:px-3 py-1 text-xs sm:text-sm font-medium rounded-full ${getStatusColor(order.status)}`}>
                 {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
               </span>
             </div>
             
-            <div className="bg-gray-50 rounded-xl p-4">
+            <div className="bg-gray-50 rounded-xl p-3 sm:p-4">
               <div className="flex items-center space-x-2 mb-2">
                 <Calendar className="w-4 h-4" />
-                <span className="text-sm font-medium text-gray-600">Order Date</span>
+                <span className="text-sm font-medium text-gray-600">Date</span>
               </div>
               <p className="text-sm font-semibold text-gray-900">
                 {new Date(order.createdAt).toLocaleDateString('en-IN', {
                   year: 'numeric',
-                  month: 'long',
+                  month: 'short',
                   day: 'numeric'
                 })}
               </p>
             </div>
             
-            <div className="bg-gray-50 rounded-xl p-4">
+            <div className="bg-gray-50 rounded-xl p-3 sm:p-4 col-span-2 md:col-span-1">
               <div className="flex items-center space-x-2 mb-2">
                 <CreditCard className="w-4 h-4" />
                 <span className="text-sm font-medium text-gray-600">Payment</span>
               </div>
               <p className="text-sm font-semibold text-gray-900">
-                {order.paymentInfo.method === 'cod' ? 'Cash on Delivery' : 'Online Payment'}
+                {order.paymentInfo.method === 'cod' ? 'COD' : 'Online'}
               </p>
             </div>
           </div>
 
           {/* Delivery Address */}
-          <div className="bg-gray-50 rounded-xl p-4">
-            <div className="flex items-center space-x-2 mb-3">
-              <MapPin className="w-5 h-5 text-brand-primary" />
-              <h4 className="font-semibold text-gray-900">Delivery Address</h4>
+          <div className="bg-gray-50 rounded-xl p-3 sm:p-4">
+            <div className="flex items-center space-x-2 mb-2 sm:mb-3">
+              <MapPin className="w-4 h-4 sm:w-5 sm:h-5 text-brand-primary" />
+              <h4 className="font-semibold text-gray-900 text-sm sm:text-base">Delivery Address</h4>
             </div>
-            <div className="text-sm text-gray-700 space-y-1">
+            <div className="text-xs sm:text-sm text-gray-700 space-y-1">
               <p className="font-medium">{order.deliveryInfo.address.name}</p>
               <p>{order.deliveryInfo.address.building}</p>
               <p>{order.deliveryInfo.address.area}</p>
@@ -380,158 +273,115 @@ export default function OrderDetailModal({ isOpen, onClose, order }: OrderDetail
 
           {/* Order Items */}
           <div>
-            <h4 className="font-semibold text-gray-900 mb-4 flex items-center">
-              <Package className="w-5 h-5 mr-2 text-brand-primary" />
-              Order Items ({order.items.length})
+            <h4 className="font-semibold text-gray-900 mb-3 sm:mb-4 flex items-center">
+              <Package className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-brand-primary" />
+              Items ({order.items.length})
             </h4>
-            <div className="space-y-3">
-              {order.items.map((item, index) => {
-                const itemTax = calculateItemTax(item);
-                return (
-                  <div key={`${item.productId}-${index}`} className="flex items-center p-4 border border-gray-200 rounded-xl hover:shadow-sm transition-shadow">
-                    {/* Product Image */}
-                    <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
-                      {item.image ? (
-                        <Image
-                          src={item.image}
-                          alt={item.name}
-                          width={64}
-                          height={64}
-                          className="object-cover w-full h-full"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <Package className="w-6 h-6 text-gray-400" />
-                        </div>
+            <div className="space-y-2 sm:space-y-3">
+              {order.items.map((item, index) => (
+                <div key={`${item.productId}-${index}`} className="flex items-center p-2.5 sm:p-3 border border-gray-200 rounded-lg sm:rounded-xl hover:shadow-sm transition-shadow">
+                  {/* Product Image */}
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
+                    {item.image ? (
+                      <Image
+                        src={item.image}
+                        alt={item.name}
+                        width={48}
+                        height={48}
+                        className="object-cover w-full h-full"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Package className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Product Info */}
+                  <div className="flex-1 ml-2.5 sm:ml-3 min-w-0">
+                    <h5 className="font-medium text-gray-900 text-sm sm:text-base mb-0.5 sm:mb-1 truncate">
+                      {item.name}
+                      {item.variantName && (
+                        <span className="text-xs sm:text-sm text-gray-600 font-normal ml-1 sm:ml-2">({item.variantName})</span>
                       )}
-                    </div>
-                    
-                    {/* Product Info */}
-                    <div className="flex-1 ml-4">
-                      <h5 className="font-medium text-gray-900 mb-1">
-                        {item.name}
-                        {item.variantName && (
-                          <span className="text-sm text-gray-600 font-normal ml-2">({item.variantName})</span>
-                        )}
-                      </h5>
-                      <div className="flex items-center space-x-4 text-sm text-gray-500">
-                        <span>Qty: {item.quantity}</span>
-                        {item.brandId && (
-                          <span>
-                            Brand: {typeof item.brandId === 'object' ? item.brandId.name : (typeof item.brandId === 'string' && item.brandId.length > 20 ? 'Loading...' : item.brandId)}
-                          </span>
-                        )}
-                        {item.categoryId && (
-                          <span>
-                            Category: {typeof item.categoryId === 'object' ? item.categoryId.name : (typeof item.categoryId === 'string' && item.categoryId.length > 20 ? 'Loading...' : item.categoryId)}
-                          </span>
-                        )}
-                        {item.tax && (
-                          <span className="text-brand-primary">
-                            Tax: {item.tax.percentage}% 
-                            {item.priceIncludesTax ? ' (Incl.)' : ' (Excl.)'}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {/* Price Info */}
-                    <div className="text-right">
-                      <div className="text-lg font-bold text-gray-900">
-                        ₹{(item.price * item.quantity).toFixed(2)}
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        ₹{item.price.toFixed(2)} x {item.quantity}
-                      </div>
-                      {itemTax.taxAmount > 0 && (
-                        <div className="text-xs text-gray-500">
-                          {item.priceIncludesTax ? 
-                            `(Tax ₹${itemTax.taxAmount.toFixed(2)} included)` :
-                            `+ Tax ₹${itemTax.taxAmount.toFixed(2)}`
-                          }
-                        </div>
+                    </h5>
+                    <div className="flex items-center space-x-2 sm:space-x-4 text-xs sm:text-sm text-gray-500">
+                      <span>Qty: {item.quantity}</span>
+                      {item.tax && (
+                        <span className="text-brand-primary">
+                          Tax: {item.tax.percentage}% 
+                          {item.priceIncludesTax ? ' (Incl.)' : ' (Excl.)'}
+                        </span>
                       )}
                     </div>
                   </div>
-                );
-              })}
+                  
+                  {/* Price Info */}
+                  <div className="text-right ml-2 sm:ml-3 flex-shrink-0">
+                    <div className="text-base sm:text-lg font-bold text-gray-900">
+                      ₹{(item.price * item.quantity).toFixed(2)}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      ₹{item.price.toFixed(2)} × {item.quantity}
+                    </div>
+                    {item.mrp && item.mrp > item.price && (
+                      <div className="text-xs text-gray-500 line-through">
+                        MRP: ₹{item.mrp.toFixed(2)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
           {/* Order Summary */}
-          <div className="bg-gray-50 rounded-xl p-6">
-            <h4 className="font-semibold text-gray-900 mb-4">Order Summary</h4>
-            <div className="space-y-3">
-              {/* Subtotal (Before Tax) */}
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Subtotal (Before Tax)</span>
-                <span className="text-gray-900 font-medium">₹{orderSummary.subtotalBeforeTax.toFixed(2)}</span>
+          <div className="bg-gray-50 rounded-xl p-4 sm:p-6">
+            <h4 className="font-semibold text-gray-900 mb-3 sm:mb-4 text-sm sm:text-base">Order Summary</h4>
+            <div className="space-y-2 sm:space-y-3">
+              {/* Subtotal */}
+              <div className="flex justify-between text-xs sm:text-sm">
+                <span className="text-gray-600">Subtotal</span>
+                <span className="text-gray-900 font-medium">₹{order.pricing.subtotal.toFixed(2)}</span>
               </div>
               
               {/* Discount Applied */}
-              {orderSummary.promocodeDiscount > 0 && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-green-600">Discount Applied</span>
-                  <span className="text-green-600 font-medium">-₹{orderSummary.promocodeDiscount.toFixed(2)}</span>
+              {order.pricing.discountAmount > 0 && (
+                <div className="flex justify-between text-xs sm:text-sm">
+                  <span className="text-green-600">Discount</span>
+                  <span className="text-green-600 font-medium">-₹{order.pricing.discountAmount.toFixed(2)}</span>
                 </div>
               )}
               
-              {/* Tax Breakdown */}
-              {orderSummary.taxAmount > 0 && (
-                <div className="space-y-2">
-                  {orderSummary.totalIGST > 0 ? (
-                    // Interstate - Show IGST
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">IGST</span>
-                      <span className="text-gray-900">₹{orderSummary.totalIGST.toFixed(2)}</span>
-                    </div>
-                  ) : (
-                    // Intrastate - Show CGST + SGST
-                    <>
-                      {orderSummary.totalCGST > 0 && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">CGST</span>
-                          <span className="text-gray-900">₹{orderSummary.totalCGST.toFixed(2)}</span>
-                        </div>
-                      )}
-                      {orderSummary.totalSGST > 0 && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">SGST</span>
-                          <span className="text-gray-900">₹{orderSummary.totalSGST.toFixed(2)}</span>
-                        </div>
-                      )}
-                    </>
-                  )}
-                  
-                  {/* Total Tax */}
-                  <div className="flex justify-between text-sm font-medium">
-                    <span className="text-gray-700">Total Tax</span>
-                    <span className="text-gray-900">₹{orderSummary.taxAmount.toFixed(2)}</span>
-                  </div>
+              {/* Tax Amount */}
+              {order.pricing.taxAmount > 0 && (
+                <div className="flex justify-between text-xs sm:text-sm">
+                  <span className="text-gray-600">Tax</span>
+                  <span className="text-gray-900">₹{order.pricing.taxAmount.toFixed(2)}</span>
                 </div>
               )}
               
               {/* Delivery Charges */}
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Delivery Charges</span>
-                <span className={`font-medium ${orderSummary.deliveryCharge === 0 ? 'text-green-600' : 'text-gray-900'}`}>
-                  {orderSummary.deliveryCharge === 0 ? 'FREE' : `₹${orderSummary.deliveryCharge.toFixed(2)}`}
+              <div className="flex justify-between text-xs sm:text-sm">
+                <span className="text-gray-600">Delivery</span>
+                <span className={`font-medium ${order.pricing.deliveryCharge === 0 ? 'text-green-600' : 'text-gray-900'}`}>
+                  {order.pricing.deliveryCharge === 0 ? 'FREE' : `₹${order.pricing.deliveryCharge.toFixed(2)}`}
                 </span>
               </div>
               
               {/* COD Charges */}
-              {orderSummary.codCharge > 0 && (
-                <div className="flex justify-between text-sm">
+              {order.pricing.codCharge > 0 && (
+                <div className="flex justify-between text-xs sm:text-sm">
                   <span className="text-gray-600">COD Charges</span>
-                  <span className="text-gray-900 font-medium">₹{orderSummary.codCharge.toFixed(2)}</span>
+                  <span className="text-gray-900 font-medium">₹{order.pricing.codCharge.toFixed(2)}</span>
                 </div>
               )}
               
               {/* Total */}
-              <div className="border-t pt-3 mt-3">
+              <div className="border-t pt-2 sm:pt-3 mt-2 sm:mt-3">
                 <div className="flex justify-between">
-                  <span className="text-lg font-semibold text-gray-900">Total</span>
-                  <span className="text-xl font-bold text-green-600">₹{Math.ceil(orderSummary.total)}</span>
+                  <span className="text-base sm:text-lg font-semibold text-gray-900">Total</span>
+                  <span className="text-lg sm:text-xl font-bold text-green-600">₹{order.pricing.total.toFixed(2)}</span>
                 </div>
               </div>
             </div>
@@ -539,7 +389,7 @@ export default function OrderDetailModal({ isOpen, onClose, order }: OrderDetail
         </div>
       </div>
       
-      {/* Invoice Modal */}
+      {/* Invoice Modal - Only for larger displays */}
       {showInvoiceModal && invoiceOrderData && (
         <InvoiceModal
           isOpen={showInvoiceModal}

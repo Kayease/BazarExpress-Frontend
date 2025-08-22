@@ -22,13 +22,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 // Icons
 import { 
   Search, 
-  Filter, 
+  ArrowDownZA, 
   X, 
   Clock, 
   Grid3X3,
   List,
   Star,
-  TrendingUp
+  SlidersHorizontal
 } from 'lucide-react';
 
 // Types
@@ -83,8 +83,8 @@ function SearchPage() {
   
   // UI state
   const [showFilters, setShowFilters] = useState({
-    main: false,
-    brandDropdown: false
+    brandDropdown: false,
+    sortDropdown: false
   });
   
   // User and location
@@ -176,8 +176,6 @@ function SearchPage() {
     });
   }, []); // Remove searchHistory dependency to prevent infinite loop
 
-
-
   // Listen for URL parameter changes to detect typing from navbar
   useEffect(() => {
     const currentQuery = params.get("q") || "";
@@ -208,12 +206,12 @@ function SearchPage() {
     }
   }, [params, searchQuery, saveSearchHistory, lastSavedQuery]);
 
-  // Close brand dropdown when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Element;
-      if (!target.closest('.brand-dropdown')) {
-        setShowFilters(prev => ({ ...prev, brandDropdown: false }));
+      if (!target.closest('.brand-dropdown') && !target.closest('.sort-dropdown')) {
+        setShowFilters(prev => ({ ...prev, brandDropdown: false, sortDropdown: false }));
       }
     };
 
@@ -382,239 +380,232 @@ function SearchPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 py-6">
-        {/* Recent Searches - At the top, single row, no rectangle */}
-      {searchHistory.length > 0 && (
-          <div className="mb-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <div className="flex items-center space-x-2 text-sm text-gray-600">
-                  <Clock className="h-4 w-4" />
-                  <span className="font-medium">Recent Searches:</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  {searchHistory.slice(0, 6).map((item, index) => (
-                    <button
-                      key={index}
-                      onClick={() => handleHistoryItemClick(item.query)}
-                      className="px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded-full text-sm text-gray-700 transition-colors flex items-center space-x-1"
-                    >
-                      <Search className="h-3 w-3 text-gray-400" />
-                      <span>{item.query}</span>
-                    </button>
-                  ))}
-                </div>
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
+        {/* Recent Searches Section - Hidden on Mobile */}
+        {searchHistory.length > 0 && (
+          <div className="hidden sm:block mb-4 sm:mb-6">
+            <div className="flex flex-row items-center justify-between">
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <Clock className="h-4 w-4 flex-shrink-0" />
+                <span className="font-medium">Recent Searches:</span>
               </div>
               <button
                 onClick={clearSearchHistory}
-                className="text-xs text-gray-500 hover:text-gray-700 transition-colors"
+                className="text-xs text-gray-500 hover:text-gray-700 underline transition-colors self-start sm:self-auto"
               >
                 Clear
               </button>
             </div>
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              {searchHistory.slice(0, 6).map((item, index) => (
+                <button
+                  key={index}
+                  onClick={() => handleHistoryItemClick(item.query)}
+                  className="px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded-full text-sm text-gray-700 transition-colors flex items-center space-x-1 whitespace-nowrap"
+                >
+                  <Search className="h-3 w-3 text-gray-400 flex-shrink-0" />
+                  <span className="truncate max-w-[120px]">{item.query}</span>
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
-        {/* Main Content Rectangle */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            {/* Search Results Header - Left side */}
-            <div className="flex-shrink-0">
-              {searchQuery ? (
-                <>
-                  <h1 className="text-lg font-semibold text-gray-900 mb-1">
+        {/* Main Search Results Container */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4 mb-6">
+          {/* Search Results Header with Inline Filters */}
+          <div className="mb-4">
+            {searchQuery ? (
+              <>
+                <div className="flex items-center justify-between gap-3 mb-2">
+                  <h1 className="text-lg sm:text-xl font-semibold text-gray-900 truncate flex-1">
                     Showing results for "{searchQuery}"
                   </h1>
-                  <p className="text-sm text-gray-600">
-                    {productsLoading || showSkeletonOnTyping ? 'Searching...' : `${sortedProducts.length} products found`}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <h1 className="text-lg font-semibold text-gray-900 mb-1">
-                    Search Products
-                  </h1>
-                  <p className="text-sm text-gray-600">
-                    Enter a search term to find products or browse by categories
-                  </p>
-                </>
-              )}
-            </div>
+                  
+                  {/* View Mode Toggle and Filter Controls */}
+                  <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+                    {/* View Mode Toggle */}
+                    <div className="flex items-center bg-gray-100 rounded-lg p-1">
+                      <button
+                        onClick={() => setFilters(prev => ({ ...prev, viewMode: 'grid' }))}
+                        className={`p-1.5 sm:p-2 rounded-md transition-colors ${filters.viewMode === 'grid' ? 'bg-white shadow-sm text-green-600' : 'text-gray-500 hover:text-gray-700'}`}
+                        aria-label="Grid view"
+                      >
+                        <Grid3X3 className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => setFilters(prev => ({ ...prev, viewMode: 'list' }))}
+                        className={`p-1.5 sm:p-2 rounded-md transition-colors ${filters.viewMode === 'list' ? 'bg-white shadow-sm text-green-600' : 'text-gray-500 hover:text-gray-700'}`}
+                        aria-label="List view"
+                      >
+                        <List className="h-4 w-4" />
+                      </button>
+                    </div>
 
-            {/* Right side - Layout and Filter Controls */}
-            <div className="flex items-center gap-3 ml-auto">
-              {/* View Mode Toggle */}
-              <div className="flex items-center bg-gray-100 rounded-lg p-1">
-                <button
-                  onClick={() => setFilters(prev => ({ ...prev, viewMode: 'grid' }))}
-                  className={`p-2 rounded-md transition-colors ${filters.viewMode === 'grid' ? 'bg-white shadow-sm text-green-600' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  <Grid3X3 className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => setFilters(prev => ({ ...prev, viewMode: 'list' }))}
-                  className={`p-2 rounded-md transition-colors ${filters.viewMode === 'list' ? 'bg-white shadow-sm text-green-600' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  <List className="h-4 w-4" />
-                </button>
-              </div>
-
-              {/* Filter Controls */}
-              {showFilters.main && (
-                <div className="flex items-center gap-3">
-                  {/* Brand Filter - Custom Checkbox Dropdown */}
-                  <div className="relative brand-dropdown">
-                    <button
-                      onClick={() => setShowFilters(prev => ({ ...prev, brandDropdown: !prev.brandDropdown }))}
-                      className="w-[220px] h-[40px] bg-white border border-gray-300 rounded-md px-3 py-2 text-left text-sm flex items-center justify-between hover:border-gray-400 focus:ring-0 focus:border-gray-300 transition-colors"
-                    >
-                      <span className="truncate">
-                        {filters.brands.length === 0 
-                          ? "Select Brand" 
-                          : filters.brands.length === 1 
-                            ? brands.find(b => b._id === filters.brands[0])?.name || "Brand"
-                            : "Multiple Brands"
-                        }
-                      </span>
-                      <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-                    
-                    {/* Dropdown Content */}
-                    {showFilters.brandDropdown && (
-                      <div className="absolute top-full left-0 mt-1 w-[280px] bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-[300px] overflow-y-auto">
-                        {/* Header */}
-                        <div className="p-3 border-b border-gray-200 bg-gray-50">
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium text-gray-700">Select Brands</span>
-                            <button
-                              onClick={() => setFilters(prev => ({ ...prev, brands: [] }))}
-                              className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-                            >
-                              Clear All
-                            </button>
+                    {/* Brand Filter Icon */}
+                    <div className="relative brand-dropdown">
+                      <button
+                        onClick={() => setShowFilters(prev => ({ 
+                          ...prev,
+                          brandDropdown: !prev.brandDropdown,
+                          sortDropdown: false
+                        }))}
+                        className={`p-1.5 sm:p-2 rounded-md transition-colors flex items-center gap-1 sm:gap-2 ${
+                          filters.brands.length > 0 
+                            ? 'bg-blue-100 text-blue-600 border border-blue-200' 
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                        aria-label="Select brand filter"
+                      >
+                        <ArrowDownZA className="h-4 w-4" />
+                        <span className="hidden sm:inline text-sm font-medium">
+                          {filters.brands.length === 0 
+                            ? "Brands" 
+                            : filters.brands.length === 1 
+                              ? brands.find(b => b._id === filters.brands[0])?.name || "Brand"
+                              : `${filters.brands.length} Brands`
+                          }
+                        </span>
+                        {filters.brands.length > 0 && (
+                          <span className="bg-blue-500 text-white text-xs rounded-full w-4 h-4 sm:w-5 sm:h-5 flex items-center justify-center font-bold">
+                            {filters.brands.length}
+                          </span>
+                        )}
+                      </button>
+                      
+                      {/* Compact Brand Dropdown */}
+                      {showFilters.brandDropdown && (
+                        <div className="absolute top-full right-0 mt-1 w-64 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-48 overflow-y-auto">
+                          <div className="p-2">
+                            {brands.map((brand) => (
+                              <label key={brand._id} className="flex items-center p-2 hover:bg-gray-50 rounded cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={filters.brands.includes(brand._id)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setFilters(prev => ({ 
+                                        ...prev, 
+                                        brands: [...prev.brands, brand._id] 
+                                      }));
+                                    } else {
+                                      setFilters(prev => ({ 
+                                        ...prev, 
+                                        brands: prev.brands.filter(b => b !== brand._id) 
+                                      }));
+                                    }
+                                  }}
+                                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                />
+                                <span className="ml-2 text-sm text-gray-700">{brand.name}</span>
+                              </label>
+                            ))}
                           </div>
                         </div>
-                        
-                        {/* Brand List */}
-                        <div className="p-2">
-                          {brands.map((brand) => (
-                            <label key={brand._id} className="flex items-center p-2 hover:bg-gray-50 rounded cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={filters.brands.includes(brand._id)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setFilters(prev => ({ 
-                                      ...prev, 
-                                      brands: [...prev.brands, brand._id] 
-                                    }));
-                                  } else {
-                                    setFilters(prev => ({ 
-                                      ...prev, 
-                                      brands: prev.brands.filter(b => b !== brand._id) 
-                                    }));
-                                  }
+                      )}
+                    </div>
+
+                    {/* Sort Filter Icon */}
+                    <div className="relative sort-dropdown">
+                      <button
+                        onClick={() => setShowFilters(prev => ({ 
+                          brandDropdown: false,
+                          sortDropdown: !prev.sortDropdown 
+                        }))}
+                        className={`p-1.5 sm:p-2 rounded-md transition-colors flex items-center gap-1 sm:gap-2 ${
+                          filters.sortBy !== 'relevance' 
+                            ? 'bg-green-100 text-green-600 border border-green-200' 
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                        aria-label="Select sort option"
+                      >
+                        <SlidersHorizontal className="h-4 w-4" />
+                        <span className="hidden sm:inline text-sm font-medium">
+                          Sort
+                        </span>
+                      </button>
+                      
+                      {/* Compact Sort Dropdown */}
+                      {showFilters.sortDropdown && (
+                        <div className="absolute top-full right-0 mt-1 w-48 bg-white border border-gray-200 rounded-md shadow-lg z-50">
+                          <div className="p-1">
+                            {SORT_OPTIONS.map((option) => (
+                              <button
+                                key={option.value}
+                                onClick={() => {
+                                  setFilters(prev => ({ ...prev, sortBy: option.value }));
+                                  setShowFilters(prev => ({ ...prev, sortDropdown: false }));
                                 }}
-                                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                              />
-                              <span className="ml-3 text-sm text-gray-700">{brand.name}</span>
-                            </label>
-                          ))}
+                                className={`w-full text-left px-3 py-2 text-sm rounded hover:bg-gray-50 ${
+                                  filters.sortBy === option.value 
+                                    ? 'bg-green-100 text-green-700 font-medium' 
+                                    : 'text-gray-700'
+                                }`}
+                              >
+                                {option.label}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
-
-                  {/* Sort Filter */}
-                  <Select 
-                    value={filters.sortBy} 
-                    onValueChange={(value) => setFilters(prev => ({ ...prev, sortBy: value }))}
-                  >
-                    <SelectTrigger className="w-[180px] h-[40px] bg-white border-gray-300 focus:ring-0 focus:border-gray-300">
-                      <SelectValue placeholder="Sort by" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white border border-gray-200">
-                      {SORT_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
                 </div>
-              )}
+                
+                <p className="text-sm sm:text-base text-gray-600 mb-3">
+                  {productsLoading || showSkeletonOnTyping ? 'Searching...' : `${sortedProducts.length} products found`}
+                </p>
 
-              {/* Filter Toggle Button */}
-              <button
-                onClick={() => setShowFilters(prev => ({ ...prev, main: !prev.main }))}
-                className={`px-4 h-[40px] rounded-lg font-medium transition-all duration-200 flex items-center justify-center relative ${
-                  showFilters.main
-                    ? 'bg-red-500 hover:bg-red-600 text-white'
-                    : 'bg-green-600 hover:bg-green-700 text-white'
-                }`}
-              >
-                {showFilters.main ? <X className="h-4 w-4" /> : <Filter className="h-4 w-4" />}
-                {hasActiveFilters && (
-                  <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
-                    {[
-                      filters.brands.length > 0,
-                      filters.categories.length > 0,
-                      filters.priceRange[0] > 0,
-                      filters.priceRange[1] < 10000,
-                      filters.sortBy !== 'relevance'
-                    ].filter(Boolean).length}
-                  </span>
-                )}
-              </button>
 
-              {/* Reset Filters Button */}
-              {hasActiveFilters && (
-                <button
-                  onClick={resetFilters}
-                  className="px-3 py-2 text-sm bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors font-medium"
-                >
-                  Reset
-                </button>
-              )}
-            </div>
+              </>
+            ) : (
+              <>
+                <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 mb-2">
+                  Search Products
+                </h1>
+                <p className="text-sm sm:text-base text-gray-600">
+                  Enter a search term to find products or browse by categories
+                </p>
+              </>
+            )}
           </div>
         </div>
 
-        {/* Applied Filters - Just before products */}
+        {/* Applied Filters Section */}
         {hasActiveFilters && (
-          <div className="mb-4">
-            <div className="flex items-center justify-between">
+          <div className="mb-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-medium text-gray-700">Applied filters:</span>
-                                              {filters.brands.length > 0 && (
-                 <>
-                   {filters.brands.map((brandId) => {
-                     const brand = brands.find(b => b._id === brandId);
-                     return (
-                       <span key={brandId} className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
-                         <span>{brand?.name || "Brand"}</span>
-                         <button
-                           onClick={() => setFilters(prev => ({ 
-                             ...prev, 
-                             brands: prev.brands.filter(b => b !== brandId) 
-                           }))}
-                           className="ml-2 hover:bg-blue-200 rounded-full p-0.5"
-                         >
-                           <X className="h-3 w-3" />
-                         </button>
-                       </span>
-                     );
-                   })}
-                 </>
-               )}
+                {filters.brands.length > 0 && (
+                  <>
+                    {filters.brands.map((brandId) => {
+                      const brand = brands.find(b => b._id === brandId);
+                      return (
+                        <span key={brandId} className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                          <span className="truncate max-w-[100px]">{brand?.name || "Brand"}</span>
+                          <button
+                            onClick={() => setFilters(prev => ({ 
+                              ...prev, 
+                              brands: prev.brands.filter(b => b !== brandId) 
+                            }))}
+                            className="ml-2 hover:bg-blue-200 rounded-full p-0.5 flex-shrink-0"
+                            aria-label={`Remove ${brand?.name || 'brand'} filter`}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </>
+                )}
                 {filters.categories.length > 0 && (
                   <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
                     <span>{filters.categories.length} categor{filters.categories.length > 1 ? 'ies' : 'y'}</span>
                     <button
                       onClick={() => setFilters(prev => ({ ...prev, categories: [] }))}
-                      className="ml-2 hover:bg-green-200 rounded-full p-0.5"
+                      className="ml-2 hover:bg-green-200 rounded-full p-0.5 flex-shrink-0"
+                      aria-label="Remove category filter"
                     >
                       <X className="h-3 w-3" />
                     </button>
@@ -622,21 +613,23 @@ function SearchPage() {
                 )}
                 {(filters.priceRange[0] > 0 || filters.priceRange[1] < 10000) && (
                   <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-800">
-                    <span>₹{filters.priceRange[0].toLocaleString()} - ₹{filters.priceRange[1].toLocaleString()}</span>
+                    <span className="truncate">₹{filters.priceRange[0].toLocaleString()} - ₹{filters.priceRange[1].toLocaleString()}</span>
                     <button
                       onClick={() => setFilters(prev => ({ ...prev, priceRange: [0, 10000] }))}
-                      className="ml-2 hover:bg-purple-200 rounded-full p-0.5"
+                      className="ml-2 hover:bg-purple-200 rounded-full p-0.5 flex-shrink-0"
+                      aria-label="Remove price filter"
                     >
                       <X className="h-3 w-3" />
-              </button>
+                    </button>
                   </span>
                 )}
                 {filters.sortBy !== 'relevance' && (
                   <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-orange-100 text-orange-800">
-                    <span>Sort: {SORT_OPTIONS.find(opt => opt.value === filters.sortBy)?.label}</span>
+                    <span className="truncate">Sort: {SORT_OPTIONS.find(opt => opt.value === filters.sortBy)?.label}</span>
                     <button
                       onClick={() => setFilters(prev => ({ ...prev, sortBy: 'relevance' }))}
-                      className="ml-2 hover:bg-orange-200 rounded-full p-0.5"
+                      className="ml-2 hover:bg-orange-200 rounded-full p-0.5 flex-shrink-0"
+                      aria-label="Remove sort filter"
                     >
                       <X className="h-3 w-3" />
                     </button>
@@ -645,15 +638,16 @@ function SearchPage() {
               </div>
               <button
                 onClick={resetFilters}
-                className="text-sm text-gray-500 hover:text-gray-700 underline"
+                className="text-sm text-gray-500 hover:text-gray-700 underline self-start sm:self-auto"
+                aria-label="Clear all filters"
               >
                 Clear all filters
               </button>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-        {/* Products Grid/List */}
+        {/* Products Section */}
         {productsLoading || showSkeletonOnTyping ? (
           <ProductGridSkeleton count={14} viewMode={filters.viewMode} />
         ) : sortedProducts.length === 0 && searchQuery ? (
@@ -679,34 +673,58 @@ function SearchPage() {
                 </ul>
               </div>
             </div>
-              </div>
+          </div>
         ) : (
           <div className={`${
             filters.viewMode === 'grid' 
-              ? 'grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-4' 
-              : 'space-y-4'
+              ? 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3 sm:gap-4 items-start' 
+              : 'space-y-3 sm:space-y-4'
           }`}>
-                {sortedProducts.map((product) => (
-                  <ProductCard
-                    key={product._id}
-                    product={product}
-                    isInWishlist={isInWishlist}
+            {sortedProducts.map((product) => (
+              <ProductCard
+                key={product._id}
+                product={product}
+                isInWishlist={isInWishlist}
                 handleWishlistClick={(product, e) => {
-                      e.stopPropagation();
-                  addToWishlist(product);
+                  e.stopPropagation();
+                  
+                  // Handle variants properly when adding to wishlist
+                  if (product.variants && Object.keys(product.variants).length > 0) {
+                    const firstVariantKey = Object.keys(product.variants)[0];
+                    const firstVariant = product.variants[firstVariantKey];
+                    
+                    const productWithVariant = {
+                      ...product,
+                      variantId: firstVariantKey,
+                      variantName: firstVariant.name || firstVariantKey.replace(/::/g, ' '),
+                      selectedVariant: firstVariant,
+                      price: (firstVariant.price !== undefined ? firstVariant.price : product.price)
+                    };
+                    
+                    addToWishlist(productWithVariant);
+                  } else {
+                    addToWishlist(product);
+                  }
                 }}
                 handleAddToCart={handleAddToCart}
-                quantity={cartItems.find(item => item.id === product._id)?.quantity || 0}
-                    locationState={locationState}
-                    isGlobalMode={isGlobalMode}
+                quantity={cartItems.find(item => {
+                  const idMatch = (item.id || item._id) === product._id;
+                  if (product.variants && Object.keys(product.variants).length > 0) {
+                    const firstVariantKey = Object.keys(product.variants)[0];
+                    return idMatch && item.variantId === firstVariantKey;
+                  }
+                  return idMatch && !item.variantId;
+                })?.quantity || 0}
+                locationState={locationState}
+                isGlobalMode={isGlobalMode}
                 viewMode={filters.viewMode}
                 onClick={() => {
                   addToRecentlyViewed(product);
                   router.push(`/products/${product._id}`);
                 }}
-                  />
-                ))}
-              </div>
+              />
+            ))}
+          </div>
         )}
       </div>
       

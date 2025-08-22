@@ -29,7 +29,7 @@ export function useProducts(params: ProductsParams) {
     category: params.category,
     subcategory: params.subcategory,
     search: params.search,
-    brand: params.brand?.split(','),
+    brand: params.brand ? params.brand.split(',').filter(Boolean) : undefined,
     sort: params.sort || 'relevance',
     minPrice: parseInt(params.minPrice || '10'),
     maxPrice: parseInt(params.maxPrice || '100000'),

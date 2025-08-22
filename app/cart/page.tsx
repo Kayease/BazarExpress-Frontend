@@ -170,10 +170,16 @@ export default function CartPage() {
                   </div>
 
                   {/* Product Details */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <h3 className="font-semibold text-gray-900 text-lg truncate">{item.name}</h3>
+                  <div className="flex-1 min-w-0 flex flex-col justify-center">
+                    <div className="flex justify-between items-start mb-3">
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-gray-900 text-lg truncate mb-1">{item.name}</h3>
+                        {/* Variant Information */}
+                        {item.variantName && (
+                          <p className="text-sm text-gray-600 font-medium mb-1">
+                            Variant: {item.variantName}
+                          </p>
+                        )}
                         <p className="text-sm text-gray-500">
                           {item.category && typeof item.category === "object" && item.category !== null 
                             ? item.category.name || item.categoryId || 'Unknown Category'
@@ -183,53 +189,59 @@ export default function CartPage() {
                             ? item.brand.name || item.brandId || 'Unknown Brand'
                             : item.brand || item.brandId || 'Unknown Brand'}
                         </p>
-                        {item.sku && <p className="text-xs text-gray-400">SKU: {item.sku}</p>}
+                        {item.sku && <p className="text-xs text-gray-400 mt-1">SKU: {item.sku}</p>}
                       </div>
                       <button
-                        onClick={() => removeFromCart(item.id)}
-                        className="text-red-500 hover:text-red-700 p-1 hover:bg-red-50 rounded-lg transition-colors"
+                        onClick={() => removeFromCart(item.id, item.variantId)}
+                        className="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 rounded-lg transition-colors ml-4 flex-shrink-0"
                         aria-label="Remove from cart"
                       >
                         <Trash2 className="h-5 w-5" />
                       </button>
                     </div>
 
+                    {/* Price and Quantity Section */}
                     <div className="flex items-center justify-between">
-                      {/* Quantity Controls */}
-                      <div className="flex items-center border-2 border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm">
-                        <button
-                          onClick={() => updateCartItem(item.id, item.quantity - 1)}
-                          disabled={item.quantity <= 1}
-                          className="px-3 py-2 bg-gray-50 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                          <Minus className="h-4 w-4" />
-                        </button>
-                        <span className="px-4 py-2 font-semibold text-center min-w-[60px]">
-                          {item.quantity}
+                      {/* Left side - Quantity Controls */}
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center border-2 border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm">
+                          <button
+                            onClick={() => updateCartItem(item.id, item.quantity - 1, item.variantId)}
+                            disabled={item.quantity <= 1}
+                            className="px-3 py-2 bg-gray-50 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            <Minus className="h-4 w-4" />
+                          </button>
+                          <span className="px-4 py-2 font-semibold text-center min-w-[60px] bg-white">
+                            {item.quantity}
+                          </span>
+                          <button
+                            onClick={() => updateCartItem(item.id, item.quantity + 1, item.variantId)}
+                            className="px-3 py-2 bg-gray-50 hover:bg-gray-100 transition-colors"
+                          >
+                            <Plus className="h-4 w-4" />
+                          </button>
+                        </div>
+                        <span className="text-sm text-gray-500">
+                          {item.quantity} {item.quantity === 1 ? 'piece' : 'pieces'}
                         </span>
-                        <button
-                          onClick={() => updateCartItem(item.id, item.quantity + 1)}
-                          className="px-3 py-2 bg-gray-50 hover:bg-gray-100 transition-colors"
-                        >
-                          <Plus className="h-4 w-4" />
-                        </button>
                       </div>
 
-                      {/* Price and Actions */}
-                      <div className="text-right">
+                      {/* Right side - Price and Actions */}
+                      <div className="text-right flex flex-col items-end gap-2">
                         <div className="text-xl font-bold text-green-600">
                           ₹{(item.price * item.quantity).toLocaleString()}
                         </div>
                         <div className="text-sm text-gray-500">
-                          ₹{item.price.toLocaleString()} each
+                          ₹{item.price.toLocaleString()} × {item.quantity} = ₹{(item.price * item.quantity).toLocaleString()}
                         </div>
                         <button
                           onClick={() => moveToWishlist(item)}
-                          disabled={isInWishlist(item.id)}
-                          className="text-sm text-blue-600 hover:text-blue-800 disabled:text-gray-400 disabled:cursor-not-allowed flex items-center gap-1 mt-1 transition-colors"
+                          disabled={isInWishlist(item.id, item.variantId)}
+                          className="text-sm text-blue-600 hover:text-blue-800 disabled:text-gray-400 disabled:cursor-not-allowed flex items-center gap-1 transition-colors"
                         >
                           <Heart className="h-4 w-4" />
-                          {isInWishlist(item.id) ? 'In Wishlist' : 'Move to Wishlist'}
+                          {isInWishlist(item.id, item.variantId) ? 'In Wishlist' : 'Move to Wishlist'}
                         </button>
                       </div>
                     </div>

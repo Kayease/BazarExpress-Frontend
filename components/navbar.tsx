@@ -16,6 +16,7 @@ import {
   LogOut as LogOutIcon,
   Heart,
   ChevronUp,
+  Package
 } from "lucide-react";
 
 import Link from "next/link";
@@ -327,6 +328,27 @@ export default function Navbar() {
                 >
                   <Search size={24} />
                 </button>
+                {/* Wishlist Button */}
+                <Link
+                  href="/wishlist"
+                  className="flex items-center px-3 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors relative"
+              >
+                <Heart
+                    size={24}
+                    className={`${wishlistItems.length > 0
+                      ? "text-red-500 fill-red-500"
+                      : ""
+                  } ${wishlistAnimation ? "animate-heart-beat" : ""}`}
+                />
+                {wishlistItems.length > 0 && (
+                  <span
+                      className={`absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center font-medium ${wishlistAnimation ? "animate-counter-pop" : ""
+                    }`}
+                  >
+                    {wishlistItems.length}
+                  </span>
+                )}
+                </Link>
                 <button
                   onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                   className="p-2 rounded-md text-gray-600 hover:bg-gray-100"
@@ -400,7 +422,7 @@ export default function Navbar() {
                             onClick={() => setShowAccountDropdown(false)}
                             className="flex items-center space-x-3 px-3 py-2 text-gray-700 hover:bg-gray-50 rounded-lg"
                           >
-                            <ShoppingCart size={16} />
+                            <Package size={16} />
                             <span>My Orders</span>
                             </Link>
                           {user?.role && ['admin', 'product_inventory_management', 'order_warehouse_management', 'marketing_content_manager', 'customer_support_executive', 'report_finance_analyst', 'delivery_boy'].includes(user.role) && (
@@ -580,7 +602,7 @@ export default function Navbar() {
                     className="w-full flex items-center p-3 bg-white border border-gray-200 rounded-lg"
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
-                    <ShoppingCart size={18} className="mr-3" />
+                    <Package size={18} className="mr-3" />
                     <span className="font-medium">My Orders</span>
                   </Link>
 

@@ -176,9 +176,9 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
                         <div className="flex items-center">
                           <button 
                             onClick={() => moveToWishlist(item)}
-                            disabled={isInWishlist(item.id)}
+                            disabled={isInWishlist(item.id, item.variantId)}
                             className="p-1.5 text-red-500 hover:bg-red-50 rounded-full transition-colors mr-1"
-                            title={isInWishlist(item.id) ? "Already in wishlist" : "Move to wishlist"}
+                            title={isInWishlist(item.id, item.variantId) ? "Already in wishlist" : "Move to wishlist"}
                           >
                             <Heart className="h-4 w-4" />
                           </button>

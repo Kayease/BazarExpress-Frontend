@@ -15,6 +15,10 @@ export async function GET(request: NextRequest) {
     const parentCategory = searchParams.get('parentCategory');
     const search = searchParams.get('search');
     const mode = searchParams.get('mode') || 'auto';
+    const brand = searchParams.get('brand');
+    const sort = searchParams.get('sort');
+    const minPrice = searchParams.get('minPrice');
+    const maxPrice = searchParams.get('maxPrice');
 
     // Validate required parameters
     if (!pincode) {
@@ -47,6 +51,22 @@ export async function GET(request: NextRequest) {
     
     if (search) {
       backendParams.append('search', search);
+    }
+    
+    if (brand) {
+      backendParams.append('brand', brand);
+    }
+    
+    if (sort) {
+      backendParams.append('sort', sort);
+    }
+    
+    if (minPrice) {
+      backendParams.append('minPrice', minPrice);
+    }
+    
+    if (maxPrice) {
+      backendParams.append('maxPrice', maxPrice);
     }
 
     // Make request to backend API

@@ -17,15 +17,17 @@ import {
 } from 'lucide-react';
 import { useLocation } from '@/components/location-provider';
 import { 
-  getProductsByLocation, 
-  LocationProductsResponse, 
-  ProductWithDelivery,
-  formatDistance,
-  formatDuration
-} from '@/lib/location';
+  getProductsByPincode, 
+  ProductsByPincode, 
+} from '@/lib/warehouse-location';
+import { ProductWithWarehouse } from '@/lib/warehouse-validation';
 import { useCartContext, useWishlistContext } from '@/components/app-provider';
 import toast from 'react-hot-toast';
 import Image from 'next/image';
+
+// Simple format functions
+const formatDistance = (distance: number) => `${distance.toFixed(1)} km`;
+const formatDuration = (duration: number) => `${Math.round(duration)} min`;
 
 interface LocationBasedProductsProps {
   categoryId?: string;
@@ -46,10 +48,10 @@ export function LocationBasedProducts({
   sortBy = 'name'
 }: LocationBasedProductsProps) {
   const { 
-    selectedLocation, 
-    locationName, 
-    deliveryAvailable, 
-    availableWarehouses,
+    locationState, 
+    isLoading: locationLoading,
+    deliveryMessage,
+    isGlobalMode,
     setShowLocationModal,
   } = useLocation();
   
@@ -57,7 +59,7 @@ export function LocationBasedProducts({
   const { addToWishlist, isInWishlist } = useWishlistContext();
 
   // Product states
-  const [products, setProducts] = useState<ProductWithDelivery[]>([]);
+  const [products, setProducts] = useState<ProductWithWarehouse[]>([]);
   const [totalProducts, setTotalProducts] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,63 +74,55 @@ export function LocationBasedProducts({
   // Load products when location or filters change
   useEffect(() => {
     // If pincode prop is given, treat as location detected
-    if ((pincode || selectedLocation) && deliveryAvailable) {
+    if ((pincode || locationState?.pincode) && locationState?.isLocationDetected) {
       loadProducts();
     } else {
       setProducts([]);
       setTotalProducts(0);
     }
 
-  }, [pincode, selectedLocation, deliveryAvailable, categoryId, currentPage, selectedWarehouse, sortBy, status]);
+  }, [pincode, locationState?.pincode, locationState?.isLocationDetected, categoryId, currentPage, selectedWarehouse, sortBy, status]);
 
   // Load products from API
   const loadProducts = async () => {
-    // Use pincode prop if provided, else selectedLocation
-    let locationArg = selectedLocation;
-    if (pincode) {
-      // Build a minimal location object for compatibility
-      locationArg = { pincode } as any;
-    }
-
-    if (!locationArg) return;
+    // Use pincode prop if provided, else locationState
+    const targetPincode = pincode || locationState?.pincode;
+    
+    if (!targetPincode) return;
 
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await getProductsByLocation(locationArg, {
+      const response = await getProductsByPincode(targetPincode, {
         category: categoryId,
         search: searchQuery,
         page: currentPage,
         limit: productsPerPage,
-        status: status
+        mode: isGlobalMode ? 'global' : 'auto'
       });
 
-      if (response.success && response.deliveryAvailable) {
+      if (response.success) {
         let filteredProducts = response.products;
 
         // Filter by warehouse if selected
         if (selectedWarehouse !== 'all') {
           filteredProducts = response.products.filter(
-            product => product.warehouseId._id === selectedWarehouse
+            product => product.warehouse?._id === selectedWarehouse
           );
         }
-
 
         // Sort products
         filteredProducts.sort((a, b) => {
           switch (sortBy) {
             case 'price-low':
-              return a.price - b.price;
+              return (a.price || 0) - (b.price || 0);
             case 'price-high':
-              return b.price - a.price;
-            case 'distance':
-              return (a.deliveryInfo?.distance || 999) - (b.deliveryInfo?.distance || 999);
+              return (b.price || 0) - (a.price || 0);
             case 'name':
             default:
               return a.name.localeCompare(b.name);
           }
-
         });
 
         setProducts(filteredProducts);
@@ -137,7 +131,7 @@ export function LocationBasedProducts({
       } else {
         setProducts([]);
         setTotalProducts(0);
-        setError(response.message || 'No products available for delivery');
+        setError(response.error || 'No products available for delivery');
       }
 
     } catch (error) {
@@ -154,7 +148,7 @@ export function LocationBasedProducts({
 
 
   // Handle add to cart
-  const handleAddToCart = async (product: ProductWithDelivery) => {
+  const handleAddToCart = async (product: ProductWithWarehouse) => {
     try {
       await addToCart({
         id: product._id,
@@ -162,12 +156,11 @@ export function LocationBasedProducts({
         price: product.price,
         image: product.image,
         quantity: 1,
-        warehouseId: product.warehouseId._id,
-        warehouseName: product.warehouseId.name,
-        variants: product.variants // Include variants for validation
+        warehouse: product.warehouse,
+        variants: product.variants // Include variants for validation if available
       });
       
-      toast.success(`${product.name} added to cart`);
+   //   toast.success(`${product.name} added to cart`);
     } catch (error: any) {
       if (error.isVariantRequired) {
         toast.error(`Please select a variant for ${product.name} before adding to cart`);
@@ -180,7 +173,7 @@ export function LocationBasedProducts({
   };
 
   // No location selected
-  if (!selectedLocation) {
+  if (!locationState?.pincode) {
     return (
       <div className="text-center py-12">
         <MapPin className="h-16 w-16 text-gray-400 mx-auto mb-4" />
@@ -203,8 +196,8 @@ export function LocationBasedProducts({
   }
 
 
-  // No delivery available
-  if (!deliveryAvailable) {
+  // No delivery available - we can remove this check or replace with error state
+  if (error && products.length === 0) {
     return (
       <div className="text-center py-12">
         <AlertCircle className="h-16 w-16 text-red-400 mx-auto mb-4" />
@@ -215,8 +208,7 @@ export function LocationBasedProducts({
           We don't deliver to your selected location yet.
         </p>
         <p className="text-sm text-gray-500 mb-6">
-          Location: {locationName}
-
+          Location: {locationState?.pincode || 'Unknown'}
         </p>
         <Button 
           onClick={() => setShowLocationModal(true)}
@@ -241,11 +233,10 @@ export function LocationBasedProducts({
             <CheckCircle className="h-5 w-5 text-green-600" />
             <div>
               <p className="font-medium text-green-800">
-                Delivering to: {locationName}
-
+                Delivering to: {locationState?.pincode || 'Unknown'}
               </p>
               <p className="text-sm text-green-600">
-                {availableWarehouses.length} warehouse(s) available
+                {totalProducts} product(s) available
               </p>
             </div>
           </div>
@@ -267,13 +258,7 @@ export function LocationBasedProducts({
         <p className="text-gray-600">
           {isLoading ? 'Loading...' : `${totalProducts} products available for delivery`}
         </p>
-        
-        {availableWarehouses.length > 0 && (
-          <div className="flex items-center gap-2 text-sm text-gray-500">
-            <Store className="h-4 w-4" />
-            <span>From {availableWarehouses.length} warehouse(s)</span>
-          </div>
-        )}
+
       </div>
 
       {/* Loading State */}
@@ -303,7 +288,7 @@ export function LocationBasedProducts({
               {/* Product Image */}
               <div className="relative h-48 bg-gray-100">
                 <Image
-                  src={product.image}
+                  src={product.image || "/placeholder.svg"}
                   alt={product.name}
                   fill
                   className="object-cover"

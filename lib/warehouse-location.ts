@@ -109,6 +109,10 @@ export async function getProductsByPincode(
     parentCategory?: string;
     search?: string;
     mode?: 'auto' | 'global';
+    brand?: string[];
+    sort?: string;
+    minPrice?: number;
+    maxPrice?: number;
   } = {}
 ): Promise<ProductsByPincode> {
   try {
@@ -136,6 +140,22 @@ export async function getProductsByPincode(
 
     if (options.mode) {
       queryParams.append('mode', options.mode);
+    }
+    
+    if (options.brand && options.brand.length > 0) {
+      queryParams.append('brand', options.brand.join(','));
+    }
+    
+    if (options.sort) {
+      queryParams.append('sort', options.sort);
+    }
+    
+    if (options.minPrice) {
+      queryParams.append('minPrice', options.minPrice.toString());
+    }
+    
+    if (options.maxPrice) {
+      queryParams.append('maxPrice', options.maxPrice.toString());
     }
 
     const apiUrl = USE_NEXTJS_API ? `/api/warehouses/products-by-pincode?${queryParams}` : `${API_BASE_URL}/warehouses/products-by-pincode?${queryParams}`;

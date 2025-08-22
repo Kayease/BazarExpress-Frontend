@@ -67,7 +67,7 @@ export default function CategorySection() {
             <p className="text-gray-600">No categories available to display.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-1 sm:gap-2 md:gap-3 lg:gap-4">
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-10 gap-1 sm:gap-2 md:gap-3 lg:gap-4">
             {categories.map((category) => (
               <button
                 key={category._id}

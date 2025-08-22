@@ -291,7 +291,7 @@ export default function ProductSection({
         });
         
         // Show toast with variant name
-        toast.success(`${product.name} (${variant?.name || product.variantId.replace(/::/g, ' ')}) added to cart`);
+    //    toast.success(`${product.name} (${variant?.name || product.variantId.replace(/::/g, ' ')}) added to cart`);
       }
       // Check if product has variants and include the first variant by default
       else if (product.variants && Object.keys(product.variants).length > 0) {
@@ -315,12 +315,12 @@ export default function ProductSection({
         });
         
         // Show toast with variant name
-        toast.success(`${product.name} (${firstVariant.name || firstVariantKey.replace(/::/g, ' ')}) added to cart`);
+    //    toast.success(`${product.name} (${firstVariant.name || firstVariantKey.replace(/::/g, ' ')}) added to cart`);
       } else {
         // No variants, use product ID as key
         setQuantities(q => ({ ...q, [productId]: 1 }));
         await addToCart({ ...product, id: productId, quantity: 1 });
-        toast.success(`${product.name} added to cart`);
+     //   toast.success(`${product.name} added to cart`);
       }
     } catch (error: any) {
       if (error.isVariantRequired) {
@@ -516,7 +516,7 @@ export default function ProductSection({
               <div className="mb-8 sm:mb-12" key={section.category._id}>
                 <div className="flex justify-between items-center mb-4 px-2 sm:px-0">
                   <div className="text-xl sm:text-2xl font-extrabold">{section.category.name}</div>
-                  <Link href={`/products?category=${section.category._id}`} className="text-green-600 font-medium hover:underline text-sm sm:text-base">See all</Link>
+                  <Link href={`/products?category=${section.category._id}`} className="hidden sm:inline text-green-600 font-medium hover:underline text-sm sm:text-base">See all</Link>
                 </div>
                 <div className="relative">
                   {/* Left Button - Hidden on mobile, visible on larger screens */}
@@ -541,27 +541,7 @@ export default function ProductSection({
                     <ChevronRight className="w-5 h-5" />
                   </button>
                   
-                  {/* Mobile Navigation Dots - Hidden on mobile, only visible on tablet */}
-                  <div className="hidden md:flex lg:hidden justify-center mt-4 space-x-2">
-                    {Array.from({ length: Math.ceil(section.products.length / 2) }).map((_, index) => (
-                      <button
-                        key={index}
-                        className={`w-2 h-2 rounded-full transition-colors ${
-                          index === Math.floor((scrollRefs.current[section.category._id]?.scrollLeft || 0) / 200) 
-                            ? 'bg-green-600' 
-                            : 'bg-gray-300'
-                        }`}
-                        onClick={() => {
-                          const scrollAmount = index * 200;
-                          scrollRefs.current[section.category._id]?.scrollTo({
-                            left: scrollAmount,
-                            behavior: 'smooth'
-                          });
-                        }}
-                        aria-label={`Go to slide ${index + 1}`}
-                      />
-                    ))}
-                  </div>
+
                   
                   <div
                     className="overflow-x-auto scrollbar-hide"
@@ -625,6 +605,12 @@ export default function ProductSection({
                             `Your cart has items from "${existingWarehouse.name}". Clear cart or choose products from the same store.` :
                             'Cannot add to cart due to warehouse conflict';
                         };
+
+                        // Create product object with variant information for wishlist check
+                        const productWithVariant = {
+                          ...product,
+                          variantId: product.variants && Object.keys(product.variants).length > 0 ? Object.keys(product.variants)[0] : undefined
+                        };
                         
                         return (
                           <div 
@@ -662,10 +648,13 @@ export default function ProductSection({
                             {/* Wishlist Button */}
                             <button
                               className="absolute top-2 right-2 z-10 p-1 rounded-full bg-white shadow hover:bg-gray-100"
-                              onClick={(e) => handleWishlistClick(product, e)}
-                              aria-label={isInWishlist && isInWishlist(product._id) ? 'Remove from wishlist' : 'Add to wishlist'}
+                              onClick={e => {
+                                e.stopPropagation();
+                                handleWishlistClick && handleWishlistClick(product, e);
+                              }}
+                              aria-label={isInWishlist && isInWishlist(product._id, productWithVariant.variantId) ? 'Remove from wishlist' : 'Add to wishlist'}
                             >
-                              <Heart className={`w-5 h-5 transition-colors duration-200 ${isInWishlist && isInWishlist(product._id) ? 'text-red-500 fill-red-500' : 'text-gray-400 fill-none'}`} />
+                              <Heart className={`w-5 h-5 transition-colors duration-200 ${isInWishlist && isInWishlist(product._id, productWithVariant.variantId) ? 'text-red-500 fill-red-500' : 'text-gray-400 fill-none'}`} />
                             </button>
                             {/* Product Image */}
                             <div className="flex justify-center items-center h-32 pt-2">

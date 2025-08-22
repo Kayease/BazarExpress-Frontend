@@ -13,6 +13,9 @@ module.exports = {
     ],
     theme: {
         extend: {
+            screens: {
+                'xs': '475px',
+            },
             colors: {
                 brand: {
                     primary: "hsl(275, 56%, 60%)", // Soft Violet (from top-right wing)

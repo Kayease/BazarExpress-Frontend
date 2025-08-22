@@ -8,7 +8,7 @@ import WarehouseConflictModal from "@/components/warehouse-conflict-modal";
 
 interface ProductCardProps {
   product: any;
-  isInWishlist?: (id: string) => boolean;
+  isInWishlist?: (id: string, variantId?: string) => boolean;
   handleWishlistClick?: (product: any, e: React.MouseEvent) => void;
   handleAdd?: (product: any) => void;
   handleAddToCart?: (product: any) => void;
@@ -19,6 +19,7 @@ interface ProductCardProps {
   isGlobalMode?: boolean;
   onClick?: () => void;
   viewMode?: 'grid' | 'list';
+  forceCanAdd?: boolean; // Allow parent to force canAddProduct to true
 }
 
 const ProductCard: React.FC<ProductCardProps> = ({
@@ -33,7 +34,8 @@ const ProductCard: React.FC<ProductCardProps> = ({
   locationState,
   isGlobalMode,
   onClick,
-  viewMode = 'grid'
+  viewMode = 'grid',
+  forceCanAdd
 }) => {
   // Rating component
   const renderStars = (rating: number) => {
@@ -106,7 +108,18 @@ const ProductCard: React.FC<ProductCardProps> = ({
   const productWithVariant = variantId ? {...product, variantId} : product;
   
   // Warehouse validation
-  const canAddProduct = canAddToCart(product, cartItems);
+  const canAddProduct = forceCanAdd ? true : canAddToCart(product, cartItems);
+  
+  console.log('ProductCard debug:', {
+    productName: product.name,
+    productId: product._id,
+    variantId: product.variantId,
+    warehouse: product.warehouse,
+    canAddProduct,
+    cartItemsCount: cartItems.length,
+    hasHandleAddToCart: !!handleAddToCart,
+    hasHandleAdd: !!handleAdd
+  });
   const conflictInfo = getWarehouseConflictInfo(product, cartItems);
   const isInCart = currentQuantity > 0;
 
@@ -137,11 +150,12 @@ const ProductCard: React.FC<ProductCardProps> = ({
   };
 
 
+  // List view layout
   if (viewMode === 'list') {
     return (
       <div
-        className={`w-full bg-white border border-gray-100 rounded-lg flex items-center p-3 gap-3 relative group cursor-pointer hover:shadow-md hover:border-gray-200 transition-all duration-200 ${
-          !canAddProduct && !isInCart ? 'border-orange-200 bg-orange-50/30' : 'hover:bg-gray-50/50'
+        className={`w-full bg-white border rounded-xl flex items-center gap-4 p-4 relative group cursor-pointer hover:shadow-lg transition-all duration-300 ${
+          !canAddProduct && !isInCart ? 'border-orange-200 bg-orange-50/30' : 'border-gray-200'
         }`}
         style={{ fontFamily: 'Sinkin Sans, sans-serif' }}
         onClick={onClick}
@@ -151,7 +165,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
       >
         {/* Discount Badge */}
         {showDiscountBadge && (
-          <div className="absolute left-5 top-0 z-10 flex items-center justify-center" style={{ width: '29px', height: '28px', pointerEvents: 'none' }}>
+          <div className="absolute left-3 top-3 z-10 flex items-center justify-center" style={{ width: '29px', height: '28px', pointerEvents: 'none' }}>
             <svg width="29" height="28" viewBox="0 0 29 28" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M28.9499 0C28.3999 0 27.9361 1.44696 27.9361 2.60412V27.9718L24.5708 25.9718L21.2055 27.9718L17.8402 25.9718L14.4749 27.9718L11.1096 25.9718L7.74436 27.9718L4.37907 25.9718L1.01378 27.9718V2.6037C1.01378 1.44655 0.549931 0 0 0H28.9499Z" fill="#256fef"></path>
             </svg>
@@ -163,31 +177,29 @@ const ProductCard: React.FC<ProductCardProps> = ({
         
         {/* Warehouse Conflict Warning */}
         {!canAddProduct && !isInCart && (
-          <div className="absolute top-2 left-2 z-10" style={{ pointerEvents: 'none' }}>
-            <div className="bg-orange-100 border border-orange-200 rounded-md px-2 py-1">
-              <div className="flex items-center gap-1">
-                <AlertTriangle className="w-3 h-3 text-orange-600" />
-                <span className="text-xs text-orange-700 font-medium">Different Store</span>
-              </div>
+          <div className="absolute top-3 left-3 z-10 bg-orange-100 border border-orange-200 rounded-md px-2 py-1" style={{ pointerEvents: 'none' }}>
+            <div className="flex items-center gap-1">
+              <AlertTriangle className="w-3 h-3 text-orange-600" />
+              <span className="text-xs text-orange-700 font-medium">Different Store</span>
             </div>
           </div>
         )}
         
         {/* Wishlist Button */}
         <button
-          className="absolute top-2 right-2 z-10 p-1.5 rounded-full bg-white shadow-sm hover:bg-gray-50 hover:shadow-md transition-all duration-200"
+          className="absolute top-3 right-3 z-10 p-2 rounded-full bg-white shadow hover:bg-gray-100 transition-colors"
           onClick={e => {
             e.stopPropagation();
             handleWishlistClick && handleWishlistClick(productWithVariant, e);
           }}
-          aria-label={isInWishlist && isInWishlist(product._id) ? 'Remove from wishlist' : 'Add to wishlist'}
+          aria-label={isInWishlist && isInWishlist(product._id, product.variantId || (product.variants && Object.keys(product.variants).length > 0 ? Object.keys(product.variants)[0] : undefined)) ? 'Remove from wishlist' : 'Add to wishlist'}
         >
-          <Heart className={`w-4 h-4 transition-colors duration-200 ${isInWishlist && isInWishlist(product._id) ? 'text-red-500 fill-red-500' : 'text-gray-400 hover:text-red-400'}`} />
+          <Heart className={`w-5 h-5 transition-colors duration-200 ${isInWishlist && isInWishlist(product._id, product.variantId || (product.variants && Object.keys(product.variants).length > 0 ? Object.keys(product.variants)[0] : undefined)) ? 'text-red-500 fill-red-500' : 'text-gray-400 fill-none'}`} />
         </button>
 
         {/* Product Image */}
         <div className="flex-shrink-0">
-          <div className="w-20 h-20 rounded-lg overflow-hidden bg-gray-50 border border-gray-100">
+          <div className="w-24 h-24 rounded-xl overflow-hidden bg-gray-50 border border-gray-100">
             <img 
               src={product.image || "/placeholder.svg"} 
               alt={product.name} 
@@ -197,116 +209,108 @@ const ProductCard: React.FC<ProductCardProps> = ({
         </div>
 
         {/* Product Details */}
-        <div className="flex-1 min-w-0">
-          {/* Delivery Mode Indicator */}
-          {locationState?.isLocationDetected && (
-            <div className="flex items-center gap-2 mb-2">
-              <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
-                isGlobalMode 
-                  ? 'bg-blue-100 text-blue-700 border border-blue-200' 
-                  : 'bg-green-100 text-green-700 border border-green-200'
-              }`}>
-                {isGlobalMode ? (
-                  <>
-                    <Globe className="w-3 h-3" />
-                    <span>Global</span>
-                  </>
-                ) : (
-                  <>
-                    <Store className="w-3 h-3" />
-                    <span>Local</span>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
+        <div className="flex-1 min-w-0 flex flex-col justify-center">
+          {/* Product Name and Variant */}
+          <div className="mb-3">
+            <h3 className="text-lg font-semibold text-gray-900 mb-1 leading-tight">
+              {product.name}
+            </h3>
+            
+            {/* Variant Name */}
+            {product.variantName && (
+              <p className="text-sm text-gray-600 font-medium mb-1">
+                Variant: {product.variantName}
+              </p>
+            )}
 
-          {/* Product Name */}
-          <h3 className="text-sm font-semibold text-gray-900 mb-1 leading-tight line-clamp-2">
-            {product.name}
-          </h3>
+            {/* Category and Brand */}
+            <p className="text-sm text-gray-500">
+              {product.category && typeof product.category === "object" && product.category !== null 
+                ? product.category.name || product.categoryId || 'Unknown Category'
+                : product.category || product.categoryId || 'Unknown Category'}
+              {" • "}
+              {product.brand && typeof product.brand === "object" && product.brand !== null 
+                ? product.brand.name || product.brandId || 'Unknown Brand'
+                : product.brand || product.brandId || 'Unknown Brand'}
+            </p>
+            
+            {/* SKU */}
+            {product.sku && <p className="text-xs text-gray-400 mt-1">SKU: {product.sku}</p>}
+          </div>
 
           {/* Rating Stars */}
-          <div className="flex items-center gap-1 mb-2">
+          <div className="flex items-center gap-1 mb-3">
             {renderStars(product.rating || 0)}
-            <span className="text-xs text-gray-500 ml-1">({product.rating || 0})</span>
+            <span className="text-sm text-gray-500 ml-1">({product.rating || 0})</span>
           </div>
 
-          {/* Variant/Weight/Unit */}
-          <div className={`text-xs mb-2 font-medium flex items-center gap-1 ${product.variants && Object.keys(product.variants).length > 0 ? 'text-green-600' : 'text-gray-600'}`}>
-            <span>{product.unit}</span>
-            {product.variants && Object.keys(product.variants).length > 0 && (
-              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-              </svg>
-            )}
-          </div>
-
-          {/* Price Section */}
-          <div className="flex items-center gap-2">
-            <div className="text-base font-bold text-gray-900">
-              ₹{product.price}
-            </div>
-            {hasDiscount && (
-              <div className="text-sm text-gray-400 line-through font-medium">
-                ₹{product.mrp}
+          {/* Price and Actions Section */}
+          <div className="flex items-center justify-between">
+            {/* Left side - Price Information */}
+            <div className="flex flex-col">
+              <div className="text-xl font-bold text-green-600">
+                ₹{product.price.toLocaleString()}
               </div>
-            )}
+              {hasDiscount && (
+                <div className="text-sm text-gray-400 line-through">
+                  ₹{product.mrp?.toLocaleString()}
+                </div>
+              )}
+            </div>
+
+            {/* Right side - Action Buttons */}
+            <div className="flex items-center gap-3">
+              {currentQuantity > 0 ? (
+                <div className="flex items-center border-2 border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm">
+                  <button
+                    onClick={handleDecrement}
+                    disabled={currentQuantity <= 1}
+                    className="px-3 py-2 bg-gray-50 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <span className="text-lg font-semibold">-</span>
+                  </button>
+                  <span className="px-4 py-2 font-semibold text-center min-w-[60px] bg-white">
+                    {currentQuantity}
+                  </span>
+                  <button
+                    onClick={handleIncrement}
+                    className="px-3 py-2 bg-gray-50 hover:bg-gray-100 transition-colors"
+                  >
+                    <span className="text-lg font-semibold">+</span>
+                  </button>
+                </div>
+              ) : canAddProduct ? (
+                <button
+                  className="bg-green-600 hover:bg-green-700 text-white font-medium px-6 py-3 rounded-xl shadow-sm hover:shadow-md transition-all duration-200"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (handleAddToCart) {
+                      handleAddToCart(productWithVariant);
+                    } else if (handleAdd) {
+                      handleAdd(productWithVariant);
+                    }
+                  }}
+                >
+                  ADD TO CART
+                </button>
+              ) : (
+                <button
+                  className="bg-orange-100 hover:bg-orange-200 text-orange-700 font-medium px-4 py-3 rounded-xl border border-orange-200 hover:border-orange-300 transition-all duration-200"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    showConflictModal(productWithVariant);
+                  }}
+                  title="Click to see options"
+                >
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4" />
+                    <span>BLOCKED</span>
+                  </div>
+                </button>
+              )}
+            </div>
           </div>
         </div>
-
-        {/* Action Section - All buttons are absolutely positioned */}
-        {currentQuantity > 0 ? (
-          <div className="absolute bottom-4 right-3 flex items-center bg-green-600 rounded-lg shadow-sm" style={{ width: '80px', height: '32px' }}>
-            <button
-              className="text-white text-sm font-semibold focus:outline-none rounded-l-lg px-2 py-1 hover:bg-green-700 transition-colors duration-150 border-none flex-1 h-full flex items-center justify-center"
-              onClick={handleDecrement}
-              aria-label="Decrease quantity"
-            >
-              -
-            </button>
-            <span className="text-white font-bold text-sm select-none px-2 py-1 bg-green-600 flex-1 h-full flex items-center justify-center">
-              {currentQuantity}
-            </span>
-            <button
-              className="text-white text-sm font-semibold focus:outline-none rounded-r-lg px-2 py-1 hover:bg-green-700 transition-colors duration-150 border-none flex-1 h-full flex items-center justify-center"
-              onClick={handleIncrement}
-              aria-label="Increase quantity"
-            >
-              +
-            </button>
-          </div>
-        ) : canAddProduct ? (
-          <button
-            className="absolute bottom-4 right-3 bg-green-600 hover:bg-green-700 text-white font-medium text-sm px-4 py-2 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-center"
-            style={{ width: '80px', height: '32px' }}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (handleAddToCart) {
-                handleAddToCart(productWithVariant);
-              } else if (handleAdd) {
-                handleAdd(productWithVariant);
-              }
-            }}
-          >
-            ADD
-          </button>
-        ) : (
-          <button
-            className="absolute bottom-4 right-3 bg-orange-100 hover:bg-orange-200 text-orange-700 font-medium text-sm px-3 py-2 rounded-lg border border-orange-200 hover:border-orange-300 transition-all duration-200 flex items-center justify-center"
-            style={{ width: '80px', height: '32px' }}
-            onClick={(e) => {
-              e.stopPropagation();
-              showConflictModal(productWithVariant);
-            }}
-            title="Click to see options"
-          >
-            <div className="flex items-center justify-center">
-              <AlertTriangle className="w-3 h-3" />
-              <span>Blocked</span>
-            </div>
-          </button>
-        )}
 
         {/* Warehouse Conflict Modal */}
         <WarehouseConflictModal
@@ -327,10 +331,10 @@ const ProductCard: React.FC<ProductCardProps> = ({
   return (
     <div
       key={product._id}
-      className={`w-full max-w-[180px] bg-white border rounded-lg flex flex-col relative group cursor-pointer hover:shadow-lg transition ${
+      className={`w-full h-full bg-white border rounded-lg flex flex-col relative group cursor-pointer hover:shadow-lg transition ${
         !canAddProduct && !isInCart ? 'border-orange-200 bg-orange-50/30' : 'border-gray-200'
       }`}
-      style={{ fontFamily: 'Sinkin Sans, sans-serif', boxShadow: 'none', minHeight: '220px' }}
+      style={{ fontFamily: 'Sinkin Sans, sans-serif', boxShadow: 'none' }}
       onClick={onClick}
       tabIndex={0}
       role="button"
@@ -365,9 +369,9 @@ const ProductCard: React.FC<ProductCardProps> = ({
           e.stopPropagation();
           handleWishlistClick && handleWishlistClick(productWithVariant, e);
         }}
-        aria-label={isInWishlist && isInWishlist(product._id) ? 'Remove from wishlist' : 'Add to wishlist'}
+        aria-label={isInWishlist && isInWishlist(product._id, product.variantId || (product.variants && Object.keys(product.variants).length > 0 ? Object.keys(product.variants)[0] : undefined)) ? 'Remove from wishlist' : 'Add to wishlist'}
       >
-        <Heart className={`w-5 h-5 transition-colors duration-200 ${isInWishlist && isInWishlist(product._id) ? 'text-red-500 fill-red-500' : 'text-gray-400 fill-none'}`} />
+        <Heart className={`w-5 h-5 transition-colors duration-200 ${isInWishlist && isInWishlist(product._id, product.variantId || (product.variants && Object.keys(product.variants).length > 0 ? Object.keys(product.variants)[0] : undefined)) ? 'text-red-500 fill-red-500' : 'text-gray-400 fill-none'}`} />
       </button>
       {/* Product Image */}
       <div className="flex justify-center items-center h-24 pt-2">
@@ -396,6 +400,13 @@ const ProductCard: React.FC<ProductCardProps> = ({
           <div className="text-[11px] font-bold text-gray-900 line-clamp-2 mb-1 leading-tight" style={{ fontFamily: 'Sinkin Sans, sans-serif' }}>
             {product.name}
           </div>
+          
+          {/* Variant Name */}
+          {product.variantName && (
+            <div className="text-[9px] text-blue-600 font-medium mb-1 leading-tight">
+              {product.variantName}
+            </div>
+          )}
           {/* Rating Stars */}
           <div className="flex items-center gap-1 mb-1">
             {renderStars(product.rating || 0)}
@@ -440,10 +451,19 @@ const ProductCard: React.FC<ProductCardProps> = ({
                 style={{ width: '70px', height: '28px', fontFamily: 'Sinkin Sans, sans-serif' }}
                 onClick={(e) => {
                   e.stopPropagation();
+                  console.log('ADD button clicked for product:', product.name);
+                  console.log('handleAddToCart available:', !!handleAddToCart);
+                  console.log('handleAdd available:', !!handleAdd);
+                  console.log('productWithVariant:', productWithVariant);
+                  
                   if (handleAddToCart) {
+                    console.log('Calling handleAddToCart with:', productWithVariant);
                     handleAddToCart(productWithVariant);
                   } else if (handleAdd) {
+                    console.log('Calling handleAdd with:', productWithVariant);
                     handleAdd(productWithVariant);
+                  } else {
+                    console.log('No handler available for adding to cart');
                   }
                 }}
               >

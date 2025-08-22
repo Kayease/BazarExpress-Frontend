@@ -930,11 +930,102 @@ function WishlistProvider({ children }: { children: ReactNode }) {
     }
   }, [isLoggedIn, syncWishlistWithDB, loadWishlist]);
 
+  const removeFromWishlist = useCallback(async (productId: string, variantId?: string) => {
+    if (isLoggedIn) {
+      try {
+        const response = await removeFromWishlistDB(productId, variantId);
+        const updatedWishlistItems = response.wishlist.map((item: any) => ({
+          id: item.productId._id,
+          _id: item.productId._id,
+          ...item.productId,
+          // Include variant information from wishlist item
+          variantId: item.variantId,
+          variantName: item.variantName,
+          selectedVariant: item.selectedVariant,
+          // Create composite wishlist item ID for variant handling
+          wishlistItemId: item.variantId ? `${item.productId._id}_${item.variantId}` : item.productId._id
+        }));
+        setWishlistItems(updatedWishlistItems);
+        // Don't persist to localStorage for logged-in users
+        // No toast for regular remove from wishlist operations
+      } catch (error) {
+        console.error('Failed to remove from wishlist:', error);
+        toast.error('Failed to remove item from wishlist');
+      }
+    } else {
+      // Local storage logic for non-logged-in users
+      const newWishlist = wishlistItems.filter((item: any) => {
+        const isSameProduct = (item.id === productId || item._id === productId);
+        
+        // If variantId is provided, match both product and variant
+        if (variantId) {
+          return !(isSameProduct && item.variantId === variantId);
+        }
+        
+        // If no variantId provided, remove items without variants only
+        return !(isSameProduct && !item.variantId);
+      });
+      setWishlistItems(newWishlist);
+      localStorage.setItem('wishlistItems', JSON.stringify(newWishlist));
+      // No toast for regular remove from wishlist operations
+    }
+  }, [wishlistItems, isLoggedIn]);
+
   const addToWishlist = useCallback(async (product: any) => {
     const productId = product.id || product._id;
     const variantId = product.variantId;
     const variantName = product.variantName;
     const selectedVariant = product.selectedVariant;
+
+    // Check if item is already in wishlist
+    const isAlreadyInWishlist = wishlistItems.some((item: any) => {
+      const isSameProduct = (item.id === productId || item._id === productId);
+      
+      // If variantId is provided, match both product and variant
+      if (variantId) {
+        return isSameProduct && item.variantId === variantId;
+      }
+      
+      // If no variantId provided, check for items without variants only
+      return isSameProduct && !item.variantId;
+    });
+
+    // If already in wishlist, remove it (toggle functionality)
+    if (isAlreadyInWishlist) {
+      // Instead of calling removeFromWishlist directly, handle removal logic here
+      if (isLoggedIn) {
+        try {
+          const response = await removeFromWishlistDB(productId, variantId);
+          const updatedWishlistItems = response.wishlist.map((item: any) => ({
+            id: item.productId._id,
+            _id: item.productId._id,
+            ...item.productId,
+            variantId: item.variantId,
+            variantName: item.variantName,
+            selectedVariant: item.selectedVariant,
+            wishlistItemId: item.variantId ? `${item.productId._id}_${item.variantId}` : item.productId._id
+          }));
+          setWishlistItems(updatedWishlistItems);
+        } catch (error) {
+          console.error('Failed to remove from wishlist:', error);
+          toast.error('Failed to remove item from wishlist');
+        }
+      } else {
+        // Local storage removal logic
+        const newWishlist = wishlistItems.filter((item: any) => {
+          const isSameProduct = (item.id === productId || item._id === productId);
+          
+          if (variantId) {
+            return !(isSameProduct && item.variantId === variantId);
+          }
+          
+          return !(isSameProduct && !item.variantId);
+        });
+        setWishlistItems(newWishlist);
+        localStorage.setItem('wishlistItems', JSON.stringify(newWishlist));
+      }
+      return;
+    }
 
     if (isLoggedIn) {
       try {
@@ -978,9 +1069,12 @@ function WishlistProvider({ children }: { children: ReactNode }) {
       });
       
       if (!existing) {
+        // Create wishlist item without quantity information
         const newWishlistItem = { 
           ...product, 
           id: productId,
+          // Remove quantity from wishlist item
+          quantity: undefined,
           // Create composite wishlist item ID for variant handling
           wishlistItemId: variantId ? `${productId}_${variantId}` : productId
         };
@@ -989,47 +1083,6 @@ function WishlistProvider({ children }: { children: ReactNode }) {
         localStorage.setItem('wishlistItems', JSON.stringify(newWishlist));
         // No toast for regular add to wishlist operations
       }
-    }
-  }, [wishlistItems, isLoggedIn]);
-
-  const removeFromWishlist = useCallback(async (productId: string, variantId?: string) => {
-    if (isLoggedIn) {
-      try {
-        const response = await removeFromWishlistDB(productId, variantId);
-        const updatedWishlistItems = response.wishlist.map((item: any) => ({
-          id: item.productId._id,
-          _id: item.productId._id,
-          ...item.productId,
-          // Include variant information from wishlist item
-          variantId: item.variantId,
-          variantName: item.variantName,
-          selectedVariant: item.selectedVariant,
-          // Create composite wishlist item ID for variant handling
-          wishlistItemId: item.variantId ? `${item.productId._id}_${item.variantId}` : item.productId._id
-        }));
-        setWishlistItems(updatedWishlistItems);
-        // Don't persist to localStorage for logged-in users
-        // No toast for regular remove from wishlist operations
-      } catch (error) {
-        console.error('Failed to remove from wishlist:', error);
-        toast.error('Failed to remove item from wishlist');
-      }
-    } else {
-      // Local storage logic for non-logged-in users
-      const newWishlist = wishlistItems.filter((item: any) => {
-        const isSameProduct = (item.id === productId || item._id === productId);
-        
-        // If variantId is provided, match both product and variant
-        if (variantId) {
-          return !(isSameProduct && item.variantId === variantId);
-        }
-        
-        // If no variantId provided, remove items without variants only
-        return !(isSameProduct && !item.variantId);
-      });
-      setWishlistItems(newWishlist);
-      localStorage.setItem('wishlistItems', JSON.stringify(newWishlist));
-      // No toast for regular remove from wishlist operations
     }
   }, [wishlistItems, isLoggedIn]);
 

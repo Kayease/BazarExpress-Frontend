@@ -8,6 +8,12 @@ interface RecentlyViewedProduct {
   price: number;
   category?: any;
   timestamp: number;
+  // Add variant support
+  variants?: Record<string, any>;
+  variantId?: string;
+  variantName?: string;
+  selectedVariant?: any;
+  warehouse?: any;
 }
 
 const RECENTLY_VIEWED_KEY = 'recentlyViewedProducts';
@@ -41,7 +47,13 @@ export function useRecentlyViewed() {
       image: product.image,
       price: product.price,
       category: product.category,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      // Include variant information if available
+      variants: product.variants,
+      variantId: product.variantId,
+      variantName: product.variantName,
+      selectedVariant: product.selectedVariant,
+      warehouse: product.warehouse
     };
 
     setRecentlyViewed(prev => {
