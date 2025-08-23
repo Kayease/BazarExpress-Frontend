@@ -40,6 +40,7 @@ import {
 import { useAppSelector, useAppDispatch } from "../../lib/store";
 import { updateProfile, fetchProfile } from "../../lib/slices/authSlice";
 import { useCartContext, useWishlistContext } from "../../components/app-provider";
+import { canAddToCart, getWarehouseConflictInfo } from "../../lib/warehouse-validation";
 
 // Custom event for wishlist updates
 const WISHLIST_UPDATED_EVENT = "wishlistUpdated";
@@ -50,7 +51,7 @@ import OrderDetailModal from "../../components/OrderDetailModal";
 export default function Profile() {
   const user = useAppSelector((state) => state.auth.user);
   const token = useAppSelector((state) => state.auth.token);
-  const { cartItems, cartTotal, updateCartItem, addToCart, isItemBeingRemoved } = useCartContext();
+  const { cartItems, cartTotal, updateCartItem, addToCart, isItemBeingRemoved, moveToCartFromWishlist } = useCartContext();
   const { wishlistItems, removeFromWishlist: removeFromWishlistContext } = useWishlistContext();
   const cartCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
   const [isEditing, setIsEditing] = useState(false);
@@ -313,6 +314,55 @@ export default function Profile() {
   const handleRemoveFromWishlist = (itemId: string, variantId?: string) => {
     removeFromWishlistContext(itemId, variantId);
     // toast.success("Item removed from wishlist");
+  };
+
+  // Move item from wishlist to cart
+  const handleMoveToCart = async (item: any) => {
+    console.log('handleMoveToCart called with item:', item);
+    console.log('Current cart items:', cartItems);
+    
+    // Check warehouse validation before moving to cart
+    if (!canAddToCart(item, cartItems)) {
+      console.log('Blocked: Cannot add product due to warehouse conflict');
+      const conflictInfo = getWarehouseConflictInfo(item, cartItems);
+      if (conflictInfo.hasConflict && conflictInfo.message) {
+        toast.error(conflictInfo.message);
+      } else {
+        toast.error('Cannot add product due to warehouse conflict');
+      }
+      return;
+    }
+    
+    try {
+      // Use the new moveToCartFromWishlist function
+      await moveToCartFromWishlist(item, (id: string, variantId?: string) => {
+        removeFromWishlistContext(id, variantId);
+      });
+      
+      // Check if product already exists in cart to show appropriate message
+      const existingCartItem = cartItems.find(cartItem => {
+        const idMatch = (cartItem.id || cartItem._id) === (item.id || item._id);
+        if (item.variantId) {
+          return idMatch && cartItem.variantId === item.variantId;
+        }
+        return idMatch && !cartItem.variantId;
+      });
+
+      if (existingCartItem) {
+        //toast.success(`${item.name}${item.variantName ? ` (${item.variantName})` : ''} quantity increased in cart`);
+      } else {
+       // toast.success(`${item.name}${item.variantName ? ` (${item.variantName})` : ''} added to cart`);
+      }
+    } catch (error: any) {
+      console.error('Error moving item to cart:', error);
+      
+      // Handle specific warehouse conflict errors
+      if (error && typeof error === 'object' && error.isWarehouseConflict) {
+        toast.error(error.message || 'Cannot add product due to warehouse conflict');
+      } else {
+        toast.error('Failed to move item to cart');
+      }
+    }
   };
 
 
@@ -880,17 +930,7 @@ export default function Profile() {
                               </div>
                               <div className="flex flex-row space-x-2 flex-shrink-0">
                                 <button
-                                  onClick={() => {
-                                    const cartItem = {
-                                      ...item,
-                                      quantity: 1,
-                                      variantId: item.variantId,
-                                      variantName: item.variantName,
-                                      selectedVariant: item.selectedVariant
-                                    };
-                                    addToCart(cartItem);
-                                    removeFromWishlistContext(item.id || item._id, item.variantId);
-                                  }}
+                                  onClick={() => handleMoveToCart(item)}
                                   className="flex items-center justify-center bg-purple-600 text-white px-3 py-1.5 rounded-lg hover:bg-purple-700 transition-colors text-xs"
                                 >
                                   <ShoppingCart className="w-3 h-3 mr-1" />
@@ -965,17 +1005,7 @@ export default function Profile() {
                               </div>
                               <div className="flex items-center space-x-2">
                                 <button
-                                  onClick={() => {
-                                    const cartItem = {
-                                      ...item,
-                                      quantity: 1,
-                                      variantId: item.variantId,
-                                      variantName: item.variantName,
-                                      selectedVariant: item.selectedVariant
-                                    };
-                                    addToCart(cartItem);
-                                    removeFromWishlistContext(item.id || item._id, item.variantId);
-                                  }}
+                                  onClick={() => handleMoveToCart(item)}
                                   className="flex items-center bg-purple-600 text-white px-3 py-1.5 rounded-lg hover:bg-purple-700 transition-colors text-sm"
                                 >
                                   <ShoppingCart className="w-3 h-3 mr-1" />

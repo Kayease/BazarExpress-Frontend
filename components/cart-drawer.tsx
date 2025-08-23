@@ -11,7 +11,7 @@ import toast from "react-hot-toast";
 export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const { isLoggedIn, setIsLoginOpen } = useAppContext();
   const { cartItems, updateCartItem, removeCartItem, cartTotal } = useCartContext();
-  const { addToWishlist, isInWishlist } = useWishlistContext();
+  const { addToWishlist, isInWishlist, moveToWishlistFromCart } = useWishlistContext();
   const router = useRouter();
   const user = useAppSelector((state: any) => state?.auth?.user);
 
@@ -60,7 +60,19 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
     }
   };
 
-  const moveToWishlist = (item: any) => {
+  const moveToWishlist = async (item: any) => {
+    // Check if item is already in wishlist
+    if (isInWishlist(item.id, item.variantId)) {
+      // If already in wishlist, just remove from cart
+      if (removeCartItem) {
+        removeCartItem(item.id, item.variantId);
+      } else {
+        updateCartItem(item.id, 0, item.variantId, false);
+      }
+      toast.success('Item removed from cart', { icon: '🛒', duration: 2000 });
+      return;
+    }
+
     // Pass variant information when adding to wishlist
     const wishlistItem = {
       ...item,
@@ -68,10 +80,21 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
       variantName: item.variantName,
       selectedVariant: item.selectedVariant
     };
-    addToWishlist(wishlistItem);
-    // Silently remove from cart without showing the removal toast
-    updateCartItem(item.id, 0, item.variantId, false);
-    //toast.success('Moved to wishlist!', {icon: '❤️',duration: 2000,});
+    
+    try {
+      // Use the new moveToWishlistFromCart function
+      await moveToWishlistFromCart(wishlistItem, (id: string, variantId?: string) => {
+        if (removeCartItem) {
+          removeCartItem(id, variantId);
+        } else {
+          updateCartItem(id, 0, variantId, false);
+        }
+      });
+      toast.success('Moved to wishlist!', { icon: '❤️', duration: 2000 });
+    } catch (error) {
+      console.error('Error moving item to wishlist:', error);
+      toast.error('Failed to move item to wishlist');
+    }
   };
 
   const handleProceed = () => {
@@ -176,11 +199,10 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
                         <div className="flex items-center">
                           <button 
                             onClick={() => moveToWishlist(item)}
-                            disabled={isInWishlist(item.id, item.variantId)}
                             className="p-1.5 text-red-500 hover:bg-red-50 rounded-full transition-colors mr-1"
-                            title={isInWishlist(item.id, item.variantId) ? "Already in wishlist" : "Move to wishlist"}
+                            title={isInWishlist(item.id, item.variantId) ? "Remove from cart (already in wishlist)" : "Move to wishlist"}
                           >
-                            <Heart className="h-4 w-4" />
+                            <Heart className={`h-4 w-4 ${isInWishlist(item.id, item.variantId) ? 'fill-current' : ''}`} />
                           </button>
                           <button 
                             onClick={() => handleRemove(item.id, item.variantId)}

@@ -7,7 +7,7 @@ import Script from 'next/script'
 
 export const metadata: Metadata = {
   title: 'BazarXpress | All your desired here..',
-  description: 'Design and Developed by Pradeependra Pratap',
+  description: 'Need - Click - Express',
 }
 
 export default function RootLayout({

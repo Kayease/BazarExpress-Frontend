@@ -43,6 +43,7 @@ interface CartContextType {
   clearCart: () => void;
   cartTotal: number;
   isLoadingCart: boolean;
+  moveToCartFromWishlist: (product: any, removeFromWishlistFn: (id: string, variantId?: string) => void) => void;
 }
 const CartContext = createContext<CartContextType | undefined>(undefined);
 export function useCartContext() {
@@ -58,6 +59,7 @@ interface WishlistContextType {
   removeFromWishlist: (productId: string, variantId?: string) => void;
   isInWishlist: (productId: string, variantId?: string) => boolean;
   isLoadingWishlist: boolean;
+  moveToWishlistFromCart: (product: any, removeFromCartFn: (id: string, variantId?: string) => void) => void;
 }
 const WishlistContext = createContext<WishlistContextType | undefined>(undefined);
 export function useWishlistContext() {
@@ -765,6 +767,46 @@ function CartProvider({ children }: { children: ReactNode }) {
     return Math.ceil(total);
   }, [cartItems]);
 
+  const moveToCartFromWishlist = useCallback(async (product: any, removeFromWishlistFn: (id: string, variantId?: string) => void) => {
+    const productId = product.id || product._id;
+    const variantId = product.variantId;
+    
+    // Check if product already exists in cart
+    const existingCartItem = cartItems.find(cartItem => {
+      const idMatch = (cartItem.id || cartItem._id) === productId;
+      if (variantId) {
+        return idMatch && cartItem.variantId === variantId;
+      }
+      return idMatch && !cartItem.variantId;
+    });
+
+    if (existingCartItem) {
+      // If product exists in cart, increase quantity by 1
+      const newQuantity = existingCartItem.quantity + 1;
+      updateCartItem(productId, newQuantity, variantId);
+      removeFromWishlistFn(productId, variantId);
+    } else {
+      // If product doesn't exist in cart, add it with quantity 1
+      const cartItem = {
+        ...product,
+        id: productId,
+        quantity: 1,
+        warehouse: product.warehouse,
+        // Preserve variant information
+        variantId: product.variantId,
+        variantName: product.variantName,
+        selectedVariant: product.selectedVariant,
+        // Ensure price is correct
+        price: product.price || product.selectedVariant?.price,
+        // Preserve unit information
+        unit: product.unit
+      };
+      
+      await addToCart(cartItem);
+      removeFromWishlistFn(productId, variantId);
+    }
+  }, [cartItems, addToCart, updateCartItem]);
+
   const cartContextValue = useMemo(() => ({
     cartItems,
     setCartItems: updateCartItems,
@@ -775,8 +817,9 @@ function CartProvider({ children }: { children: ReactNode }) {
     cartTotal,
     isLoadingCart,
     isItemBeingRemoved,
-    isItemBeingAdded
-  }), [cartItems, addToCart, updateCartItem, removeCartItem, clearCart, cartTotal, isLoadingCart, isItemBeingRemoved, isItemBeingAdded]);
+    isItemBeingAdded,
+    moveToCartFromWishlist
+  }), [cartItems, addToCart, updateCartItem, removeCartItem, clearCart, cartTotal, isLoadingCart, isItemBeingRemoved, isItemBeingAdded, moveToCartFromWishlist]);
 
   return (
     <CartContext.Provider value={cartContextValue}>
@@ -1100,13 +1143,34 @@ function WishlistProvider({ children }: { children: ReactNode }) {
     });
   }, [wishlistItems]);
 
+  const moveToWishlistFromCart = useCallback(async (product: any, removeFromCartFn: (id: string, variantId?: string) => void) => {
+    const productId = product.id || product._id;
+    const variantId = product.variantId;
+    
+    // Check if item is already in wishlist
+    const isAlreadyInWishlist = isInWishlist(productId, variantId);
+    
+    if (isAlreadyInWishlist) {
+      // If already in wishlist, just remove from cart
+      removeFromCartFn(productId, variantId);
+      return;
+    }
+    
+    // Add to wishlist first
+    await addToWishlist(product);
+    
+    // Then remove from cart
+    removeFromCartFn(productId, variantId);
+  }, [addToWishlist, isInWishlist]);
+
   const wishlistContextValue = useMemo(() => ({
     wishlistItems,
     addToWishlist,
     removeFromWishlist,
     isInWishlist,
-    isLoadingWishlist
-  }), [wishlistItems, addToWishlist, removeFromWishlist, isInWishlist, isLoadingWishlist]);
+    isLoadingWishlist,
+    moveToWishlistFromCart
+  }), [wishlistItems, addToWishlist, removeFromWishlist, isInWishlist, isLoadingWishlist, moveToWishlistFromCart]);
 
   return (
     <WishlistContext.Provider value={wishlistContextValue}>

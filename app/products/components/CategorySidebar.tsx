@@ -269,7 +269,7 @@ function CategorySidebar({
 
   return (
     <div className="w-20 sm:w-24 md:w-28 lg:w-32 flex-shrink-0">
-      <div className="bg-white rounded-lg shadow-sm border overflow-hidden sticky top-6" style={{ height: 'calc(100vh - 160px)' }}>
+      <div className="bg-white rounded-lg shadow-sm border overflow-hidden sticky top-20 sm:top-24 md:top-6" style={{ height: 'calc(100vh - 120px)' }}>
         {/* Header */}
         <div className="p-2 sm:p-3 border-b bg-gray-50 flex-shrink-0">
           <div className="flex items-center justify-between">
@@ -278,7 +278,7 @@ function CategorySidebar({
         </div>
         
         {/* Categories Grid - Scrollable */}
-        <div className="p-2 sm:p-3 overflow-y-auto flex-1" style={{ height: 'calc(100vh - 220px)' }}>
+        <div className="p-2 sm:p-3 overflow-y-auto flex-1" style={{ height: 'calc(100vh - 180px)' }}>
           {sidebarMode === 'parent' ? (
             /* Parent Categories - Images Only */
             <div className="space-y-2 sm:space-y-3">

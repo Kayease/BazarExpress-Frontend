@@ -368,19 +368,6 @@ export default function ProductsPage() {
               onPriceRangeChange={handlePriceRangeChange}
             />
 
-            {/* Remove the old filter system since it's now inline */}
-            {/* {showFilters && (
-              <ProductFilters
-                brands={brands}
-                selectedBrands={brand?.split(',') || []}
-                onBrandChange={handleBrandChange}
-                sortBy={sort || 'relevance'}
-                onSortChange={handleSortChange}
-                priceRange={[parseInt(minPrice || '10'), parseInt(maxPrice || '100000')]}
-                onPriceRangeChange={handlePriceRangeChange}
-              />
-            )} */}
-
             <ProductLoadingState
               isLoading={isLoading && products.length === 0}
               error={error}
@@ -403,7 +390,7 @@ export default function ProductsPage() {
             >
               <ProductGrid
                 products={products}
-                      viewMode={viewMode}
+                viewMode={viewMode}
                 onProductClick={handleProductClick}
                 onAddToCart={addToCart}
                 onUpdateCart={updateCartItem}
@@ -417,22 +404,22 @@ export default function ProductsPage() {
                   <div className="animate-pulse flex space-x-4">
                     <div className="h-10 w-40 bg-gray-200 rounded"></div>
                   </div>
-                  </div>
-                )}
+                </div>
+              )}
                 
               {!isLoading && hasMore && (
-                  <div className="flex justify-center py-8">
-                    <button
+                <div className="flex justify-center py-8">
+                  <button
                     onClick={loadMore}
-                      className="px-6 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-primary-dark transition-colors"
-                    >
-                      Load More Products
-                    </button>
-                  </div>
-                )}
+                    className="px-6 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-primary-dark transition-colors"
+                  >
+                    Load More Products
+                  </button>
+                </div>
+              )}
             </ProductLoadingState>
-                    </div>
-                  </div>
+          </div>
+        </div>
       </div>
     </div>
   );

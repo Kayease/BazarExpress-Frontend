@@ -1,6 +1,6 @@
 "use client";
 import React from "react";
-import { Heart, Globe, Store, AlertTriangle, Star } from "lucide-react";
+import { Heart, Globe, Store, AlertTriangle, Star} from "lucide-react";
 import { canAddToCart, getWarehouseConflictInfo } from "@/lib/warehouse-validation";
 import { useCartContext } from "@/components/app-provider";
 import { useWarehouseConflict } from "@/hooks/use-warehouse-conflict";
@@ -20,6 +20,7 @@ interface ProductCardProps {
   onClick?: () => void;
   viewMode?: 'grid' | 'list';
   forceCanAdd?: boolean; // Allow parent to force canAddProduct to true
+  alwaysShowAddButton?: boolean; // When true, hide quantity controls and show ADD button even if in cart
 }
 
 const ProductCard: React.FC<ProductCardProps> = ({
@@ -35,7 +36,8 @@ const ProductCard: React.FC<ProductCardProps> = ({
   isGlobalMode,
   onClick,
   viewMode = 'grid',
-  forceCanAdd
+  forceCanAdd,
+  alwaysShowAddButton
 }) => {
   // Rating component
   const renderStars = (rating: number) => {
@@ -154,7 +156,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
   if (viewMode === 'list') {
     return (
       <div
-        className={`w-full bg-white border rounded-xl flex items-center gap-4 p-4 relative group cursor-pointer hover:shadow-lg transition-all duration-300 ${
+        className={`w-full bg-white border rounded-xl flex items-start sm:items-center gap-3 p-3 sm:gap-4 sm:p-4 relative group cursor-pointer hover:shadow-lg transition-all duration-300 ${
           !canAddProduct && !isInCart ? 'border-orange-200 bg-orange-50/30' : 'border-gray-200'
         }`}
         style={{ fontFamily: 'Sinkin Sans, sans-serif' }}
@@ -165,29 +167,31 @@ const ProductCard: React.FC<ProductCardProps> = ({
       >
         {/* Discount Badge */}
         {showDiscountBadge && (
-          <div className="absolute left-3 top-3 z-10 flex items-center justify-center" style={{ width: '29px', height: '28px', pointerEvents: 'none' }}>
+          <div className="absolute left-2 top-2 sm:left-3 sm:top-3 z-10 flex items-center justify-center scale-90 sm:scale-100" style={{ width: '29px', height: '28px', pointerEvents: 'none' }}>
             <svg width="29" height="28" viewBox="0 0 29 28" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M28.9499 0C28.3999 0 27.9361 1.44696 27.9361 2.60412V27.9718L24.5708 25.9718L21.2055 27.9718L17.8402 25.9718L14.4749 27.9718L11.1096 25.9718L7.74436 27.9718L4.37907 25.9718L1.01378 27.9718V2.6037C1.01378 1.44655 0.549931 0 0 0H28.9499Z" fill="#256fef"></path>
             </svg>
             <div className="absolute top-0 left-0 w-full h-full flex flex-col items-center justify-center text-center text-[9px] font-extrabold text-white z-20" style={{ pointerEvents: 'none' }}>
-              {discountPercent}%<br />OFF
+              {discountPercent}%
+              <br />
+              OFF
             </div>
           </div>
         )}
         
         {/* Warehouse Conflict Warning */}
         {!canAddProduct && !isInCart && (
-          <div className="absolute top-3 left-3 z-10 bg-orange-100 border border-orange-200 rounded-md px-2 py-1" style={{ pointerEvents: 'none' }}>
+          <div className="absolute top-10 left-2 sm:top-3 sm:left-3 z-10 bg-orange-100 border border-orange-200 rounded-md px-2 py-1" style={{ pointerEvents: 'none' }}>
             <div className="flex items-center gap-1">
               <AlertTriangle className="w-3 h-3 text-orange-600" />
-              <span className="text-xs text-orange-700 font-medium">Different Store</span>
+              <span className="text-[11px] sm:text-xs text-orange-700 font-medium">Different Store</span>
             </div>
           </div>
         )}
         
         {/* Wishlist Button */}
         <button
-          className="absolute top-3 right-3 z-10 p-2 rounded-full bg-white shadow hover:bg-gray-100 transition-colors"
+          className="absolute top-2 right-2 sm:top-3 sm:right-3 z-10 p-1.5 sm:p-2 rounded-full bg-white shadow hover:bg-gray-100 transition-colors"
           onClick={e => {
             e.stopPropagation();
             handleWishlistClick && handleWishlistClick(productWithVariant, e);
@@ -199,7 +203,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
 
         {/* Product Image */}
         <div className="flex-shrink-0">
-          <div className="w-24 h-24 rounded-xl overflow-hidden bg-gray-50 border border-gray-100">
+          <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg sm:rounded-xl overflow-hidden bg-gray-50 border border-gray-100">
             <img 
               src={product.image || "/placeholder.svg"} 
               alt={product.name} 
@@ -211,20 +215,20 @@ const ProductCard: React.FC<ProductCardProps> = ({
         {/* Product Details */}
         <div className="flex-1 min-w-0 flex flex-col justify-center">
           {/* Product Name and Variant */}
-          <div className="mb-3">
-            <h3 className="text-lg font-semibold text-gray-900 mb-1 leading-tight">
+          <div className="sm:mb-2">
+            <h3 className="text-sm sm:text-lg font-semibold text-gray-900 mb-0.5 sm:mb-1 leading-snug sm:leading-tight line-clamp-2">
               {product.name}
             </h3>
             
             {/* Variant Name */}
             {product.variantName && (
-              <p className="text-sm text-gray-600 font-medium mb-1">
+              <p className="text-[11px] sm:text-sm text-gray-600 font-medium mb-0.5 sm:mb-1 line-clamp-1">
                 Variant: {product.variantName}
               </p>
             )}
 
             {/* Category and Brand */}
-            <p className="text-sm text-gray-500">
+            <p className="text-[11px] sm:text-sm text-gray-500 line-clamp-1">
               {product.category && typeof product.category === "object" && product.category !== null 
                 ? product.category.name || product.categoryId || 'Unknown Category'
                 : product.category || product.categoryId || 'Unknown Category'}
@@ -233,55 +237,48 @@ const ProductCard: React.FC<ProductCardProps> = ({
                 ? product.brand.name || product.brandId || 'Unknown Brand'
                 : product.brand || product.brandId || 'Unknown Brand'}
             </p>
-            
-            {/* SKU */}
-            {product.sku && <p className="text-xs text-gray-400 mt-1">SKU: {product.sku}</p>}
           </div>
 
           {/* Rating Stars */}
-          <div className="flex items-center gap-[0.5px] mb-3">
+          <div className="flex items-center gap-[1px] sm:gap-[0.5px] mb-1 sm:mb-2">
             {renderStars(product.rating || 0)}
-            <span className="text-[9px] text-gray-500 ml-1">({product.rating || 0})</span>
+            <span className="text-[10px] sm:text-[9px] text-gray-500 ml-1">({product.rating || 0})</span>
           </div>
 
           {/* Price and Actions Section */}
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3 sm:gap-4 w-full">
             {/* Left side - Price Information */}
             <div className="flex flex-col">
-              <div className="text-xl font-bold text-purple-600">
+              <div className="text-base sm:text-xl font-bold text-purple-600 leading-none">
                 ₹{product.price.toLocaleString()}
               </div>
               {hasDiscount && (
-                <div className="text-sm text-gray-400 line-through">
+                <div className="text-[11px] sm:text-sm text-gray-400 line-through leading-none mt-0.5">
                   ₹{product.mrp?.toLocaleString()}
                 </div>
               )}
             </div>
 
             {/* Right side - Action Buttons */}
-            <div className="flex items-center gap-3">
-              {currentQuantity > 0 ? (
-                <div className="flex items-center border-2 border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm">
+            <div className="flex items-center gap-2 sm:gap-3">
+              {(!alwaysShowAddButton && currentQuantity > 0) ? (
+                <div className="flex items-center bg-brand-primary rounded-md justify-between" style={{ width: '70px', height: '28px' }}>
                   <button
+                    className="text-white text-sm font-semibold focus:outline-none flex-1 text-center h-full flex items-center justify-center hover:bg-brand-primary-dark transition-colors rounded-l-md"
                     onClick={handleDecrement}
-                    disabled={currentQuantity <= 1}
-                    className="px-3 py-2 bg-gray-50 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <span className="text-lg font-semibold">-</span>
-                  </button>
-                  <span className="px-4 py-2 font-semibold text-center min-w-[60px] bg-white">
-                    {currentQuantity}
-                  </span>
+                    aria-label="Decrease quantity"
+                  >-</button>
+                  <span className="text-white font-bold text-sm select-none text-center flex-1 h-full flex items-center justify-center bg-brand-primary">{currentQuantity}</span>
                   <button
+                    className="text-white text-sm font-semibold focus:outline-none flex-1 text-center h-full flex items-center justify-center hover:bg-brand-primary-dark transition-colors rounded-r-md"
                     onClick={handleIncrement}
-                    className="px-3 py-2 bg-gray-50 hover:bg-gray-100 transition-colors"
-                  >
-                    <span className="text-lg font-semibold">+</span>
-                  </button>
+                    aria-label="Increase quantity"
+                  >+</button>
                 </div>
               ) : canAddProduct ? (
                 <button
-                  className="bg-brand-primary hover:bg-brand-primary-dark text-white font-medium px-4 py-1.5 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 text-sm"
+                  className="border border-brand-primary text-brand-primary font-semibold text-[11px] bg-white hover:bg-brand-primary/10 transition-colors flex items-center justify-center rounded-md"
+                  style={{ width: '70px', height: '28px', fontFamily: 'Sinkin Sans, sans-serif' }}
                   onClick={(e) => {
                     e.stopPropagation();
                     if (handleAddToCart) {
@@ -290,20 +287,22 @@ const ProductCard: React.FC<ProductCardProps> = ({
                       handleAdd(productWithVariant);
                     }
                   }}
+                  aria-label="ADD"
+                  title="ADD"
                 >
-                  ADD TO CART
+                  ADD
                 </button>
               ) : (
                 <button
-                  className="bg-orange-100 hover:bg-orange-200 text-orange-700 font-medium px-4 py-3 rounded-xl border border-orange-200 hover:border-orange-300 transition-all duration-200"
+                  className="bg-orange-100 hover:bg-orange-200 text-orange-700 font-medium px-3 py-2 sm:px-4 sm:py-3 rounded-lg sm:rounded-xl border border-orange-200 hover:border-orange-300 transition-all duration-200 text-xs sm:text-sm"
                   onClick={(e) => {
                     e.stopPropagation();
                     showConflictModal(productWithVariant);
                   }}
                   title="Click to see options"
                 >
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4" />
+                  <div className="flex items-center justify-center gap-1.5 sm:gap-2">
+                    <AlertTriangle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                     <span>BLOCKED</span>
                   </div>
                 </button>
@@ -431,7 +430,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
             )}
           </div>
           <div className="flex-shrink-0">
-            {currentQuantity > 0 ? (
+            {(!alwaysShowAddButton && currentQuantity > 0) ? (
               <div className="flex items-center bg-brand-primary rounded-md justify-between" style={{ width: '70px', height: '28px' }}>
                 <button
                   className="text-white text-sm font-semibold focus:outline-none flex-1 text-center h-full flex items-center justify-center hover:bg-brand-primary-dark transition-colors rounded-l-md"

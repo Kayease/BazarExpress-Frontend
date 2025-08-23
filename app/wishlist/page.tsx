@@ -16,7 +16,7 @@ import { toast } from "react-toastify";
 
 export default function WishlistPage() {
   const { wishlistItems, removeFromWishlist, isInWishlist, addToWishlist } = useWishlistContext();
-  const { addToCart, cartItems, updateCartItem, clearCart } = useCartContext();
+  const { addToCart, cartItems, updateCartItem, clearCart, moveToCartFromWishlist } = useCartContext();
   const router = useRouter();
   const { locationState, isGlobalMode } = useLocation();
   
@@ -111,7 +111,7 @@ export default function WishlistPage() {
     }
   }, [wishlistItems, locationProducts]);
 
-  const moveToCart = (item: any) => {
+  const moveToCart = async (item: any) => {
     console.log('moveToCart called with item:', item);
     console.log('Current cart items:', cartItems);
     
@@ -122,46 +122,29 @@ export default function WishlistPage() {
       return;
     }
     
-    // Check if product already exists in cart
-    const existingCartItem = cartItems.find(cartItem => {
-      const idMatch = (cartItem.id || cartItem._id) === (item.id || item._id);
-      if (item.variantId) {
-        return idMatch && cartItem.variantId === item.variantId;
-      }
-      return idMatch && !cartItem.variantId;
-    });
-
-    console.log('Existing cart item found:', existingCartItem);
-
-    if (existingCartItem) {
-      // If product exists in cart, increase quantity by 1
-      const newQuantity = existingCartItem.quantity + 1;
-      console.log('Increasing quantity to:', newQuantity);
-      // Update cart item quantity
-      updateCartItem(item.id || item._id, newQuantity, item.variantId);
-      removeFromWishlist(item.id || item._id, item.variantId);
-      toast.success(`${item.name}${item.variantName ? ` (${item.variantName})` : ''} quantity increased in cart`);
-    } else {
-      // If product doesn't exist in cart, add it with quantity 1
-      const cartItem = {
-        ...item,
-        id: item.id || item._id,
-        quantity: 1,
-        warehouse: item.warehouse,
-        // Preserve variant information
-        variantId: item.variantId,
-        variantName: item.variantName,
-        selectedVariant: item.selectedVariant,
-        // Ensure price is correct
-        price: item.price || item.selectedVariant?.price,
-        // Preserve unit information
-        unit: item.unit
-      };
+    try {
+      // Use the new moveToCartFromWishlist function
+      await moveToCartFromWishlist(item, (id: string, variantId?: string) => {
+        removeFromWishlist(id, variantId);
+      });
       
-      console.log('Adding new item to cart:', cartItem);
-      addToCart(cartItem);
-      removeFromWishlist(item.id || item._id, item.variantId);
-      toast.success(`${item.name}${item.variantName ? ` (${item.variantName})` : ''} added to cart`);
+      // Check if product already exists in cart to show appropriate message
+      const existingCartItem = cartItems.find(cartItem => {
+        const idMatch = (cartItem.id || cartItem._id) === (item.id || item._id);
+        if (item.variantId) {
+          return idMatch && cartItem.variantId === item.variantId;
+        }
+        return idMatch && !cartItem.variantId;
+      });
+
+      if (existingCartItem) {
+      //  toast.success(`${item.name}${item.variantName ? ` (${item.variantName})` : ''} quantity increased in cart`);
+      } else {
+       // toast.success(`${item.name}${item.variantName ? ` (${item.variantName})` : ''} added to cart`);
+      }
+    } catch (error) {
+      console.error('Error moving item to cart:', error);
+      toast.error('Failed to move item to cart');
     }
   };
 
@@ -462,7 +445,8 @@ export default function WishlistPage() {
                   locationState={locationState}
                   isGlobalMode={isGlobalMode}
                   viewMode={viewMode}
-                  forceCanAdd={true} // Force ADD button to show for wishlist items
+                  forceCanAdd={true}
+                  alwaysShowAddButton={true}
                   onClick={() => router.push(`/products/${item._id || item.id}`)}
                 />
               );

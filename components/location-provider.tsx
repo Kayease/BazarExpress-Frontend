@@ -103,9 +103,8 @@ export function LocationProvider({ children }: LocationProviderProps) {
       } else {
         // No saved location - attempt automatic location detection
         const hasAttemptedAutoDetection = localStorage.getItem('hasAttemptedAutoDetection');
-        const hasManuallyDismissedModal = sessionStorage.getItem('hasManuallyDismissedLocationModal');
         
-        if (!hasAttemptedAutoDetection && !hasManuallyDismissedModal) {
+        if (!hasAttemptedAutoDetection) {
           // Mark that we've attempted auto-detection to avoid repeated prompts
           localStorage.setItem('hasAttemptedAutoDetection', 'true');
           
@@ -152,6 +151,24 @@ export function LocationProvider({ children }: LocationProviderProps) {
             setTimeout(() => setShowLocationModal(true), 2000);
           } finally {
             setIsLoading(false);
+          }
+        } else {
+          // If auto-detection was already attempted but location is still not detected,
+          // set up a timer to show the modal after a delay (in case of failed detection)
+          const modalDismissedAt = sessionStorage.getItem('modalDismissedAt');
+          const enoughTimePassed = !modalDismissedAt || 
+            (Date.now() - parseInt(modalDismissedAt)) > 5 * 60 * 1000; // 5 minutes
+          
+          if (enoughTimePassed) {
+            const retryTimer = setTimeout(() => {
+              if (!locationState.isLocationDetected && !showLocationModal) {
+                console.log('LocationProvider - Showing modal after failed auto-detection retry');
+                setShowLocationModal(true);
+              }
+            }, 5000); // Show modal after 5 seconds if location is still not detected
+            
+            // Store the timer reference for cleanup
+            fallbackTimer = retryTimer;
           }
         }
       }
@@ -409,7 +426,9 @@ export function LocationProvider({ children }: LocationProviderProps) {
         onClose={() => {
           setShowLocationModal(false);
           // Mark that user manually dismissed the modal in this session
+          // This prevents immediate re-showing but allows retry after some time
           sessionStorage.setItem('hasManuallyDismissedLocationModal', 'true');
+          sessionStorage.setItem('modalDismissedAt', Date.now().toString());
         }}
       />
     </LocationContext.Provider>

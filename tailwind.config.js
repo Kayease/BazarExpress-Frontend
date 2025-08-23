@@ -28,6 +28,19 @@ module.exports = {
                     error: "hsl(0, 84%, 60%)", // Red (default)
                     info: "hsl(217, 91%, 60%)", // Blue (default)
                 },
+                // Custom purple color palette for easy theming
+                purple: {
+                    50: "#faf5ff",   // Very light purple
+                    100: "#f3e8ff",  // Light purple
+                    200: "#e9d5ff",  // Lighter purple
+                    300: "#d8b4fe",  // Light purple
+                    400: "#c084fc",  // Medium light purple
+                    500: "#a855f7",  // Medium purple
+                    600: "#9333ea",   // Primary purple (matches brand.primary)
+                    700: "#7c3aed",   // Darker purple
+                    800: "#6b21a8",  // Dark purple
+                    900: "#581c87",  // Very dark purple
+                },
                 surface: {
                     primary: "hsl(0, 0%, 100%)", // White
                     secondary: "hsl(240, 20%, 97%)", // Light lavender gray

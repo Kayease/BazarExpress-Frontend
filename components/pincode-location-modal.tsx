@@ -28,12 +28,73 @@ export function PincodeLocationModal({ isOpen, onClose, showOnMount = false }: P
 
   // Auto-show modal if location not detected and showOnMount is true
   const [shouldShow, setShouldShow] = useState(false);
+  const [autoShowTimer, setAutoShowTimer] = useState<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (showOnMount && !locationState.isLocationDetected) {
       setShouldShow(true);
     }
   }, [showOnMount, locationState.isLocationDetected]);
+
+  // Auto-show modal after failed location detection
+  useEffect(() => {
+    // Clear any existing timer
+    if (autoShowTimer) {
+      clearTimeout(autoShowTimer);
+      setAutoShowTimer(null);
+    }
+
+    // Check if we should auto-show the modal
+    const hasManuallyDismissed = sessionStorage.getItem('hasManuallyDismissedLocationModal');
+    const modalDismissedAt = sessionStorage.getItem('modalDismissedAt');
+    const hasAttemptedAutoDetection = localStorage.getItem('hasAttemptedAutoDetection');
+    
+    // Check if enough time has passed since the modal was dismissed (5 minutes)
+    const enoughTimePassed = !modalDismissedAt || 
+      (Date.now() - parseInt(modalDismissedAt)) > 5 * 60 * 1000;
+    
+    // Auto-show conditions:
+    // 1. Location is not detected
+    // 2. Not currently loading
+    // 3. There's an error (indicating failed detection)
+    // 4. Either user hasn't manually dismissed the modal OR enough time has passed
+    // 5. Auto-detection has been attempted
+    if (!locationState.isLocationDetected && 
+        !isLoading && 
+        error && 
+        (!hasManuallyDismissed || enoughTimePassed) && 
+        hasAttemptedAutoDetection &&
+        !isOpen && 
+        !shouldShow) {
+      
+      console.log('PincodeLocationModal - Setting up auto-show timer due to failed location detection');
+      
+      // Show modal after 3 seconds delay
+      const timer = setTimeout(() => {
+        console.log('PincodeLocationModal - Auto-showing modal after failed location detection');
+        setShouldShow(true);
+      }, 3000);
+      
+      setAutoShowTimer(timer);
+    }
+
+    // Cleanup function
+    return () => {
+      if (autoShowTimer) {
+        clearTimeout(autoShowTimer);
+        setAutoShowTimer(null);
+      }
+    };
+  }, [locationState.isLocationDetected, isLoading, error, isOpen, shouldShow, autoShowTimer]);
+
+  // Cleanup timer on component unmount
+  useEffect(() => {
+    return () => {
+      if (autoShowTimer) {
+        clearTimeout(autoShowTimer);
+      }
+    };
+  }, [autoShowTimer]);
 
   const handlePincodeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,6 +109,12 @@ export function PincodeLocationModal({ isOpen, onClose, showOnMount = false }: P
     
     // Close modal on success
     if (!error) {
+      // Clean up any pending timer
+      if (autoShowTimer) {
+        clearTimeout(autoShowTimer);
+        setAutoShowTimer(null);
+      }
+      
       onClose();
       setShouldShow(false);
     }
@@ -58,14 +125,31 @@ export function PincodeLocationModal({ isOpen, onClose, showOnMount = false }: P
     
     // Close modal on success
     if (!error) {
+      // Clean up any pending timer
+      if (autoShowTimer) {
+        clearTimeout(autoShowTimer);
+        setAutoShowTimer(null);
+      }
+      
       onClose();
       setShouldShow(false);
     }
   };
 
   const handleClose = () => {
+    // Clean up any pending timer
+    if (autoShowTimer) {
+      clearTimeout(autoShowTimer);
+      setAutoShowTimer(null);
+    }
+    
     onClose();
     setShouldShow(false);
+    
+    // Mark that user manually dismissed the modal in this session
+    // This prevents immediate re-showing but allows retry after some time
+    sessionStorage.setItem('hasManuallyDismissedLocationModal', 'true');
+    sessionStorage.setItem('modalDismissedAt', Date.now().toString());
   };
 
   const modalOpen = isOpen || shouldShow;

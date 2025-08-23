@@ -870,50 +870,48 @@ export default function InvoiceModal({ isOpen, onClose, orderData }: InvoiceModa
 
 
 
-              {/* Footer - Terms & Conditions and Signature */}
-              <div className="no-break" style={{ marginTop: '10px', pageBreakInside: 'avoid' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                  <div style={{ fontSize: '9px', color: '#666', maxWidth: '60%' }}>
-                    <p style={{ margin: '2px 0', fontWeight: 'bold' }}>Terms & Conditions:</p>
-                    <p style={{ margin: '1px 0' }}>• This is a computer generated invoice and does not require physical signature.</p>
-                    <p style={{ margin: '1px 0' }}>• Please check all items at the time of delivery and report any discrepancies immediately.</p>
-                    <p style={{ margin: '1px 0' }}>• Return policy as per company terms and conditions.</p>
-                    <p style={{ margin: '1px 0' }}>• For any queries, please contact customer support through website or mobile app.</p>
-                  </div>
-                  <div style={{ textAlign: 'center', minWidth: '150px' }}>
-                    <div style={{ width: '150px' }}>
-                      {/* Signature Image */}
-                      <div style={{ marginBottom: '10px', minHeight: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <div style={{ width: '120px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f9f9f9', border: '1px dashed #ccc' }}>
-                          <img
-                            src="/sign.jpg"
-                            alt="Authorized Signature"
-                            style={{
-                              height: '38px',
-                              width: 'auto',
-                              maxWidth: '118px',
-                              objectFit: 'contain',
-                              display: 'block'
-                            }}
-                            onError={(e) => {
-                              const target = e.target as HTMLImageElement;
-                              target.style.display = 'none';
-                              const parent = target.parentElement;
-                              if (parent) {
-                                parent.innerHTML = '<div style="font-size: 10px; color: #999; text-align: center;">Digital Signature</div>';
-                              }
-                            }}
-                          />
-                        </div>
-                      </div>
-                      <div style={{ borderTop: '1px solid #000', paddingTop: '5px' }}>
-                        <p style={{ margin: '0', fontSize: '11px', fontWeight: 'bold' }}>Authorized Signatory</p>
-                        <p style={{ margin: '2px 0 0 0', fontSize: '9px' }}>for {invoiceSettings.businessName}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+                             {/* Footer - Terms & Conditions and Signature */}
+               <div className="no-break" style={{ marginTop: '10px', pageBreakInside: 'avoid' }}>
+                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '25px' }}>
+                   <div style={{ fontSize: '9px', color: '#666', flex: '1', maxWidth: '60%' }}>
+                     <p style={{ margin: '2px 0', fontWeight: 'bold' }}>Terms & Conditions:</p>
+                     <p style={{ margin: '1px 0' }}>• This is a computer generated invoice and does not require physical signature.</p>
+                     <p style={{ margin: '1px 0' }}>• Please check all items at the time of delivery and report any discrepancies immediately.</p>
+                     <p style={{ margin: '1px 0' }}>• Return policy as per company terms and conditions.</p>
+                     <p style={{ margin: '1px 0' }}>• For any queries, please contact customer support through website or mobile app.</p>
+                   </div>
+                   <div style={{ textAlign: 'center', flexShrink: 0, width: '70px' }}>
+                     {/* Signature Image */}
+                     <div style={{ marginBottom: '3px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                       <div style={{ width: '35px', height: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f9f9f9', border: '1px dashed #ccc' }}>
+                         <img
+                           src="/sign.jpg"
+                           alt="Authorized Signature"
+                           style={{
+                             height: '10px',
+                             width: 'auto',
+                             maxWidth: '33px',
+                             objectFit: 'contain',
+                             display: 'block'
+                           }}
+                           onError={(e) => {
+                             const target = e.target as HTMLImageElement;
+                             target.style.display = 'none';
+                             const parent = target.parentElement;
+                             if (parent) {
+                               parent.innerHTML = '<div style="font-size: 6px; color: #999; text-align: center;">Digital Signature</div>';
+                             }
+                           }}
+                         />
+                       </div>
+                     </div>
+                     <div style={{ borderTop: '1px solid #000', paddingTop: '1px' }}>
+                       <p style={{ margin: '0', fontSize: '7px', fontWeight: 'bold' }}>Authorized Signatory</p>
+                       <p style={{ margin: '1px 0 0 0', fontSize: '5px' }}>for {invoiceSettings.businessName}</p>
+                     </div>
+                   </div>
+                 </div>
+               </div>
               </div>
             </div>
           </div>

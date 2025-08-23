@@ -384,28 +384,28 @@ export default function AddressModal({
 
   return (
     <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/20 overflow-y-auto p-2 sm:p-4">
-      <div className="w-full max-w-4xl bg-white rounded-lg shadow-xl overflow-hidden flex flex-col h-[95vh] sm:h-auto sm:max-h-[95vh]">
+      <div className="w-full max-w-4xl bg-white rounded-lg shadow-xl overflow-hidden flex flex-col h-[90vh] sm:h-auto sm:max-h-[95vh]">
         <div className="flex flex-col h-full">
           {/* Header */}
-          <div className="p-3 border-b flex justify-between items-center bg-white z-10 flex-shrink-0">
-            <h3 className="text-base sm:text-lg font-semibold">{selectedAddress ? "Edit Address" : "Enter complete address"}</h3>
+          <div className="p-2 sm:p-3 border-b flex justify-between items-center bg-white z-10 flex-shrink-0">
+            <h3 className="text-sm sm:text-lg font-semibold">{selectedAddress ? "Edit Address" : "Enter complete address"}</h3>
             <button 
               onClick={handleClose}
               className="text-gray-500 hover:text-gray-700 p-1">
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
           </div>
           
           {/* Main Content - Two Column Layout */}
           <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
             {/* Map Area - Left Column */}
-            <div className="p-3 md:w-1/2 border-b md:border-b-0 md:border-r border-gray-100 flex flex-col">
-              <div className="flex gap-2 mb-3">
+            <div className="p-2 sm:p-3 md:w-1/2 border-b md:border-b-0 md:border-r border-gray-100 flex flex-col">
+              <div className="flex gap-2 mb-2 sm:mb-3">
                 <div className="flex-1">
                   <input
                     ref={inputRef}
                     type="text"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-brand-primary text-xs sm:text-sm"
+                    className="w-full border border-gray-300 rounded-lg px-2 sm:px-3 py-1.5 sm:py-2 focus:outline-none focus:ring-1 focus:ring-brand-primary text-xs sm:text-sm"
                     placeholder="Search location..."
                   />
                 </div>
@@ -423,8 +423,8 @@ export default function AddressModal({
                 </button>
               </div>
               
-              {/* Map Container - Takes remaining space */}
-              <div className="flex-1 min-h-[200px] sm:min-h-0 rounded-lg overflow-hidden border border-gray-200 bg-white mb-3">
+              {/* Map Container - Reduced height for mobile */}
+              <div className="flex-1 min-h-[150px] sm:min-h-[200px] md:min-h-0 rounded-lg overflow-hidden border border-gray-200 bg-white mb-2 sm:mb-3">
                 <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
               </div>
               
@@ -441,14 +441,14 @@ export default function AddressModal({
             </div>
 
             {/* Form Area - Right Column */}
-            <div className="p-3 sm:p-4 md:w-1/2 flex flex-col overflow-hidden">
+            <div className="p-2 sm:p-3 md:p-4 md:w-1/2 flex flex-col overflow-hidden">
               <div className="flex-1 overflow-y-auto min-h-0">
-                <form id="address-form" className="flex flex-col gap-2 pb-4" onSubmit={handleSubmit}>
+                <form id="address-form" className="flex flex-col gap-2 sm:gap-3 pb-3 sm:pb-4" onSubmit={handleSubmit}>
                   <div className="flex flex-wrap gap-2 sm:gap-3">
                     <div className="w-full mb-1">
                       <label className="block text-xs font-medium text-gray-700">Save address as *</label>
                     </div>
-                    <div className="flex flex-wrap gap-2 w-full">
+                    <div className="flex flex-wrap gap-1 sm:gap-2 w-full">
                       {["Home", "Office", "Hotel", "Other"].map((type) => (
                         <button
                           key={type}
@@ -469,15 +469,15 @@ export default function AddressModal({
                   </div>
                   
                   <div className="mb-1.5">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
-                      <div className="sm:col-span-2">
+                    <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                      <div>
                         <label className="block text-xs font-medium text-gray-700 mb-0.5">Flat / House no / Building name *</label>
                         <input
                           type="text"
                           name="building"
                           value={addressForm.building || ""}
                           onChange={e => setAddressForm(prev => ({ ...prev, building: e.target.value }))}
-                          className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary text-xs sm:text-sm"
+                          className="w-full px-2 sm:px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary text-xs sm:text-sm"
                           required
                         />
                       </div>
@@ -488,7 +488,7 @@ export default function AddressModal({
                           name="floor"
                           value={addressForm.floor || ""}
                           onChange={e => setAddressForm(prev => ({ ...prev, floor: e.target.value }))}
-                          className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary text-xs sm:text-sm"
+                          className="w-full px-2 sm:px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary text-xs sm:text-sm"
                         />
                       </div>
                     </div>
@@ -500,7 +500,7 @@ export default function AddressModal({
                       type="text"
                       name="area"
                       value={addressForm.area || ""}
-                      className="w-full px-3 py-1.5 border border-gray-300 rounded-lg bg-gray-100 focus:outline-none focus:ring-1 focus:ring-brand-primary text-xs sm:text-sm"
+                      className="w-full px-2 sm:px-3 py-1.5 border border-gray-300 rounded-lg bg-gray-100 focus:outline-none focus:ring-1 focus:ring-brand-primary text-xs sm:text-sm"
                       required
                       readOnly
                     />
@@ -513,12 +513,12 @@ export default function AddressModal({
                       name="landmark"
                       value={addressForm.landmark || ""}
                       onChange={e => setAddressForm(prev => ({ ...prev, landmark: e.target.value }))}
-                      className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary text-xs sm:text-sm"
+                      className="w-full px-2 sm:px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary text-xs sm:text-sm"
                     />
                   </div>
                   
                   <div className="mb-1.5">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+                    <div className="grid grid-cols-2 gap-2 sm:gap-3">
                       <div>
                         <label className="block text-xs font-medium text-gray-700 mb-0.5">Your name *</label>
                         <input
@@ -526,7 +526,7 @@ export default function AddressModal({
                           name="name"
                           value={addressForm.name || ""}
                           onChange={e => setAddressForm(prev => ({ ...prev, name: e.target.value }))}
-                          className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary text-xs sm:text-sm"
+                          className="w-full px-2 sm:px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary text-xs sm:text-sm"
                           required
                         />
                       </div>
@@ -538,7 +538,7 @@ export default function AddressModal({
                           value={addressForm.phone || ""}
                           onChange={e => setAddressForm(prev => ({ ...prev, phone: e.target.value }))}
                           pattern="[0-9]{10}"
-                          className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary text-xs sm:text-sm"
+                          className="w-full px-2 sm:px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary text-xs sm:text-sm"
                         />
                       </div>
                     </div>
@@ -551,7 +551,7 @@ export default function AddressModal({
                       name="addressLabel"
                       value={addressForm.addressLabel || ""}
                       onChange={e => setAddressForm(prev => ({ ...prev, addressLabel: e.target.value }))}
-                      className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary text-xs sm:text-sm"
+                      className="w-full px-2 sm:px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary text-xs sm:text-sm"
                       placeholder="e.g., Near main gate, Opposite pharmacy, etc."
                     />
                   </div>
@@ -562,7 +562,7 @@ export default function AddressModal({
                       name="additionalInstructions"
                       value={addressForm.additionalInstructions || ""}
                       onChange={e => setAddressForm(prev => ({ ...prev, additionalInstructions: e.target.value }))}
-                      className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary text-xs sm:text-sm"
+                      className="w-full px-2 sm:px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary text-xs sm:text-sm"
                       placeholder="E.g., Ring bell twice, call before delivery, etc."
                       rows={2}
                     />
@@ -571,12 +571,12 @@ export default function AddressModal({
               </div>
               
               {/* Fixed Save/Update Button */}
-              <div className="bg-white pt-3 pb-3 border-t border-gray-100 flex-shrink-0">
+              <div className="bg-white pt-2 sm:pt-3 pb-2 sm:pb-3 border-t border-gray-100 flex-shrink-0">
                 <div className="flex gap-2 sm:gap-3">
                   <button
                     type="button"
                     onClick={handleClose}
-                    className="px-3 sm:px-5 py-2 sm:py-2.5 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 text-xs sm:text-sm"
+                    className="px-3 sm:px-5 py-1.5 sm:py-2.5 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 text-xs sm:text-sm"
                   >
                     Cancel
                   </button>
@@ -584,7 +584,7 @@ export default function AddressModal({
                     type="submit"
                     form="address-form"
                     disabled={isSubmitting}
-                    className={`flex-1 px-3 sm:px-5 py-2 sm:py-2.5 text-white rounded-lg font-medium text-xs sm:text-sm ${isSubmitting ? 'bg-gray-400 cursor-not-allowed' : 'bg-brand-primary hover:bg-brand-primary-dark'}`}
+                    className={`flex-1 px-3 sm:px-5 py-1.5 sm:py-2.5 text-white rounded-lg font-medium text-xs sm:text-sm ${isSubmitting ? 'bg-gray-400 cursor-not-allowed' : 'bg-brand-primary hover:bg-brand-primary-dark'}`}
                   >
                     {isSubmitting ? "Saving..." : (selectedAddress ? "Update Address" : "Save Address")}
                   </button>
