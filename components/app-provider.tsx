@@ -243,7 +243,7 @@ function CartProvider({ children }: { children: ReactNode }) {
             );
           } else {
             // Only show success toast if items were actually synced without conflicts
-            toast.success(`${localCartCount} item(s) synced to your cart`);
+    //        toast.success(`${localCartCount} item(s) synced to your cart`);
           }
         } else {
           loadCart();
@@ -876,7 +876,7 @@ function WishlistProvider({ children }: { children: ReactNode }) {
           setWishlistItems(syncedWishlistItems);
           
           // Only show toast if items were actually synced
-          toast.success(`${localWishlistCount} item(s) synced to your wishlist`);
+        //  toast.success(`${localWishlistCount} item(s) synced to your wishlist`);
         } else {
           loadWishlist();
         }

@@ -87,7 +87,7 @@ export function ProductLoadingState({
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <button
                 onClick={onResetFilters}
-                className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+                className="px-6 py-3 bg-brand-primary text-white rounded-lg hover:bg-brand-primary-dark transition-colors font-medium"
               >
                 Reset Filters
               </button>
@@ -136,7 +136,7 @@ export function ProductLoadingState({
             {searchQuery && (
               <button
                 onClick={onClearSearch}
-                className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+                className="px-6 py-3 bg-brand-primary text-white rounded-lg hover:bg-brand-primary-dark transition-colors font-medium"
               >
                 Clear Search
               </button>
@@ -144,7 +144,7 @@ export function ProductLoadingState({
             {categoryDisplay && onStayInCategory && (
               <button
                 onClick={onStayInCategory}
-                className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+                className="px-6 py-3 bg-brand-primary text-white rounded-lg hover:bg-brand-primary-dark transition-colors font-medium"
               >
                 Stay in {categoryName}
               </button>

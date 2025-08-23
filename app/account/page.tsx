@@ -715,7 +715,7 @@ export default function Profile() {
                                 <p className="text-xs text-gray-600">
                                   {item.unit || item.category}
                                 </p>
-                                <p className="text-sm font-bold text-green-600">
+                                <p className="text-sm font-bold text-purple-600">
                                   ₹{item.price} x {item.quantity} = ₹{item.price * item.quantity}
                                 </p>
                               </div>

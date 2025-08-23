@@ -401,8 +401,8 @@ export default function Navbar() {
                       <div className="absolute right-0 top-full mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
                       <div className="p-4">
                           <div className="flex items-center space-x-3 mb-4 pb-2 border-b border-gray-100">
-                          <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                              <User size={18} className="text-green-600" />
+                          <div className="w-10 h-10 bg-brand-primary/10 rounded-full flex items-center justify-center">
+                              <User size={18} className="text-brand-primary" />
                           </div>
                           <div>
                             <p className="font-medium text-gray-900">
@@ -535,8 +535,8 @@ export default function Navbar() {
               ) : (
                 <div className="space-y-2">
                   <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                    <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                      <User size={18} className="text-green-600" />
+                    <div className="w-10 h-10 bg-brand-primary/10 rounded-full flex items-center justify-center">
+                      <User size={18} className="text-brand-primary" />
                     </div>
                     <div>
                       <p className="font-medium">{user?.name || "User"}</p>
@@ -600,7 +600,7 @@ export default function Navbar() {
                     className="w-full flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg"
                   >
                     <div className="flex items-center">
-                      <ShoppingCart size={18} className={cartItemCount > 0 ? "text-green-600 mr-3" : "mr-3"} />
+                      <ShoppingCart size={18} className={cartItemCount > 0 ? "text-brand-primary mr-3" : "mr-3"} />
                       <span className="font-medium">
                         {cartItemCount > 0 ? `${cartItemCount} item${cartItemCount !== 1 ? 's' : ''}` : 'My Cart'}
                       </span>

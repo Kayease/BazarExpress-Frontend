@@ -428,14 +428,14 @@ function SearchPage() {
                     <div className="flex items-center bg-gray-100 rounded-lg p-1">
                       <button
                         onClick={() => setFilters(prev => ({ ...prev, viewMode: 'grid' }))}
-                        className={`p-1.5 sm:p-2 rounded-md transition-colors ${filters.viewMode === 'grid' ? 'bg-white shadow-sm text-green-600' : 'text-gray-500 hover:text-gray-700'}`}
+                        className={`p-1.5 sm:p-2 rounded-md transition-colors ${filters.viewMode === 'grid' ? 'bg-white shadow-sm text-brand-primary' : 'text-gray-500 hover:text-gray-700'}`}
                         aria-label="Grid view"
                       >
                         <Grid3X3 className="h-4 w-4" />
                       </button>
                       <button
                         onClick={() => setFilters(prev => ({ ...prev, viewMode: 'list' }))}
-                        className={`p-1.5 sm:p-2 rounded-md transition-colors ${filters.viewMode === 'list' ? 'bg-white shadow-sm text-green-600' : 'text-gray-500 hover:text-gray-700'}`}
+                        className={`p-1.5 sm:p-2 rounded-md transition-colors ${filters.viewMode === 'list' ? 'bg-white shadow-sm text-brand-primary' : 'text-gray-500 hover:text-gray-700'}`}
                         aria-label="List view"
                       >
                         <List className="h-4 w-4" />
@@ -514,7 +514,7 @@ function SearchPage() {
                         }))}
                         className={`p-1.5 sm:p-2 rounded-md transition-colors flex items-center gap-1 sm:gap-2 ${
                           filters.sortBy !== 'relevance' 
-                            ? 'bg-green-100 text-green-600 border border-green-200' 
+                            ? 'bg-brand-primary/10 text-brand-primary border border-brand-primary/20' 
                             : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                         }`}
                         aria-label="Select sort option"
@@ -538,7 +538,7 @@ function SearchPage() {
                                 }}
                                 className={`w-full text-left px-3 py-2 text-sm rounded hover:bg-gray-50 ${
                                   filters.sortBy === option.value 
-                                    ? 'bg-green-100 text-green-700 font-medium' 
+                                    ? 'bg-purple-100 text-purple-700 font-medium' 
                                     : 'text-gray-700'
                                 }`}
                               >

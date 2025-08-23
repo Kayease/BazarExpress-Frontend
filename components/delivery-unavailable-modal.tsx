@@ -106,7 +106,7 @@ export function DeliveryUnavailableModal({
                 className="w-full p-3 sm:p-4 border-2 border-green-200 rounded-xl hover:border-green-400 hover:bg-green-50 transition-all text-left"
               >
                 <div className="flex items-start gap-2 sm:gap-3">
-                  <Globe className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 mt-0.5 flex-shrink-0" />
+                  <Globe className="h-4 w-4 sm:h-5 sm:w-5 text-brand-primary mt-0.5 flex-shrink-0" />
                   <div className="min-w-0 flex-1">
                     <div className="font-semibold text-gray-900 mb-1 text-sm sm:text-base">
                       Switch to Global Store

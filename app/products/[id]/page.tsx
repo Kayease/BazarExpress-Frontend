@@ -327,7 +327,7 @@ export default function ProductDetailsPage() {
             </p>
             <Button 
               onClick={() => router.push("/products")}
-              className="bg-green-600 hover:bg-green-700"
+              className="bg-brand-primary hover:bg-brand-primary-dark"
             >
               Browse Products
             </Button>
@@ -471,7 +471,7 @@ export default function ProductDetailsPage() {
                           setMainImageIdx(0);
                           setQuantity(1); // Reset quantity when variant changes
                         }}
-                        className={selectedVariant === variantKey ? "bg-green-600 hover:bg-green-700" : ""}
+                        className={selectedVariant === variantKey ? "bg-brand-primary hover:bg-brand-primary-dark" : ""}
                       >
                         {variants[variantKey].name || variantKey.replace(/::/g, ' ')}
                       </Button>
@@ -495,7 +495,7 @@ export default function ProductDetailsPage() {
                         <Award className="h-3 w-3" />
                         {brandName}
                       </Badge>
-                      <Badge variant="outline" className="text-green-700 border-green-200">
+                      <Badge variant="outline" className="text-brand-primary border-brand-primary/20">
                         {categoryName}
                       </Badge>
                       {product.sku && (
@@ -507,7 +507,7 @@ export default function ProductDetailsPage() {
                   </div>
 
                   <div className="flex items-center gap-4 flex-wrap">
-                    <span className="text-3xl font-bold text-green-600">
+                    <span className="text-3xl font-bold text-brand-primary">
                       ₹{currentPrice.toLocaleString()}
                     </span>
                     {currentMrp > currentPrice && (
@@ -711,7 +711,7 @@ export default function ProductDetailsPage() {
                   <div className="flex gap-3">
                     {canAddProduct ? (
                       <Button
-                        className="flex-1 bg-green-600 hover:bg-green-700 h-12"
+                        className="flex-1 bg-brand-primary hover:bg-brand-primary-dark h-12"
                         disabled={currentStock <= 0 || isItemBeingAdded(product._id, selectedVariant || undefined)}
                         onClick={async () => {
                           try {

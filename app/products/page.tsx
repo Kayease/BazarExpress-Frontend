@@ -424,7 +424,7 @@ export default function ProductsPage() {
                   <div className="flex justify-center py-8">
                     <button
                     onClick={loadMore}
-                      className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                      className="px-6 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-primary-dark transition-colors"
                     >
                       Load More Products
                     </button>

@@ -224,33 +224,64 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
       <div
         role="dialog"
         aria-modal="true"
-        className="fixed inset-0 flex items-center justify-center bg-black/20 z-50"
+        className="fixed inset-0 flex items-center justify-center bg-black/20 z-50 p-4"
       >
         <div 
-          className="bg-white rounded-xl p-6 w-11/12 max-w-md relative shadow-xl"
+          className="bg-white rounded-xl p-4 sm:p-6 w-full max-w-md relative shadow-xl max-h-[90vh] overflow-y-auto"
         >
           <button
             onClick={handleClose}
-            className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+            className="absolute top-3 right-3 sm:top-4 sm:right-4 text-gray-500 hover:text-gray-700 z-10"
             aria-label="Close modal"
           >
             <X size={20} />
           </button>
           
-          <div className="mb-8 text-center">
+          <div className="mb-6 sm:mb-8 text-center">
             <Image 
               src="/logo.svg" 
               alt="BazarXpress" 
-              width={56}  
-              height={56}
+              width={64}
+              height={64}
               style={{ height: 'auto' }}
-              className="mx-auto mb-4"
+              className="mx-auto mb-3 sm:mb-4 w-16 h-16 sm:w-20 sm:h-20"
             />
-            <h2 className="text-2xl font-bold text-gray-800 mb-2">
-              {step === "phone" ? "India's last minute app" : 
-               step === "password" ? "Enter Password" : "OTP Verification"}
+            <h2 
+              className="text-xl sm:text-2xl font-bold text-gray-800 mb-2 relative overflow-hidden"
+              style={{
+                transform: 'skew(-15deg)',
+                textShadow: '2px 2px 4px rgba(0,0,0,0.1)'
+              }}
+            >
+              <span className="relative inline-block">
+                {step === "phone" ? "Need. Click. Express" : 
+                 step === "password" ? "Enter Password" : "OTP Verification"}
+                {/* Enhanced motion blur lines */}
+                <div className="absolute inset-0 -z-10">
+                  {/* Primary motion blur - multiple layers for realism */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-gray-200 to-transparent transform -skew(-15deg) scale-x-200 blur-sm opacity-40"></div>
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-gray-300 to-transparent transform -skew(-15deg) scale-x-175 blur-md opacity-50"></div>
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-gray-400 to-transparent transform -skew(-15deg) scale-x-150 blur-lg opacity-60"></div>
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-gray-500 to-transparent transform -skew(-15deg) scale-x-125 blur-xl opacity-70"></div>
+                  
+                  {/* Secondary motion blur - different angles for depth */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-gray-300 to-transparent transform -skew(-20deg) scale-x-180 blur-sm opacity-30"></div>
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-gray-400 to-transparent transform -skew(-25deg) scale-x-160 blur-md opacity-40"></div>
+                  
+                  {/* Horizontal motion lines for speed effect */}
+                  <div className="absolute inset-0">
+                    <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-gray-400 to-transparent transform -skew(-15deg) scale-x-150 blur-sm opacity-60"></div>
+                    <div className="absolute top-1/4 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-gray-300 to-transparent transform -skew(-15deg) scale-x-140 blur-sm opacity-50"></div>
+                    <div className="absolute top-1/2 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-gray-400 to-transparent transform -skew(-15deg) scale-x-160 blur-sm opacity-40"></div>
+                    <div className="absolute top-3/4 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-gray-300 to-transparent transform -skew(-15deg) scale-x-130 blur-sm opacity-30"></div>
+                  </div>
+                  
+                  {/* Edge blur for realistic text edges */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-gray-100 via-transparent to-gray-100 transform -skew(-15deg) scale-x-110 blur-xs opacity-20"></div>
+                </div>
+              </span>
             </h2>
-            <p className="text-gray-600">
+            <p className="text-sm sm:text-base text-gray-600 px-2">
               {step === "phone" 
                 ? "Log in or Sign up" 
                 : step === "password"
@@ -258,12 +289,13 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                 : `We have sent a verification code to +91-${phone}`}
             </p>
           </div>
+          
           {step === "phone" && (
             <form onSubmit={handleSendOtp} className="space-y-4">
               <div>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <span className="text-gray-500">+91</span>
+                  <div className="absolute inset-y-0 left-0 pl-3 sm:pl-4 flex items-center pointer-events-none">
+                    <span className="text-gray-500 text-sm sm:text-base">+91</span>
                   </div>
                   <input
                     id="phone"
@@ -271,21 +303,21 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                     type="tel"
                     value={phone}
                     onChange={e => setPhone(e.target.value.replace(/[^\d]/g, ""))}
-                    className="w-full pl-12 pr-4 py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent text-gray-800 text-lg"
+                    className="w-full pl-10 sm:pl-12 pr-3 sm:pr-4 py-3 sm:py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent text-gray-800 text-base sm:text-lg"
                     placeholder="Enter mobile number"
                     maxLength={10}
                     required
                   />
-              </div>
+                </div>
               </div>
               <button
                 type="submit"
                 disabled={loading || phone.length !== 10}
-                className="w-full bg-brand-primary text-white py-4 rounded-lg hover:bg-brand-primary-dark transition duration-200 font-semibold text-lg disabled:opacity-50 disabled:cursor-not-allowed mt-4"
+                className="w-full bg-brand-primary text-white py-3 sm:py-4 rounded-lg hover:bg-brand-primary-dark transition duration-200 font-semibold text-base sm:text-lg disabled:opacity-50 disabled:cursor-not-allowed mt-4"
               >
                 {loading ? "Sending..." : "Continue"}
               </button>
-              <p className="text-xs text-gray-500 text-center mt-4">
+              <p className="text-xs text-gray-500 text-center mt-4 px-2">
                 By continuing, you agree to our{" "}
                 <a href="/terms" className="text-brand-primary hover:underline">Terms of service</a>
                 {" "}& {" "}
@@ -293,6 +325,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
               </p>
             </form>
           )}
+          
           {step === "password" && (
             <form onSubmit={handleVerifyPassword} className="space-y-4">
               <div>
@@ -303,7 +336,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                   type="password"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  className="w-full px-4 py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent text-gray-800 text-lg"
+                  className="w-full px-3 sm:px-4 py-3 sm:py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent text-gray-800 text-base sm:text-lg"
                   placeholder="Enter your password"
                   minLength={6}
                   required
@@ -312,7 +345,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
               <button
                 type="submit"
                 disabled={loading || password.length < 6}
-                className="w-full bg-brand-primary text-white py-4 rounded-lg hover:bg-brand-primary-dark transition duration-200 font-semibold text-lg disabled:opacity-50 disabled:cursor-not-allowed mt-4"
+                className="w-full bg-brand-primary text-white py-3 sm:py-4 rounded-lg hover:bg-brand-primary-dark transition duration-200 font-semibold text-base sm:text-lg disabled:opacity-50 disabled:cursor-not-allowed mt-4"
               >
                 {loading ? "Verifying..." : "Verify Password"}
               </button>
@@ -334,6 +367,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
               </div>
             </form>
           )}
+          
           {step === "otp" && (
             <form onSubmit={handleVerifyOtp} className="space-y-4">
               <div>

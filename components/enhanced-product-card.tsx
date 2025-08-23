@@ -96,18 +96,18 @@ const EnhancedProductCard: React.FC<EnhancedProductCardProps> = ({
   const renderAddButton = () => {
     if (buttonState === 'quantity') {
       return (
-        <div className="flex items-center bg-green-600 rounded-md justify-between" style={{ width: '70px', height: '28px' }}>
+        <div className="flex items-center bg-brand-primary rounded-md justify-between" style={{ width: '70px', height: '28px' }}>
           <button
-            className="text-white text-sm font-semibold focus:outline-none flex-1 text-center h-full flex items-center justify-center hover:bg-green-700 transition-colors rounded-l-md"
+            className="text-white text-sm font-semibold focus:outline-none flex-1 text-center h-full flex items-center justify-center hover:bg-brand-primary-dark transition-colors rounded-l-md"
             onClick={(e) => {
               e.stopPropagation();
               handleDec && handleDec(product);
             }}
             aria-label="Decrease quantity"
           >-</button>
-          <span className="text-white font-bold text-sm select-none text-center flex-1 h-full flex items-center justify-center bg-green-600">{quantity}</span>
+          <span className="text-white font-bold text-sm select-none text-center flex-1 h-full flex items-center justify-center bg-brand-primary">{quantity}</span>
           <button
-            className="text-white text-sm font-semibold focus:outline-none flex-1 text-center h-full flex items-center justify-center hover:bg-green-700 transition-colors rounded-r-md"
+            className="text-white text-sm font-semibold focus:outline-none flex-1 text-center h-full flex items-center justify-center hover:bg-brand-primary-dark transition-colors rounded-r-md"
             onClick={(e) => {
               e.stopPropagation();
               handleInc && handleInc(product);
@@ -137,7 +137,7 @@ const EnhancedProductCard: React.FC<EnhancedProductCardProps> = ({
 
     return (
       <button
-        className="border border-green-600 text-green-700 font-semibold text-[11px] bg-white hover:bg-green-50 transition-colors flex items-center justify-center rounded-md"
+        className="border border-brand-primary text-brand-primary font-semibold text-[11px] bg-white hover:bg-brand-primary/10 transition-colors flex items-center justify-center rounded-md"
         style={{ width: '70px', height: '28px', fontFamily: 'Sinkin Sans, sans-serif' }}
         onClick={handleAddClick}
       >ADD</button>

@@ -516,7 +516,7 @@ export default function ProductSection({
               <div className="mb-8 sm:mb-12" key={section.category._id}>
                 <div className="flex justify-between items-center mb-4 px-2 sm:px-0">
                   <div className="text-xl sm:text-2xl font-extrabold">{section.category.name}</div>
-                  <Link href={`/products?category=${section.category._id}`} className="hidden sm:inline text-green-600 font-medium hover:underline text-sm sm:text-base">See all</Link>
+                  <Link href={`/products?category=${section.category._id}`} className="hidden sm:inline text-brand-primary font-medium hover:underline text-sm sm:text-base">See all</Link>
                 </div>
                 <div className="relative">
                   {/* Left Button - Hidden on mobile, visible on larger screens */}
@@ -711,22 +711,22 @@ export default function ProductSection({
                                 </div>
                                 <div className="flex-shrink-0">
                                   {isInCart ? (
-                                    <div className="flex items-center bg-green-600 rounded-md justify-between" style={{ width: '70px', height: '28px' }}>
+                                    <div className="flex items-center bg-brand-primary rounded-md justify-between" style={{ width: '70px', height: '28px' }}>
                                       <button
-                                        className="text-white text-sm font-semibold focus:outline-none flex-1 text-center h-full flex items-center justify-center hover:bg-green-700 transition-colors rounded-l-md"
+                                        className="text-white text-sm font-semibold focus:outline-none flex-1 text-center h-full flex items-center justify-center hover:bg-brand-primary-dark transition-colors rounded-l-md"
                                         onClick={(e) => handleButtonClick(e, () => handleDec({...product, variantId: variantId}))}
                                         aria-label="Decrease quantity"
                                       >-</button>
-                                      <span className="text-white font-bold text-sm select-none text-center flex-1 h-full flex items-center justify-center bg-green-600">{quantities[cartKey] || 0}</span>
+                                      <span className="text-white font-bold text-sm select-none text-center flex-1 h-full flex items-center justify-center bg-brand-primary">{quantities[cartKey] || 0}</span>
                                       <button
-                                        className="text-white text-sm font-semibold focus:outline-none flex-1 text-center h-full flex items-center justify-center hover:bg-green-700 transition-colors rounded-r-md"
+                                        className="text-white text-sm font-semibold focus:outline-none flex-1 text-center h-full flex items-center justify-center hover:bg-brand-primary-dark transition-colors rounded-r-md"
                                         onClick={(e) => handleButtonClick(e, () => handleInc({...product, variantId: variantId}))}
                                         aria-label="Increase quantity"
                                       >+</button>
                                     </div>
                                   ) : canAddProduct ? (
                                     <button
-                                      className="border border-green-600 text-green-700 font-semibold text-[11px] bg-white hover:bg-green-50 transition-colors flex items-center justify-center rounded-md"
+                                      className="border border-brand-primary text-brand-primary font-semibold text-[11px] bg-white hover:bg-brand-primary/10 transition-colors flex items-center justify-center rounded-md"
                                       style={{ width: '70px', height: '28px', fontFamily: 'Sinkin Sans, sans-serif' }}
                                       onClick={(e) => handleButtonClick(e, () => handleAdd({...product, variantId: variantId}))}
                                     >ADD</button>

@@ -121,12 +121,12 @@ export default function CartValidationAlert({
       <div className="bg-green-50 border border-green-200 rounded-lg p-4">
         <div className="flex items-start justify-between">
           <div className="flex items-start gap-3">
-            <CheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
+            <CheckCircle className="h-5 w-5 text-brand-primary mt-0.5" />
             <div>
               <p className="font-medium text-green-800">
                 All Items Can Be Delivered
               </p>
-              <p className="text-sm text-green-600 mt-1">
+              <p className="text-sm text-brand-primary mt-1">
                 {validation.deliverableItemCount} item(s) from {validation.validationResults.length} warehouse(s) can be delivered to your address.
               </p>
               
@@ -149,7 +149,7 @@ export default function CartValidationAlert({
             onClick={() => setShowDetails(!showDetails)}
             variant="ghost"
             size="sm"
-            className="text-green-600 hover:text-green-700"
+            className="text-brand-primary hover:text-brand-primary-dark"
           >
             {showDetails ? 'Hide' : 'Details'}
           </Button>

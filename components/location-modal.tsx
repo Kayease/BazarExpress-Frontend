@@ -375,7 +375,7 @@ export default function LocationModal({
             CURRENT LOCATION
           </h3>
           <div className="flex items-start">
-            <MapPin className="w-5 h-5 text-green-600 mt-0.5 mr-3 flex-shrink-0" />
+            <MapPin className="w-5 h-5 text-brand-primary mt-0.5 mr-3 flex-shrink-0" />
             <div>
               <div className="text-gray-900">
                 {currentLocation || "Location not set"}
@@ -388,7 +388,7 @@ export default function LocationModal({
                     const locationData = JSON.parse(storedLocation);
                     if (locationData.deliveryTime) {
                       return (
-                        <p className="text-xs text-green-600 mt-1">
+                        <p className="text-xs text-brand-primary mt-1">
                           Delivery in {locationData.deliveryTime}
                         </p>
                       );
@@ -427,7 +427,7 @@ export default function LocationModal({
                     </h4>
                     <p className="text-sm text-gray-600">{location.address}</p>
                     {location.deliveryTime && (
-                      <p className="text-xs text-green-600 mt-1">
+                      <p className="text-xs text-brand-primary mt-1">
                         Delivery in {location.deliveryTime}
                       </p>
                     )}
@@ -454,7 +454,7 @@ export default function LocationModal({
         {/* Loading State */}
         {isSearching && !searchResults.length && (
           <div className="p-6 flex flex-col items-center justify-center">
-            <Loader2 className="w-6 h-6 text-green-600 animate-spin mb-3" />
+            <Loader2 className="w-6 h-6 text-brand-primary animate-spin mb-3" />
             <p className="text-sm text-gray-500">Searching locations...</p>
           </div>
         )}

@@ -155,19 +155,19 @@ export default function Footer() {
             {/* Contact Info */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
               <div className="flex items-center space-x-3 text-gray-300 text-sm">
-                <MapPin size={16} className="text-green-400 flex-shrink-0" />
+                <MapPin size={16} className="text-brand-primary flex-shrink-0" />
                 <span>New Delhi, India - 110001</span>
               </div>
               <div className="flex items-center space-x-3 text-gray-300 text-sm">
-                <Phone size={16} className="text-green-400 flex-shrink-0" />
+                <Phone size={16} className="text-brand-primary flex-shrink-0" />
                 <span>1800-BAZARX (24/7 Support)</span>
               </div>
               <div className="flex items-center space-x-3 text-gray-300 text-sm">
-                <Mail size={16} className="text-green-400 flex-shrink-0" />
+                <Mail size={16} className="text-brand-primary flex-shrink-0" />
                 <span>support@bazarxpress.com</span>
               </div>
               <div className="flex items-center space-x-3 text-gray-300 text-sm">
-                <Clock size={16} className="text-green-400 flex-shrink-0" />
+                <Clock size={16} className="text-brand-primary flex-shrink-0" />
                 <span>Available 24/7, 365 days</span>
               </div>
             </div>
@@ -185,11 +185,11 @@ export default function Footer() {
                   <li key={link.name}>
                     <Link
                       href={link.href}
-                      className="flex items-center space-x-2 text-gray-300 text-sm hover:text-green-400 transition-colors duration-200 group"
+                      className="flex items-center space-x-2 text-gray-300 text-sm hover:text-brand-primary transition-colors duration-200 group"
                     >
                       <IconComponent
                         size={16}
-                        className="group-hover:text-green-400 transition-colors"
+                        className="group-hover:text-brand-primary transition-colors"
                       />
                       <span>{link.name}</span>
                     </Link>
@@ -212,11 +212,11 @@ export default function Footer() {
                   <Link
                     key={link.name}
                     href={link.href}
-                    className="flex items-center space-x-2 text-gray-300 text-sm hover:text-green-400 transition-colors duration-200 group"
+                    className="flex items-center space-x-2 text-gray-300 text-sm hover:text-brand-primary transition-colors duration-200 group"
                   >
                     <IconComponent
                       size={16}
-                      className="group-hover:text-green-400 transition-colors"
+                      className="group-hover:text-brand-primary transition-colors"
                     />
                     <span>{link.name}</span>
                   </Link>
@@ -237,7 +237,7 @@ export default function Footer() {
                     href={social.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="w-8 h-8 bg-gray-800 hover:bg-green-600 rounded-lg flex items-center justify-center transition-all duration-200 hover:scale-110 group"
+                    className="w-8 h-8 bg-gray-800 hover:bg-brand-primary rounded-lg flex items-center justify-center transition-all duration-200 hover:scale-110 group"
                     title={social.name}
                   >
                     <IconComponent
@@ -267,7 +267,7 @@ export default function Footer() {
 />
                 <button
   type="submit"
-  className="px-2 py-2 bg-green-600 hover:bg-green-700 rounded-lg sm:rounded-r-lg sm:rounded-l-none transition-colors flex items-center justify-center sm:w-auto w-full"
+  className="px-2 py-2 bg-brand-primary hover:bg-brand-primary-dark rounded-lg sm:rounded-r-lg sm:rounded-l-none transition-colors flex items-center justify-center sm:w-auto w-full"
   disabled={isSubmitting}
 >
                   {isSubmitting ? (
@@ -294,11 +294,11 @@ export default function Footer() {
 
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2 text-gray-400 text-xs">
-                <Shield size={14} className="text-green-400" />
+                <Shield size={14} className="text-brand-primary" />
                 <span>Secure & Safe</span>
               </div>
               <div className="flex items-center space-x-2 text-gray-400 text-xs">
-                <Award size={14} className="text-green-400" />
+                <Award size={14} className="text-brand-primary" />
                 <span>Quality Assured</span>
               </div>
             </div>

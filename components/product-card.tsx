@@ -248,7 +248,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
           <div className="flex items-center justify-between">
             {/* Left side - Price Information */}
             <div className="flex flex-col">
-              <div className="text-xl font-bold text-green-600">
+              <div className="text-xl font-bold text-purple-600">
                 ₹{product.price.toLocaleString()}
               </div>
               {hasDiscount && (
@@ -281,7 +281,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
                 </div>
               ) : canAddProduct ? (
                 <button
-                  className="bg-green-600 hover:bg-green-700 text-white font-medium px-6 py-3 rounded-xl shadow-sm hover:shadow-md transition-all duration-200"
+                  className="bg-brand-primary hover:bg-brand-primary-dark text-white font-medium px-6 py-2 rounded-xl shadow-sm hover:shadow-md transition-all duration-200"
                   onClick={(e) => {
                     e.stopPropagation();
                     if (handleAddToCart) {
@@ -432,22 +432,22 @@ const ProductCard: React.FC<ProductCardProps> = ({
           </div>
           <div className="flex-shrink-0">
             {currentQuantity > 0 ? (
-              <div className="flex items-center bg-green-600 rounded-md justify-between" style={{ width: '70px', height: '28px' }}>
+              <div className="flex items-center bg-brand-primary rounded-md justify-between" style={{ width: '70px', height: '28px' }}>
                 <button
-                  className="text-white text-sm font-semibold focus:outline-none flex-1 text-center h-full flex items-center justify-center hover:bg-green-700 transition-colors rounded-l-md"
+                  className="text-white text-sm font-semibold focus:outline-none flex-1 text-center h-full flex items-center justify-center hover:bg-brand-primary-dark transition-colors rounded-l-md"
                   onClick={handleDecrement}
                   aria-label="Decrease quantity"
                 >-</button>
-                <span className="text-white font-bold text-sm select-none text-center flex-1 h-full flex items-center justify-center bg-green-600">{currentQuantity}</span>
+                <span className="text-white font-bold text-sm select-none text-center flex-1 h-full flex items-center justify-center bg-brand-primary">{currentQuantity}</span>
                 <button
-                  className="text-white text-sm font-semibold focus:outline-none flex-1 text-center h-full flex items-center justify-center hover:bg-green-700 transition-colors rounded-r-md"
+                  className="text-white text-sm font-semibold focus:outline-none flex-1 text-center h-full flex items-center justify-center hover:bg-brand-primary-dark transition-colors rounded-r-md"
                   onClick={handleIncrement}
                   aria-label="Increase quantity"
                 >+</button>
               </div>
             ) : canAddProduct ? (
               <button
-                className="border border-green-600 text-green-700 font-semibold text-[11px] bg-white hover:bg-green-50 transition-colors flex items-center justify-center rounded-md"
+                className="border border-brand-primary text-brand-primary font-semibold text-[11px] bg-white hover:bg-brand-primary/10 transition-colors flex items-center justify-center rounded-md"
                 style={{ width: '70px', height: '28px', fontFamily: 'Sinkin Sans, sans-serif' }}
                 onClick={(e) => {
                   e.stopPropagation();

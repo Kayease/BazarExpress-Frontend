@@ -188,7 +188,7 @@ export default function DeliveryAvailabilityChecker({
       <div className="space-y-3">
         {/* Delivery Available Header */}
         <div className="flex items-start gap-3">
-          <CheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
+          <CheckCircle className="h-5 w-5 text-brand-primary mt-0.5" />
           <div className="flex-1">
             <h4 className="font-medium text-green-800">Delivery Available</h4>
             <p className="text-sm text-green-700 mt-1">
@@ -218,7 +218,7 @@ export default function DeliveryAvailabilityChecker({
         <div className="bg-white rounded-lg p-3 border border-green-200">
           {deliveryInfo.isFreeDelivery ? (
             <div className="flex items-center gap-2">
-              <CheckCircle className="h-4 w-4 text-green-600" />
+              <CheckCircle className="h-4 w-4 text-brand-primary" />
               <span className="font-medium text-green-800">FREE DELIVERY</span>
             </div>
           ) : (
