@@ -153,7 +153,9 @@ export default function WishlistPage() {
         variantName: item.variantName,
         selectedVariant: item.selectedVariant,
         // Ensure price is correct
-        price: item.price || item.selectedVariant?.price
+        price: item.price || item.selectedVariant?.price,
+        // Preserve unit information
+        unit: item.unit
       };
       
       console.log('Adding new item to cart:', cartItem);
@@ -185,7 +187,9 @@ export default function WishlistPage() {
           ...product, 
           id: product._id, 
           quantity: 1,
-          warehouse: product.warehouse
+          warehouse: product.warehouse,
+          // Preserve unit information
+          unit: product.unit
         };
         
         console.log('Adding product with existing variant info to cart:', productToAdd);
@@ -204,7 +208,9 @@ export default function WishlistPage() {
           variantName: firstVariant.name || firstVariantKey.replace(/::/g, ' '),
           selectedVariant: firstVariant,
           price: (firstVariant.price !== undefined ? firstVariant.price : product.price),
-          warehouse: product.warehouse
+          warehouse: product.warehouse,
+          // Preserve unit information from variant or product
+          unit: firstVariant.unit || product.unit
         };
         
         console.log('Adding variant product to cart:', productWithVariant);
@@ -217,7 +223,9 @@ export default function WishlistPage() {
           ...product, 
           id: product._id, 
           quantity: 1,
-          warehouse: product.warehouse
+          warehouse: product.warehouse,
+          // Preserve unit information
+          unit: product.unit
         };
         
         console.log('Adding simple product to cart:', productToAdd);
@@ -272,7 +280,9 @@ export default function WishlistPage() {
         // Product already has variant info, use it directly
         const productToAdd = {
           ...product,
-          warehouse: product.warehouse
+          warehouse: product.warehouse,
+          // Preserve unit information
+          unit: product.unit
         };
         
         console.log('Adding product with existing variant info to wishlist:', productToAdd);
@@ -289,7 +299,9 @@ export default function WishlistPage() {
           variantName: firstVariant.name || firstVariantKey.replace(/::/g, ' '),
           selectedVariant: firstVariant,
           price: (firstVariant.price !== undefined ? firstVariant.price : product.price),
-          warehouse: product.warehouse
+          warehouse: product.warehouse,
+          // Preserve unit information from variant or product
+          unit: firstVariant.unit || product.unit
         };
         
         console.log('Adding variant product to wishlist:', productWithVariant);
@@ -300,7 +312,9 @@ export default function WishlistPage() {
         console.log('Product has no variant information - treating as simple product');
         const productToAdd = {
           ...product,
-          warehouse: product.warehouse
+          warehouse: product.warehouse,
+          // Preserve unit information
+          unit: product.unit
         };
         
         console.log('Adding simple product to wishlist:', productToAdd);
@@ -416,7 +430,13 @@ export default function WishlistPage() {
                 variantId: item.variantId,
                 warehouse: item.warehouse,
                 canAddProduct,
-                cartItemsCount: cartItems.length
+                cartItemsCount: cartItems.length,
+                category: item.category,
+                brand: item.brand,
+                categoryType: typeof item.category,
+                brandType: typeof item.brand,
+                categoryKeys: item.category && typeof item.category === 'object' ? Object.keys(item.category) : null,
+                brandKeys: item.brand && typeof item.brand === 'object' ? Object.keys(item.brand) : null
               });
               
               return (
@@ -427,7 +447,10 @@ export default function WishlistPage() {
                     // Ensure variant information is properly displayed
                     variantId: item.variantId,
                     variantName: item.variantName,
-                    selectedVariant: item.selectedVariant
+                    selectedVariant: item.selectedVariant,
+                    // Ensure category and brand objects are preserved
+                    category: item.category,
+                    brand: item.brand
                   }}
                   isInWishlist={isInWishlist}
                   handleWishlistClick={(product: any, e: React.MouseEvent) => {
@@ -465,21 +488,38 @@ export default function WishlistPage() {
                 : 'space-y-2 sm:space-y-3'
               }`}>
                 {relatedProducts.map((product) => {
-                  // Enhance product with variant information if it has variants
-                  const enhancedProduct = (() => {
-                    if (product.variants && Object.keys(product.variants).length > 0) {
-                      const firstVariantKey = Object.keys(product.variants)[0];
-                      const firstVariant = product.variants[firstVariantKey];
-                      return {
-                        ...product,
-                        variantId: firstVariantKey,
-                        variantName: firstVariant.name || firstVariantKey.replace(/::/g, ' '),
-                        selectedVariant: firstVariant,
-                        price: (firstVariant.price !== undefined ? firstVariant.price : product.price)
-                      };
-                    }
-                    return product;
-                  })();
+                                     // Enhance product with variant information if it has variants
+                   const enhancedProduct = (() => {
+                     // Debug: Log the product structure
+                     console.log('Enhancing related product:', {
+                       name: product.name,
+                       hasVariants: !!product.variants,
+                       variantsKeys: product.variants ? Object.keys(product.variants) : [],
+                       currentUnit: product.unit,
+                       variants: product.variants
+                     });
+                     
+                     if (product.variants && Object.keys(product.variants).length > 0) {
+                       const firstVariantKey = Object.keys(product.variants)[0];
+                       const firstVariant = product.variants[firstVariantKey];
+                       console.log('Found variant with unit:', firstVariant.unit);
+                       return {
+                         ...product,
+                         variantId: firstVariantKey,
+                         variantName: firstVariant.name || firstVariantKey.replace(/::/g, ' '),
+                         selectedVariant: firstVariant,
+                         price: (firstVariant.price !== undefined ? firstVariant.price : product.price),
+                         // Preserve unit information from variant or product
+                         unit: firstVariant.unit || product.unit || '1 Unit' // Fallback to default unit
+                       };
+                     }
+                     // For products without variants, ensure unit is set
+                     console.log('Using fallback unit for related product');
+                     return {
+                       ...product,
+                       unit: product.unit || '1 Unit' // Fallback to default unit
+                     };
+                   })();
 
                   return (
                     <ProductCard
@@ -506,7 +546,7 @@ export default function WishlistPage() {
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">
             <div className="flex items-center justify-between mb-3 sm:mb-4">
               <h2 className="text-lg sm:text-xl font-semibold text-gray-900 flex items-center gap-2">
-                <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
+                <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600" />
                 Recently Viewed
               </h2>
             </div>
@@ -516,28 +556,80 @@ export default function WishlistPage() {
               : 'space-y-2 sm:space-y-3'
             }`}>
               {recentlyViewed.slice(0, 8).map((product) => {
-                // Enhance product with variant information if it has variants
-                const enhancedProduct = (() => {
-                  // First check if product already has variant info (from recently viewed)
-                  if (product.variantId && product.variantName) {
-                    return product;
-                  }
-                  
-                  // If not, check if it has variants object and extract first variant
-                  if (product.variants && Object.keys(product.variants).length > 0) {
-                    const firstVariantKey = Object.keys(product.variants)[0];
-                    const firstVariant = product.variants[firstVariantKey];
-                    return {
-                      ...product,
-                      variantId: firstVariantKey,
-                      variantName: firstVariant.name || firstVariantKey.replace(/::/g, ' '),
-                      selectedVariant: firstVariant,
-                      price: (firstVariant.price !== undefined ? firstVariant.price : product.price)
-                    };
-                  }
-                  
-                  return product;
-                })();
+                                 // Enhance product with variant information if it has variants
+                 const enhancedProduct = (() => {
+                   // Debug: Log the product structure
+                   console.log('Enhancing recently viewed product:', {
+                     name: product.name,
+                     variantId: product.variantId,
+                     variantName: product.variantName,
+                     hasVariants: !!product.variants,
+                     variantsKeys: product.variants ? Object.keys(product.variants) : [],
+                     currentUnit: product.unit,
+                     variants: product.variants,
+                     category: product.category,
+                     brand: product.brand,
+                     categoryType: typeof product.category,
+                     brandType: typeof product.brand,
+                     categoryKeys: product.category && typeof product.category === 'object' ? Object.keys(product.category) : null,
+                     brandKeys: product.brand && typeof product.brand === 'object' ? Object.keys(product.brand) : null
+                   });
+                   
+                   // First check if product already has variant info (from recently viewed)
+                   if (product.variantId && product.variantName) {
+                     // For recently viewed products, ensure unit is properly set
+                     // Check if we need to extract unit from variants
+                     if (product.variants && Object.keys(product.variants).length > 0 && product.variantId) {
+                       const variant = product.variants[product.variantId];
+                       if (variant && variant.unit) {
+                         console.log('Found variant with unit:', variant.unit);
+                         return {
+                           ...product,
+                           unit: variant.unit,
+                           // Ensure category and brand objects are preserved
+                           category: product.category,
+                           brand: product.brand
+                         };
+                       }
+                     }
+                     // If no unit found in variant, use fallback
+                     console.log('Using fallback unit for recently viewed product');
+                     return {
+                       ...product,
+                       unit: product.unit || '1 Unit',
+                       // Ensure category and brand objects are preserved
+                       category: product.category,
+                       brand: product.brand
+                     };
+                   }
+                   
+                                        // If not, check if it has variants object and extract first variant
+                     if (product.variants && Object.keys(product.variants).length > 0) {
+                       const firstVariantKey = Object.keys(product.variants)[0];
+                       const firstVariant = product.variants[firstVariantKey];
+                       return {
+                         ...product,
+                         variantId: firstVariantKey,
+                         variantName: firstVariant.name || firstVariantKey.replace(/::/g, ' '),
+                         selectedVariant: firstVariant,
+                         price: (firstVariant.price !== undefined ? firstVariant.price : product.price),
+                         // Preserve unit information from variant or product
+                         unit: firstVariant.unit || product.unit || '1 Unit', // Fallback to default unit
+                         // Ensure category and brand objects are preserved
+                         category: product.category,
+                         brand: product.brand
+                       };
+                     }
+                     
+                     // For products without variants, ensure unit is set
+                     return {
+                       ...product,
+                       unit: product.unit || '1 Unit', // Fallback to default unit
+                       // Ensure category and brand objects are preserved
+                       category: product.category,
+                       brand: product.brand
+                     };
+                 })();
 
                 return (
                   <ProductCard

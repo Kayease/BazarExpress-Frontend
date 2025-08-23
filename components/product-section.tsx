@@ -128,20 +128,20 @@ export default function ProductSection({
     for (let i = 0; i < 5; i++) {
       if (i < fullStars) {
         stars.push(
-          <Star key={i} className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+          <Star key={i} className="w-[10px] h-[10px] text-yellow-400 fill-yellow-400" />
         );
       } else if (i === fullStars && hasHalfStar) {
         stars.push(
-          <div key={i} className="relative w-3 h-3">
-            <Star className="w-3 h-3 text-gray-300 fill-gray-300 absolute" />
+          <div key={i} className="relative w-[10px] h-[10px]">
+            <Star className="w-[10px] h-[10px] text-gray-300 fill-gray-300 absolute" />
             <div className="overflow-hidden w-1/2">
-              <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+              <Star className="w-[10px] h-[10px] text-yellow-400 fill-yellow-400" />
             </div>
           </div>
         );
       } else {
         stars.push(
-          <Star key={i} className="w-3 h-3 text-gray-300 fill-gray-300" />
+          <Star key={i} className="w-[10px] h-[10px] text-gray-300 fill-gray-300" />
         );
       }
     }
@@ -692,7 +692,7 @@ export default function ProductSection({
                                   {product.name}
                                 </div>
                                 {/* Rating Stars */}
-                                <div className="flex items-center gap-1 mb-1">
+                                <div className="flex items-center gap-[0.5px] mb-1">
                                   {renderStars(product.rating || 0)}
                                   <span className="text-[9px] text-gray-500 ml-1">({product.rating || 0})</span>
                                 </div>

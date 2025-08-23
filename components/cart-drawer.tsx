@@ -159,7 +159,7 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
                             {item.name}
                           </h4>
                           {item.variantName && (
-                            <p className="text-xs text-blue-600 font-medium mt-0.5">
+                            <p className="text-xs text-purple-600 font-medium mt-0.5">
                               Variant: {item.variantName}
                             </p>
                           )}

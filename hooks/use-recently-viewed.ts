@@ -7,6 +7,7 @@ interface RecentlyViewedProduct {
   image: string;
   price: number;
   category?: any;
+  brand?: any;
   timestamp: number;
   // Add variant support
   variants?: Record<string, any>;
@@ -14,6 +15,7 @@ interface RecentlyViewedProduct {
   variantName?: string;
   selectedVariant?: any;
   warehouse?: any;
+  unit?: string;
 }
 
 const RECENTLY_VIEWED_KEY = 'recentlyViewedProducts';
@@ -41,19 +43,35 @@ export function useRecentlyViewed() {
   const addToRecentlyViewed = useCallback((product: any) => {
     if (!product?._id) return;
 
+    // Extract unit from variant if available, otherwise use product unit
+    let unit = product.unit;
+    if (product.variantId && product.variants && product.variants[product.variantId]) {
+      const variant = product.variants[product.variantId];
+      unit = variant.unit || product.unit;
+      console.log('Extracted unit from variant:', { variantId: product.variantId, variantUnit: variant.unit, finalUnit: unit });
+    } else if (product.selectedVariant && product.selectedVariant.unit) {
+      unit = product.selectedVariant.unit;
+      console.log('Extracted unit from selectedVariant:', { selectedVariantUnit: product.selectedVariant.unit, finalUnit: unit });
+    } else {
+      console.log('Using product unit:', { productUnit: product.unit, finalUnit: unit });
+    }
+
     const productData: RecentlyViewedProduct = {
       _id: product._id,
       name: product.name,
       image: product.image,
       price: product.price,
       category: product.category,
+      brand: product.brand,
       timestamp: Date.now(),
       // Include variant information if available
       variants: product.variants,
       variantId: product.variantId,
       variantName: product.variantName,
       selectedVariant: product.selectedVariant,
-      warehouse: product.warehouse
+      warehouse: product.warehouse,
+      // Include unit information (extracted from variant if available)
+      unit: unit
     };
 
     setRecentlyViewed(prev => {

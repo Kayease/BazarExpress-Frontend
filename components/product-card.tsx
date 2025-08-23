@@ -46,20 +46,20 @@ const ProductCard: React.FC<ProductCardProps> = ({
     for (let i = 0; i < 5; i++) {
       if (i < fullStars) {
         stars.push(
-          <Star key={i} className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+          <Star key={i} className="w-[10px] h-[10px] text-yellow-400 fill-yellow-400" />
         );
       } else if (i === fullStars && hasHalfStar) {
         stars.push(
-          <div key={i} className="relative w-3 h-3">
-            <Star className="w-3 h-3 text-gray-300 fill-gray-300 absolute" />
+          <div key={i} className="relative w-[10px] h-[10px]">
+            <Star className="w-[10px] h-[10px] text-gray-300 fill-gray-300 absolute" />
             <div className="overflow-hidden w-1/2">
-              <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+              <Star className="w-[10px] h-[10px] text-yellow-400 fill-yellow-400" />
             </div>
           </div>
         );
       } else {
         stars.push(
-          <Star key={i} className="w-3 h-3 text-gray-300 fill-gray-300" />
+          <Star key={i} className="w-[10px] h-[10px] text-gray-300 fill-gray-300" />
         );
       }
     }
@@ -239,9 +239,9 @@ const ProductCard: React.FC<ProductCardProps> = ({
           </div>
 
           {/* Rating Stars */}
-          <div className="flex items-center gap-1 mb-3">
+          <div className="flex items-center gap-[0.5px] mb-3">
             {renderStars(product.rating || 0)}
-            <span className="text-sm text-gray-500 ml-1">({product.rating || 0})</span>
+            <span className="text-[9px] text-gray-500 ml-1">({product.rating || 0})</span>
           </div>
 
           {/* Price and Actions Section */}
@@ -281,7 +281,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
                 </div>
               ) : canAddProduct ? (
                 <button
-                  className="bg-brand-primary hover:bg-brand-primary-dark text-white font-medium px-6 py-2 rounded-xl shadow-sm hover:shadow-md transition-all duration-200"
+                  className="bg-brand-primary hover:bg-brand-primary-dark text-white font-medium px-4 py-1.5 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 text-sm"
                   onClick={(e) => {
                     e.stopPropagation();
                     if (handleAddToCart) {
@@ -403,17 +403,17 @@ const ProductCard: React.FC<ProductCardProps> = ({
           
           {/* Variant Name */}
           {product.variantName && (
-            <div className="text-[9px] text-blue-600 font-medium mb-1 leading-tight">
+            <div className="text-[9px] text-purple-600 font-medium mb-1 leading-tight">
               {product.variantName}
             </div>
           )}
           {/* Rating Stars */}
-          <div className="flex items-center gap-1 mb-1">
+          <div className="flex items-center gap-[0.1px] mb-1">
             {renderStars(product.rating || 0)}
             <span className="text-[9px] text-gray-500 ml-1">({product.rating || 0})</span>
           </div>
           {/* Variant/Weight/Unit */}
-          <div className={`text-[10px] mb-1 font-normal flex items-center gap-1 ${product.variants && Object.keys(product.variants).length > 0 ? 'text-green-600' : 'text-gray-500'}`} style={{ fontFamily: 'Sinkin Sans, sans-serif' }}>
+          <div className={`text-[10px] mb-1 font-normal flex items-center gap-1 ${product.variants && Object.keys(product.variants).length > 0 ? 'text-purple-600' : 'text-gray-500'}`} style={{ fontFamily: 'Sinkin Sans, sans-serif' }}>
             <span>{product.unit}</span>
             {product.variants && Object.keys(product.variants).length > 0 && (
               <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
