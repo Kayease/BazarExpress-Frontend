@@ -468,7 +468,7 @@ export default function ProductDetailsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 mb-12">
           {/* Left Sidebar - Gallery Images (Fixed/Sticky) */}
           <div className="lg:col-span-1">
-            <div className="sticky top-8 space-y-4">
+            <div className="sticky top-24 space-y-4">
             <div className="flex flex-col gap-3 relative">
               {/* Up Arrow */}
               {allImages.length > 7 && galleryStartIdx > 0 && (
@@ -522,7 +522,7 @@ export default function ProductDetailsPage() {
 
           {/* Main Image Area (Fixed/Sticky) */}
           <div className="lg:col-span-5">
-            <div className="sticky top-8 space-y-4">
+            <div className="sticky top-24 space-y-4">
             <Card className="overflow-hidden">
               <div className="relative aspect-video bg-white group">
                 <Image
