@@ -39,12 +39,12 @@ export function ProductBreadcrumb({ product, categories = [] }: ProductBreadcrum
     : null;
 
   return (
-    <div className="bg-white border-b">
+    <div className="bg-white">
       <div className="container mx-auto px-4 py-4">
         <nav className="flex items-center text-sm text-gray-600 gap-2">
           <button
             onClick={() => router.push("/")}
-            className="hover:text-green-600 transition-colors"
+            className="hover:text-purple-600 transition-colors"
           >
             Home
           </button>
@@ -52,7 +52,7 @@ export function ProductBreadcrumb({ product, categories = [] }: ProductBreadcrum
           
           <button
             onClick={() => router.push("/products")}
-            className="hover:text-green-600 transition-colors"
+            className="hover:text-purple-600 transition-colors"
           >
             All Categories
           </button>
@@ -76,7 +76,7 @@ export function ProductBreadcrumb({ product, categories = [] }: ProductBreadcrum
             <>
               <button
                 onClick={() => router.push(`/products?category=${categoryInfo._id}`)}
-                className="hover:text-green-600 transition-colors"
+                className="hover:text-purple-600 transition-colors"
               >
                 {categoryName}
               </button>

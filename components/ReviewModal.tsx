@@ -10,6 +10,7 @@ import { Star, Send, X, AlertCircle, CheckCircle } from "lucide-react";
 import { useAppContext } from "@/components/app-provider";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
+import LoginModal from "@/components/login-modal";
 
 interface ReviewModalProps {
   isOpen: boolean;
@@ -34,6 +35,7 @@ export function ReviewModal({
   const [comment, setComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const { user } = useAppContext();
   const router = useRouter();
 
@@ -42,10 +44,7 @@ export function ReviewModal({
     
     if (!user) {
       toast.error("Please log in to submit a review.");
-      setTimeout(() => {
-        onClose();
-        router.push('/login');
-      }, 1500);
+      setIsLoginModalOpen(true);
       return;
     }
 
@@ -118,6 +117,7 @@ export function ReviewModal({
           errorMessage = "You have already reviewed this product.";
         } else if (error.message.includes('login') || error.message.includes('authentication')) {
           errorMessage = "Please log in to submit a review.";
+          setIsLoginModalOpen(true);
         } else {
           errorMessage = error.message;
         }
@@ -143,16 +143,19 @@ export function ReviewModal({
   if (submitStatus === 'success') {
     return (
       <Dialog open={isOpen} onOpenChange={handleClose}>
-        <DialogContent className="sm:max-w-md">
-          <div className="text-center py-8">
-            <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+        <DialogContent className="w-[95vw] max-w-md mx-auto sm:mx-0 sm:w-full max-h-[90vh] overflow-y-auto bg-white rounded-xl border border-gray-200 shadow-xl [&>button]:hidden">
+          <div className="text-center py-6 sm:py-8 px-4 sm:px-6">
+            <CheckCircle className="h-12 w-12 sm:h-16 sm:w-16 text-brand-primary mx-auto mb-3 sm:mb-4" />
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
               Review Submitted Successfully!
             </h3>
-            <p className="text-gray-600 mb-4">
+            <p className="text-sm sm:text-base text-gray-600 mb-4 px-2">
               Thank you for your feedback. Your review is now pending approval and will be visible once approved by our team.
             </p>
-            <Button onClick={handleClose} className="bg-green-600 hover:bg-green-700">
+            <Button 
+              onClick={handleClose} 
+              className="bg-gradient-to-r from-brand-primary to-brand-primary-dark hover:from-brand-primary-dark hover:to-brand-primary text-white font-medium shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 border-0 px-6 py-2"
+            >
               Close
             </Button>
           </div>
@@ -163,31 +166,31 @@ export function ReviewModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="text-lg font-semibold">Write a Review</DialogTitle>
+      <DialogContent className="w-[95vw] z-[999] max-w-md mx-auto sm:mx-0 sm:w-full max-h-[90vh] overflow-y-auto bg-white rounded-xl border border-gray-200 shadow-xl [&>button]:hidden">
+        <DialogHeader className="px-4 sm:px-6 pt-4 sm:pt-6">
+          <DialogTitle className="text-base sm:text-lg font-semibold text-gray-900">Write a Review</DialogTitle>
           <p className="text-sm text-gray-600 mt-1">{productName}</p>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3 px-4 sm:px-6 pb-4 sm:pb-6">
           {/* Rating */}
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">
+          <div className="space-y-1">
+            <Label className="text-sm font-medium text-gray-700">
               Rating <span className="text-red-500">*</span>
             </Label>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 flex-wrap">
               {[1, 2, 3, 4, 5].map((star) => (
                 <button
                   key={star}
                   type="button"
-                  className="p-1 transition-colors"
+                  className="p-1 transition-all duration-200 hover:scale-110"
                   onMouseEnter={() => setHoveredRating(star)}
                   onMouseLeave={() => setHoveredRating(0)}
                   onClick={() => setRating(star)}
                   disabled={isSubmitting}
                 >
                   <Star
-                    className={`h-6 w-6 transition-colors ${
+                    className={`h-5 w-5 sm:h-6 sm:w-6 transition-all duration-200 ${
                       star <= (hoveredRating || rating)
                         ? "text-yellow-400 fill-yellow-400"
                         : "text-gray-300 hover:text-yellow-200"
@@ -196,7 +199,7 @@ export function ReviewModal({
                 </button>
               ))}
               {rating > 0 && (
-                <span className="ml-2 text-sm text-gray-600">
+                <span className="ml-2 text-xs sm:text-sm text-gray-600 font-medium">
                   {rating === 1 && "Poor"}
                   {rating === 2 && "Fair"}
                   {rating === 3 && "Good"}
@@ -208,8 +211,8 @@ export function ReviewModal({
           </div>
 
           {/* Title */}
-          <div className="space-y-2">
-            <Label htmlFor="title" className="text-sm font-medium">
+          <div className="space-y-1">
+            <Label htmlFor="title" className="text-sm font-medium text-gray-700">
               Review Title <span className="text-red-500">*</span>
             </Label>
             <Input
@@ -219,14 +222,14 @@ export function ReviewModal({
               placeholder="Summarize your experience"
               maxLength={60}
               disabled={isSubmitting}
-              className="w-full"
+              className="w-full border border-gray-300 hover:border-gray-400 focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 transition-colors duration-200 rounded-lg"
             />
             <p className="text-xs text-gray-500">{title.length}/60</p>
           </div>
 
           {/* Comment */}
-          <div className="space-y-2">
-            <Label htmlFor="comment" className="text-sm font-medium">
+          <div className="space-y-1">
+            <Label htmlFor="comment" className="text-sm font-medium text-gray-700">
               Your Review <span className="text-red-500">*</span>
             </Label>
             <Textarea
@@ -237,26 +240,26 @@ export function ReviewModal({
               rows={3}
               maxLength={500}
               disabled={isSubmitting}
-              className="w-full resize-none"
+              className="w-full resize-none border border-gray-300 hover:border-gray-400 focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 transition-colors duration-200 rounded-lg"
             />
             <p className="text-xs text-gray-500">{comment.length}/500</p>
           </div>
 
           {/* Submit Buttons */}
-          <div className="flex gap-3 pt-2">
+          <div className="flex flex-col sm:flex-row gap-3 pt-1">
             <Button
               type="button"
               variant="outline"
               onClick={handleClose}
               disabled={isSubmitting}
-              className="flex-1"
+              className="flex-1 h-11 border-2 border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all duration-200 font-medium"
             >
               Cancel
             </Button>
             <Button
               type="submit"
               disabled={isSubmitting || rating === 0 || !title.trim() || !comment.trim()}
-              className="flex-1 bg-green-600 hover:bg-green-700"
+              className="flex-1 h-11 bg-gradient-to-r from-brand-primary to-brand-primary-dark hover:from-brand-primary-dark hover:to-brand-primary text-white font-medium shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 border-0"
             >
               {isSubmitting ? (
                 <>
@@ -274,21 +277,18 @@ export function ReviewModal({
         </form>
 
         {!user && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mt-4">
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex items-start gap-2">
+          <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-3 mx-4 sm:mx-6 mb-4 sm:mb-6">
+            <div className="flex flex-col sm:flex-row items-start justify-between gap-3">
+              <div className="flex items-start gap-2 flex-1">
                 <AlertCircle className="h-4 w-4 text-yellow-600 flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-yellow-800">
+                <p className="text-xs text-yellow-800 leading-relaxed">
                   Please log in to submit a review. Only customers who have purchased and received this product can write reviews.
                 </p>
               </div>
               <Button
                 size="sm"
-                onClick={() => {
-                  onClose();
-                  router.push('/login');
-                }}
-                className="bg-yellow-600 hover:bg-yellow-700 text-white text-xs px-3 py-1 h-auto"
+                onClick={() => setIsLoginModalOpen(true)}
+                className="bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-white text-xs px-4 py-2 h-auto font-medium shadow-md hover:shadow-lg transition-all duration-200 border-0"
               >
                 Login
               </Button>
@@ -296,6 +296,12 @@ export function ReviewModal({
           </div>
         )}
       </DialogContent>
+
+      {/* Login Modal */}
+      <LoginModal 
+        isOpen={isLoginModalOpen} 
+        onClose={() => setIsLoginModalOpen(false)} 
+      />
     </Dialog>
   );
 }
