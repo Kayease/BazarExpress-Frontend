@@ -151,7 +151,7 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
               <p className="text-gray-500 mb-6 max-w-xs">Add items to your cart to see them here</p>
               <button 
                 onClick={() => {
-                  router.push('/search');
+                  router.push('/products');
                   onClose();
                 }}
                 className="px-6 py-2.5 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors"
