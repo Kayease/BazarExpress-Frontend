@@ -17,6 +17,8 @@ interface RelatedProductsProps {
   isInWishlist: (id: string, variantId?: string) => boolean;
   addToWishlist: (product: any) => void;
   addToCart: (product: any) => void;
+  locationState?: any;
+  isGlobalMode?: boolean;
 }
 
 const RelatedProducts = memo(({ 
@@ -25,7 +27,9 @@ const RelatedProducts = memo(({
   router, 
   isInWishlist, 
   addToWishlist, 
-  addToCart 
+  addToCart,
+  locationState,
+  isGlobalMode
 }: RelatedProductsProps) => {
   if (relatedProducts.length === 0) {
     return (
@@ -173,8 +177,8 @@ const RelatedProducts = memo(({
                 }
               }}
               quantity={0}
-              locationState={null}
-              isGlobalMode={true}
+              locationState={locationState}
+              isGlobalMode={isGlobalMode}
               viewMode="grid"
               onClick={() => router.push(`/products/${relProd._id}`)}
             />

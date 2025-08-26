@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 
@@ -177,7 +178,8 @@ export const useProductOptimized = (): UseProductOptimizedReturn => {
     if (!productId || !product?.category) return;
 
     const categoryId = typeof product.category === 'object' ? product.category._id : product.category;
-    const cacheKey = `${productId}_${categoryId}`;
+    const warehouseId = product.warehouse?._id || 'no-warehouse';
+    const cacheKey = `${productId}_${categoryId}_${warehouseId}`;
 
     // Check cache first
     const cached = relatedProductsCache.get(cacheKey);
@@ -190,17 +192,61 @@ export const useProductOptimized = (): UseProductOptimizedReturn => {
       setRelatedProductsLoading(true);
       
       const APIURL = process.env.NEXT_PUBLIC_API_URL;
-      const response = await fetch(`${APIURL}/products/public?category=${categoryId}&limit=8`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch related products');
+      
+      // Get location state from localStorage since we can't access the useLocation hook here
+      let locationState = null;
+      let isGlobalMode = false;
+      
+      try {
+        const storedLocation = localStorage.getItem('locationState');
+        if (storedLocation) {
+          locationState = JSON.parse(storedLocation);
+          isGlobalMode = locationState?.isGlobalMode || false;
+        }
+      } catch (e) {
+        console.log('No location state found, using fallback');
+      }
+
+      let relatedData;
+      
+      // Use location-aware API if location is detected
+      if (locationState?.pincode && locationState?.isLocationDetected) {
+        const mode = isGlobalMode ? 'global' : 'auto';
+        const response = await fetch(`${APIURL}/warehouses/products-by-pincode?pincode=${locationState.pincode}&category=${categoryId}&limit=20&mode=${mode}`);
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch location-aware related products');
+        }
+        
+        const locationResponse = await response.json();
+        relatedData = locationResponse.success ? locationResponse.products : [];
+      } else {
+        // Fallback to global products if no location detected
+        const response = await fetch(`${APIURL}/products/public?category=${categoryId}&limit=20`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch related products');
+        }
+        relatedData = await response.json();
       }
       
-      const relatedData = await response.json();
-      
-      // Filter out the current product and ensure it's an array
-      const filteredRelatedProducts = Array.isArray(relatedData) 
-        ? relatedData.filter((p: Product) => p._id !== productId)
+      // Filter to only show products from the same warehouse as the current product
+      let filteredRelatedProducts = Array.isArray(relatedData) 
+        ? relatedData.filter((p: Product) => {
+            // Skip the current product
+            if (p._id === productId) return false;
+            
+            // If current product has a warehouse, only show products from the same warehouse
+            if (product.warehouse && p.warehouse) {
+              return p.warehouse._id === product.warehouse._id;
+            }
+            
+            // If no warehouse info, show the product (fallback)
+            return true;
+          })
         : [];
+      
+      // Limit to 8 products
+      filteredRelatedProducts = filteredRelatedProducts.slice(0, 8);
       
       // Cache the related products data
       relatedProductsCache.set(cacheKey, { data: filteredRelatedProducts, timestamp: Date.now() });
@@ -211,7 +257,7 @@ export const useProductOptimized = (): UseProductOptimizedReturn => {
     } finally {
       setRelatedProductsLoading(false);
     }
-  }, [productId, product?.category, isCacheValid]);
+  }, [productId, product?.category, product?.warehouse, isCacheValid]);
 
   // Memoized refresh functions
   const refreshProduct = useCallback(() => {
@@ -231,11 +277,12 @@ export const useProductOptimized = (): UseProductOptimizedReturn => {
   const refreshRelatedProducts = useCallback(() => {
     if (productId && product?.category) {
       const categoryId = typeof product.category === 'object' ? product.category._id : product.category;
-      const cacheKey = `${productId}_${categoryId}`;
+      const warehouseId = product.warehouse?._id || 'no-warehouse';
+      const cacheKey = `${productId}_${categoryId}_${warehouseId}`;
       relatedProductsCache.delete(cacheKey);
       fetchRelatedProducts();
     }
-  }, [productId, product?.category, fetchRelatedProducts]);
+  }, [productId, product?.category, product?.warehouse, fetchRelatedProducts]);
 
   // Fetch product on mount and when productId changes
   useEffect(() => {
@@ -255,7 +302,7 @@ export const useProductOptimized = (): UseProductOptimizedReturn => {
     if (product && !reviewsLoading) {
       fetchRelatedProducts();
     }
-  }, [product, reviewsLoading, fetchRelatedProducts]);
+  }, [product, reviewsLoading, product?.warehouse, fetchRelatedProducts]);
 
   // Memoized return value to prevent unnecessary re-renders
   const returnValue = useMemo(() => ({

@@ -1092,6 +1092,13 @@ export default function ProductDetailsPage() {
 
   const { addToRecentlyViewed } = useRecentlyViewed();
   const { locationState, isGlobalMode } = useLocation();
+
+  // Clear related products cache when location changes
+  useEffect(() => {
+    if (product?._id && product?.category) {
+      refreshRelatedProducts();
+    }
+  }, [locationState?.pincode, locationState?.isLocationDetected, isGlobalMode, product?._id, product?.category, refreshRelatedProducts]);
   
 
 
@@ -2091,6 +2098,8 @@ export default function ProductDetailsPage() {
             isInWishlist={isInWishlist}
             addToWishlist={addToWishlist}
             addToCart={addToCart}
+            locationState={locationState}
+            isGlobalMode={isGlobalMode}
           />
         </Suspense>
 
