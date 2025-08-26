@@ -1,8 +1,9 @@
-import { useEffect, useState, memo, useRef } from 'react';
+import { useEffect, useState, memo, useRef, useCallback, useMemo } from 'react';
 import Image from 'next/image';
 import { Grid3X3, ArrowLeft } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Category } from '../types';
+import OptimizedImage from '@/components/OptimizedImage';
 
 interface CategorySidebarProps {
   selectedCategory?: string;
@@ -10,6 +11,10 @@ interface CategorySidebarProps {
   onCategoryChange: (category?: string) => void;
   onSubcategoryChange: (subcategory?: string) => void;
 }
+
+// Cache for categories to prevent refetching
+const categoriesCache = new Map<string, { data: Category[]; timestamp: number }>();
+const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
 
 function CategorySidebar({
   selectedCategory,
@@ -29,10 +34,87 @@ function CategorySidebar({
     console.log(`[CategorySidebar] ${message}`, data || '');
   };
 
+  // Check if cached data is still valid
+  const isCacheValid = useCallback((timestamp: number) => {
+    return Date.now() - timestamp < CACHE_DURATION;
+  }, []);
+
+  // Fetch parent categories with caching
+  const fetchParentCategories = useCallback(async () => {
+    try {
+      // Check cache first
+      const cached = categoriesCache.get('parent');
+      if (cached && isCacheValid(cached.timestamp)) {
+        setParentCategories(cached.data);
+        logDebug('Using cached parent categories', { count: cached.data.length });
+        return;
+      }
+
+      setLoadingCategories(true);
+      logDebug('Fetching parent categories');
+      
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+      const response = await fetch(`${apiUrl}/categories`);
+      
+      if (response.ok) {
+        const categories = await response.json();
+        // Filter only parent categories (no parentId or empty parentId)
+        const parents = categories.filter((cat: Category) => !cat.parentId || cat.parentId === '');
+        
+        // Cache the data
+        categoriesCache.set('parent', { data: parents, timestamp: Date.now() });
+        
+        setParentCategories(parents);
+        logDebug('Parent categories fetched and cached', { count: parents.length });
+      } else {
+        logDebug('Error fetching parent categories', { status: response.status });
+      }
+    } catch (error) {
+      logDebug('Error fetching parent categories', error);
+    } finally {
+      setLoadingCategories(false);
+    }
+  }, [isCacheValid, logDebug]);
+
+  // Fetch subcategories with caching
+  const fetchSubcategories = useCallback(async (parentId: string) => {
+    try {
+      // Check cache first
+      const cacheKey = `subcategories_${parentId}`;
+      const cached = categoriesCache.get(cacheKey);
+      if (cached && isCacheValid(cached.timestamp)) {
+        setSubcategories(cached.data);
+        logDebug('Using cached subcategories', { count: cached.data.length });
+        return;
+      }
+
+      logDebug('Fetching subcategories for parent', { parentId });
+      
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+      const response = await fetch(`${apiUrl}/categories/subcategories/${parentId}`);
+      
+      if (response.ok) {
+        const subcategoriesData = await response.json();
+        
+        // Cache the data
+        categoriesCache.set(cacheKey, { data: subcategoriesData, timestamp: Date.now() });
+        
+        setSubcategories(subcategoriesData);
+        logDebug('Subcategories fetched and cached', { count: subcategoriesData.length });
+      } else {
+        logDebug('Error fetching subcategories', { status: response.status });
+        setSubcategories([]);
+      }
+    } catch (error) {
+      logDebug('Error fetching subcategories', error);
+      setSubcategories([]);
+    }
+  }, [isCacheValid, logDebug]);
+
   // Fetch parent categories on mount
   useEffect(() => {
     fetchParentCategories();
-  }, []);
+  }, [fetchParentCategories]);
 
   // Track if we've manually set the sidebar mode
   const manualModeChange = useRef(false);
@@ -78,56 +160,70 @@ function CategorySidebar({
       setSelectedParentCategory(null);
       logDebug('Switched to parent category mode');
     }
-  }, [selectedCategory, parentCategories.length, selectedSubcategory, sidebarMode]);
+  }, [selectedCategory, parentCategories.length, selectedSubcategory, sidebarMode, fetchSubcategories]);
 
-  // Function to fetch parent categories
-  const fetchParentCategories = async () => {
-    try {
-      setLoadingCategories(true);
-      logDebug('Fetching parent categories');
-      
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL ;
-      const response = await fetch(`${apiUrl}/categories`);
-      
-      if (response.ok) {
-        const categories = await response.json();
-        // Filter only parent categories (no parentId or empty parentId)
-        const parents = categories.filter((cat: Category) => !cat.parentId || cat.parentId === '');
-        setParentCategories(parents);
-        logDebug('Parent categories fetched', { count: parents.length });
-      } else {
-        logDebug('Error fetching parent categories', { status: response.status });
-      }
-    } catch (error) {
-      logDebug('Exception fetching categories', { error });
-    } finally {
-      setLoadingCategories(false);
-    }
-  };
+  // Memoized category rendering functions for better performance
+  const renderCategoryButton = useCallback((cat: Category, isSelected: boolean, onClick: () => void, title: string) => (
+    <div key={cat._id} className="flex flex-col items-center">
+      <button
+        onClick={onClick}
+        className={`w-full h-16 sm:h-20 rounded-lg transition-all duration-200 flex flex-col items-center justify-center relative ${
+          isSelected
+            ? 'bg-purple-50' 
+            : 'bg-white hover:bg-gray-50'
+        }`}
+        title={title}
+      >
+        {isSelected && (
+          <div className="absolute right-0 top-0 bottom-0 w-1 bg-purple-500 rounded-l-lg"></div>
+        )}
+        {cat.thumbnail ? (
+          <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 rounded-lg overflow-hidden bg-gray-100 mb-1">
+            <OptimizedImage
+              src={cat.thumbnail}
+              alt={cat.name}
+              width={48}
+              height={48}
+              className="w-full h-full object-cover"
+              priority={false}
+              quality={60}
+            />
+          </div>
+        ) : (
+          <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 rounded-lg bg-gradient-to-br from-gray-300 to-gray-400 flex items-center justify-center mb-1">
+            <span className="text-white font-bold text-sm sm:text-lg">
+              {cat.name.charAt(0).toUpperCase()}
+            </span>
+          </div>
+        )}
+        <span className="text-[8px] sm:text-[10px] text-gray-600 text-center font-medium leading-tight px-1">
+          {cat.name}
+        </span>
+      </button>
+    </div>
+  ), []);
 
-  // Function to fetch subcategories
-  const fetchSubcategories = async (parentId: string) => {
-    if (!parentId) return;
-    
-    try {
-      logDebug('Fetching subcategories', { parentId });
-      
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL ;
-      const response = await fetch(`${apiUrl}/categories/subcategories/${parentId}`);
-      
-      if (response.ok) {
-        const subs = await response.json();
-        setSubcategories(subs);
-        logDebug('Subcategories fetched', { count: subs.length });
-      } else {
-        logDebug('Error fetching subcategories', { status: response.status });
-        setSubcategories([]);
-      }
-    } catch (error) {
-      logDebug('Exception fetching subcategories', { error });
-      setSubcategories([]);
-    }
-  };
+  // Memoized parent categories rendering
+  const parentCategoriesElements = useMemo(() => 
+    parentCategories.map((cat) => 
+      renderCategoryButton(
+        cat,
+        selectedCategory === cat._id,
+        () => handleParentCategoryClick(cat),
+        cat.name
+      )
+    ), [parentCategories, selectedCategory, renderCategoryButton]);
+
+  // Memoized subcategories rendering
+  const subcategoriesElements = useMemo(() => 
+    subcategories.map((subcat) => 
+      renderCategoryButton(
+        subcat,
+        selectedSubcategory === subcat._id,
+        () => handleSubcategoryClick(subcat),
+        subcat.name
+      )
+    ), [subcategories, selectedSubcategory, renderCategoryButton]);
 
   // Handle parent category click
   const handleParentCategoryClick = (category: Category) => {
@@ -304,43 +400,7 @@ function CategorySidebar({
               </div>
 
               {/* Parent Category Images */}
-              {parentCategories.map((cat) => (
-                <div key={cat._id} className="flex flex-col items-center">
-                  <button
-                    onClick={() => handleParentCategoryClick(cat)}
-                    className={`w-full h-16 sm:h-20 rounded-lg transition-all duration-200 flex flex-col items-center justify-center relative ${
-                      selectedCategory === cat._id
-                        ? 'bg-purple-50' 
-                        : 'bg-white hover:bg-gray-50'
-                    }`}
-                    title={cat.name}
-                  >
-                    {selectedCategory === cat._id && (
-                      <div className="absolute right-0 top-0 bottom-0 w-1 bg-purple-500 rounded-l-lg"></div>
-                    )}
-                    {cat.thumbnail ? (
-                      <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 rounded-lg overflow-hidden bg-gray-100 mb-1">
-                        <Image
-                          src={cat.thumbnail}
-                          alt={cat.name}
-                          width={48}
-                          height={48}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                    ) : (
-                      <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 rounded-lg bg-gradient-to-br from-gray-300 to-gray-400 flex items-center justify-center mb-1">
-                        <span className="text-white font-bold text-sm sm:text-lg">
-                          {cat.name.charAt(0).toUpperCase()}
-                        </span>
-                      </div>
-                    )}
-                    <span className="text-[8px] sm:text-[10px] text-gray-600 text-center font-medium leading-tight px-1">
-                      {cat.name}
-                    </span>
-                  </button>
-                </div>
-              ))}
+              {parentCategoriesElements}
             </div>
           ) : (
             /* Subcategories - Images Only */
@@ -381,43 +441,7 @@ function CategorySidebar({
               </div>
 
               {/* Subcategory Images */}
-              {subcategories.map((subcat) => (
-                <div key={subcat._id} className="flex flex-col items-center">
-                  <button
-                    onClick={() => handleSubcategoryClick(subcat)}
-                    className={`w-full h-16 sm:h-20 rounded-lg transition-all duration-200 flex flex-col items-center justify-center relative ${
-                      selectedSubcategory === subcat._id
-                        ? 'bg-purple-50' 
-                        : 'bg-white hover:bg-gray-50'
-                    }`}
-                    title={subcat.name}
-                  >
-                    {selectedSubcategory === subcat._id && (
-                      <div className="absolute right-0 top-0 bottom-0 w-1 bg-purple-500 rounded-l-lg"></div>
-                    )}
-                    {subcat.thumbnail ? (
-                      <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 rounded-lg overflow-hidden bg-gray-100 mb-1">
-                        <Image
-                          src={subcat.thumbnail}
-                          alt={subcat.name}
-                          width={48}
-                          height={48}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                    ) : (
-                      <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 rounded-lg bg-gradient-to-br from-gray-300 to-gray-400 flex items-center justify-center mb-1">
-                        <span className="text-white font-bold text-sm sm:text-lg">
-                          {subcat.name.charAt(0).toUpperCase()}
-                        </span>
-                      </div>
-                    )}
-                    <span className="text-[8px] sm:text-[10px] text-gray-600 text-center font-medium leading-tight px-1">
-                      {subcat.name}
-                    </span>
-                  </button>
-                </div>
-              ))}
+              {subcategoriesElements}
             </div>
           )}
         </div>

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo, Suspense, lazy } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
@@ -49,6 +49,12 @@ import toast from "react-hot-toast";
 import { useRecentlyViewed } from "@/hooks/use-recently-viewed";
 import { useIsMobile } from "@/hooks/use-mobile";
 import ProductPageSkeleton from "@/components/ProductPageSkeleton";
+import { useProductOptimized } from "@/hooks/use-product-optimized";
+import PerformanceMonitor from "@/components/PerformanceMonitor";
+
+// Lazy load heavy components
+const LazyRelatedProducts = lazy(() => import('@/components/RelatedProducts'));
+const LazyProductReviews = lazy(() => import('@/components/ProductReviews'));
 
 interface ProductDimensions {
   l: string;
@@ -1044,17 +1050,36 @@ export default function ProductDetailsPage() {
   const router = useRouter();
   const isMobile = useIsMobile();
   
-  const [product, setProduct] = useState<ExtendedProduct | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Use optimized hook for data fetching with caching
+  const {
+    product: optimizedProduct,
+    loading: optimizedLoading,
+    error: optimizedError,
+    reviews: optimizedReviews,
+    reviewsLoading: optimizedReviewsLoading,
+    relatedProducts: optimizedRelatedProducts,
+    relatedProductsLoading: optimizedRelatedProductsLoading,
+    refreshProduct,
+    refreshReviews,
+    refreshRelatedProducts
+  } = useProductOptimized();
+
+  // Use optimized data when available, fallback to local state
+  const product = optimizedProduct || null;
+  const loading = optimizedLoading;
+  const error = optimizedError;
+  const reviews = Array.isArray(optimizedReviews) ? optimizedReviews : [];
+  const reviewsLoading = optimizedReviewsLoading;
+  const relatedProducts = Array.isArray(optimizedRelatedProducts) ? optimizedRelatedProducts : [];
+  const relatedProductsLoading = optimizedRelatedProductsLoading;
+  
+  // Local state for UI interactions
   const [mainImageIdx, setMainImageIdx] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [galleryStartIdx, setGalleryStartIdx] = useState(0);
   const { addToCart, cartItems, isItemBeingAdded } = useCartContext();
   const { addToWishlist, isInWishlist } = useWishlistContext();
   const { user } = useAppContext();
-  const [relatedProducts, setRelatedProducts] = useState<ExtendedProduct[]>([]);
-  const [reviews, setReviews] = useState<ProductReview[]>([]);
-  const [reviewsLoading, setReviewsLoading] = useState(true);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [averageRating, setAverageRating] = useState(0);
@@ -1067,7 +1092,8 @@ export default function ProductDetailsPage() {
 
   const { addToRecentlyViewed } = useRecentlyViewed();
   const { locationState, isGlobalMode } = useLocation();
-  const APIURL = process.env.NEXT_PUBLIC_API_URL;
+  
+
 
   // Function to get available variants based on selected attributes
   const getAvailableVariants = useCallback(() => {
@@ -1175,123 +1201,40 @@ export default function ProductDetailsPage() {
 
 
 
-  const fetchCategories = async () => {
-    try {
-      const response = await fetch('/api/categories');
-      if (response.ok) {
-        const categoriesData = await response.json();
-        setCategories(categoriesData);
-      }
-    } catch (error) {
-      console.error('Error fetching categories:', error);
-    }
-  };
 
-  const fetchReviews = async (productId: string) => {
-    try {
-      const response = await fetch(`${APIURL}/reviews/product/${productId}`);
-      const data = await response.json();
 
-      if (response.ok) {
-        const reviewsArray = data.reviews || [];
-        const overallStats = data.overallStats || { averageRating: 0, totalReviews: 0 };
+  // Use optimized hook data - no need for manual fetching
+  // The hook handles all data fetching with caching automatically
 
-        setReviews(reviewsArray);
-        setTotalReviews(overallStats.totalReviews);
-        setAverageRating(overallStats.averageRating || 0);
-      } else {
-        setReviews([]);
-        setTotalReviews(0);
-        setAverageRating(0);
-      }
-
-      setReviewsLoading(false);
-    } catch (error) {
-      console.error("Error fetching reviews:", error);
-      setReviews([]);
-      setTotalReviews(0);
-      setAverageRating(0);
-      setReviewsLoading(false);
-    }
-  };
-
+  // Handle recently viewed and reset state when product changes
   useEffect(() => {
-    if (!id) return;
-    setLoading(true);
+    if (product) {
+      addToRecentlyViewed(product);
+      
+      // Reset variant selection when loading new product
+      setSelectedVariant(null);
+      setMainImageIdx(0);
+      setSelectedAttributes({});
+      setIsInitialLoad(true);
+    }
+  }, [product, addToRecentlyViewed]);
 
-    const fetchProductData = async () => {
-      try {
-        await fetchCategories();
-
-        const productResponse = await fetch(`${APIURL}/products/${id}`);
-        const productData = await productResponse.json();
-
-        if (!productResponse.ok) {
-          throw new Error("Product not found");
-        }
-
-        setProduct(productData);
-        addToRecentlyViewed(productData);
-
-        // Reset variant selection when loading new product
-        setSelectedVariant(null);
-        setMainImageIdx(0);
-        setSelectedAttributes({});
-        setIsInitialLoad(true);
-
-        await fetchReviews(productData._id);
-
-        if (productData && productData.category) {
-          const categoryId =
-            typeof productData.category === "object" && productData.category._id
-              ? productData.category._id
-              : productData.category;
-
-          try {
-            // Use location-aware product fetching for related products
-            if (locationState?.pincode && locationState?.isLocationDetected) {
-              const mode = isGlobalMode ? 'global' : 'auto';
-              const relatedResponse = await fetch(`${APIURL}/warehouses/products-by-pincode?pincode=${locationState.pincode}&category=${categoryId}&limit=8&mode=${mode}`);
-              const relatedData = await relatedResponse.json();
-
-              if (relatedData.success && Array.isArray(relatedData.products)) {
-                setRelatedProducts(
-                  relatedData.products.filter((p: ExtendedProduct) => p._id !== productData._id)
-                );
-              } else {
-                setRelatedProducts([]);
-              }
-            } else {
-              // Fallback to global products if no location detected
-              const relatedResponse = await fetch(`${APIURL}/products/public?category=${categoryId}&limit=8`);
-              const relatedProducts = await relatedResponse.json();
-
-              if (Array.isArray(relatedProducts)) {
-                setRelatedProducts(
-                  relatedProducts.filter((p: ExtendedProduct) => p._id !== productData._id)
-                );
-              }
-            }
-          } catch (error) {
-            console.error("Error fetching related products:", error);
-            setRelatedProducts([]);
-          }
-        }
-
-        setLoading(false);
-      } catch (error) {
-        console.error("Error fetching product:", error);
-        setLoading(false);
-        setReviewsLoading(false);
-      }
-    };
-
-    fetchProductData();
-  }, [id, APIURL, locationState?.pincode, locationState?.isLocationDetected, isGlobalMode]);
+  // Update average rating and total reviews from reviews data
+  useEffect(() => {
+    if (reviews.length > 0) {
+      const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
+      const avgRating = totalRating / reviews.length;
+      setAverageRating(avgRating);
+      setTotalReviews(reviews.length);
+    } else {
+      setAverageRating(0);
+      setTotalReviews(0);
+    }
+  }, [reviews]);
 
   const handleReviewSubmitted = () => {
     if (product) {
-      fetchReviews(product._id);
+      refreshReviews();
     }
   };
 
@@ -1303,6 +1246,7 @@ export default function ProductDetailsPage() {
         return;
       }
 
+      const APIURL = process.env.NEXT_PUBLIC_API_URL;
       const response = await fetch(`${APIURL}/reviews/${reviewId}/helpful`, {
         method: 'POST',
         headers: {
@@ -1314,7 +1258,7 @@ export default function ProductDetailsPage() {
 
       if (response.ok) {
         if (product) {
-          fetchReviews(product._id);
+          refreshReviews();
         }
       } else {
         const errorData = await response.json();
@@ -1330,6 +1274,24 @@ export default function ProductDetailsPage() {
     return <ProductPageSkeleton isMobile={isMobile} />;
   }
 
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Card className="p-8 text-center max-w-md mx-4">
+          <CardContent className="space-y-4">
+            <AlertCircle className="h-16 w-16 text-red-500 mx-auto" />
+            <h1 className="text-2xl font-bold text-gray-900">Error Loading Product</h1>
+            <p className="text-gray-600">{error}</p>
+            <p className="text-sm text-gray-500">Product ID: {id}</p>
+            <Button onClick={() => window.location.reload()} className="bg-brand-primary hover:bg-brand-primary-dark">
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (!product) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -1338,6 +1300,7 @@ export default function ProductDetailsPage() {
             <AlertCircle className="h-16 w-16 text-red-500 mx-auto" />
             <h1 className="text-2xl font-bold text-gray-900">Product Not Found</h1>
             <p className="text-gray-600">The product you're looking for doesn't exist or has been removed.</p>
+            <p className="text-sm text-gray-500">Product ID: {id}</p>
             <Button onClick={() => router.push("/products")} className="bg-brand-primary hover:bg-brand-primary-dark">
               Browse Products
             </Button>
@@ -1423,8 +1386,16 @@ export default function ProductDetailsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-full mx-auto px-2 sm:px-4 py-4 sm:py-6">
+    <>
+      <PerformanceMonitor 
+        onMetrics={(metrics) => {
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🚀 Product Page Performance:', metrics);
+          }
+        }}
+      />
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-full mx-auto px-2 sm:px-4 py-4 sm:py-6">
         {/* Breadcrumbs */}
         <div className="mb-4">
           <ProductBreadcrumb product={product} categories={categories} />
@@ -1452,7 +1423,7 @@ export default function ProductDetailsPage() {
 
               {/* Gallery Images Container */}
               <div className="flex flex-col gap-2 max-h-96 items-center">
-                {allImages.slice(galleryStartIdx, galleryStartIdx + 7).map((img, idx) => {
+                {allImages.slice(galleryStartIdx, galleryStartIdx + 7).map((img: string, idx: number) => {
                   const actualIdx = galleryStartIdx + idx;
                   return (
                     <div
@@ -1622,7 +1593,7 @@ export default function ProductDetailsPage() {
                           {attribute.name}
                         </label>
                         <div className="flex flex-wrap gap-2">
-                          {attribute.values.map((value) => {
+                          {attribute.values.map((value: string) => {
                             const isSelected = selectedAttributes[attribute.name] === value;
                             
                             // Check if this attribute value has any variants with stock > 0
@@ -2067,309 +2038,63 @@ export default function ProductDetailsPage() {
                 )}
               </div>
             ) : (
-              /* Reviews Tab Content */
-              <div className="space-y-4">
-                                {/* Overall Rating Section */}
-                <div className="bg-gradient-to-r from-gray-50 to-white rounded-lg p-6 border border-gray-200">
-                  <div className="grid grid-cols-3 gap-6 items-center">
-                    {/* Left: Stars and Rating */}
-                    <div className="flex flex-col items-center text-center">
-                      <div className="flex items-center gap-1 mb-3">
-                        {[...Array(5)].map((_, i) => (
-                          <Star
-                            key={i}
-                            className={`h-6 w-6 ${i < Math.floor(displayRating) ? "text-yellow-400 fill-yellow-400" : "text-gray-300"}`}
-                          />
-                        ))}
+              /* Reviews Tab Content - Lazy Loaded */
+              <Suspense fallback={
+                <div className="space-y-3">
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className="animate-pulse border border-gray-200 rounded-lg p-3 bg-gray-50/30">
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="h-8 w-8 bg-gray-200 rounded-full"></div>
+                        <div className="space-y-1.5 flex-1">
+                          <div className="h-3 bg-gray-200 rounded w-24"></div>
+                          <div className="h-2.5 bg-gray-200 rounded w-16"></div>
+                        </div>
                       </div>
-                      <div className="text-center">
-                        <span className="text-2xl font-bold text-gray-900">{displayRating.toFixed(1)}</span>
-                        <span className="text-sm text-gray-500 ml-1">out of 5</span>
+                      <div className="space-y-1.5">
+                        <div className="h-3 bg-gray-200 rounded w-full"></div>
+                        <div className="h-3 bg-gray-200 rounded w-3/4"></div>
                       </div>
                     </div>
-                    
-                    {/* Center: Total Reviews */}
-                    <div className="flex flex-col items-center text-center border-l border-r border-gray-200 px-6">
-                      <div className="text-3xl font-bold text-gray-900 mb-1">{displayReviewCount}</div>
-                      <div className="text-sm text-gray-500">Total Reviews</div>
-                    </div>
-                    
-                    {/* Right: Write Review Button */}
-                    <div className="flex justify-center">
-                      <Button 
-                        onClick={() => setIsReviewModalOpen(true)} 
-                        className="bg-gradient-to-r from-brand-primary to-brand-primary-dark hover:from-brand-primary-dark hover:to-brand-primary text-white font-semibold shadow-lg transition-all duration-300 px-8 py-3 text-base"
-                      >
-                        <MessageSquare className="h-5 w-5 mr-2" />
-                        Write a Review
-                      </Button>
-                    </div>
-                  </div>
+                  ))}
                 </div>
-
-                {/* Reviews List */}
-                {reviewsLoading ? (
-                  <div className="space-y-3">
-                    {[...Array(3)].map((_, i) => (
-                      <div key={i} className="animate-pulse border border-gray-200 rounded-lg p-3 bg-gray-50/30">
-                        <div className="flex items-center gap-3 mb-2">
-                          <div className="h-8 w-8 bg-gray-200 rounded-full"></div>
-                          <div className="space-y-1.5 flex-1">
-                            <div className="h-3 bg-gray-200 rounded w-24"></div>
-                            <div className="h-2.5 bg-gray-200 rounded w-16"></div>
-                          </div>
-                        </div>
-                        <div className="space-y-1.5">
-                          <div className="h-3 bg-gray-200 rounded w-full"></div>
-                          <div className="h-3 bg-gray-200 rounded w-3/4"></div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : reviews.length > 0 ? (
-                  <div className="space-y-3">
-                    {reviews.slice(0, 5).map((review: any) => (
-                      <div key={review._id} className="border border-gray-200 rounded-lg p-3 bg-gray-50/30 hover:bg-gray-50/60 transition-all duration-200">
-                        <div className="flex items-start gap-3">
-                          <div className="w-8 h-8 bg-brand-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
-                            <User className="h-4 w-4 text-brand-primary" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-start justify-between mb-1">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <p className="font-medium text-gray-900 text-sm truncate">{review.user.name}</p>
-                                  {review.verified && (
-                                    <div className="flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-emerald-500 to-green-600 text-white text-xs font-medium rounded-full">
-                                      <CheckCircle className="h-3 w-3" />
-                                      Verified
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-1 mb-1">
-                                  {[...Array(5)].map((_, i) => (
-                                    <Star key={i} className={`h-3 w-3 ${i < review.rating ? "text-yellow-400 fill-yellow-400" : "text-gray-300"}`} />
-                                  ))}
-                                  <span className="text-xs text-gray-500 ml-1">{review.rating}/5</span>
-                                </div>
-                              </div>
-                              <span className="text-xs text-gray-500 flex-shrink-0">{new Date(review.createdAt).toLocaleDateString()}</span>
-                            </div>
-                            {review.title && (
-                              <h4 className="font-medium text-gray-900 text-sm mb-1 line-clamp-1">{review.title}</h4>
-                            )}
-                            <p className="text-gray-600 text-sm leading-relaxed line-clamp-2">{review.comment}</p>
-                            
-                            {/* Review Actions */}
-                            {review.helpful !== undefined && (
-                              <div className="flex items-center gap-3 mt-2 pt-2 border-t border-gray-200/50">
-                                <button
-                                  onClick={() => handleMarkHelpful(review._id, true)}
-                                  className="flex items-center gap-1 text-xs text-gray-500 hover:text-green-600 transition-colors"
-                                >
-                                  <ThumbsUp className="h-3 w-3" />
-                                  Helpful ({review.helpful || 0})
-                                </button>
-                                <button
-                                  onClick={() => handleMarkHelpful(review._id, false)}
-                                  className="flex items-center gap-1 text-xs text-gray-500 hover:text-red-600 transition-colors"
-                                >
-                                  <ThumbsDown className="h-3 w-3" />
-                                  Not helpful
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    
-                    {/* View All Reviews Button */}
-                    {reviews.length > 5 && (
-                      <div className="text-center pt-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-full border-2 border-gray-200 hover:border-brand-primary hover:bg-brand-primary hover:text-white transition-all duration-300"
-                        >
-                          View All {displayReviewCount} Reviews
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 bg-white border border-gray-200 rounded-lg">
-                    <MessageSquare className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-500 mb-4">No reviews yet</p>
-                    <Button 
-                      onClick={() => setIsReviewModalOpen(true)} 
-                      variant="outline"
-                      className="bg-white hover:bg-brand-primary hover:text-white hover:border-brand-primary transition-all duration-300 border-2 font-medium"
-                    >
-                      Be the first to review
-                    </Button>
-                  </div>
-                )}
-              </div>
+              }>
+                <LazyProductReviews
+                  reviews={reviews}
+                  reviewsLoading={reviewsLoading}
+                  displayRating={displayRating}
+                  displayReviewCount={displayReviewCount}
+                  setIsReviewModalOpen={setIsReviewModalOpen}
+                  handleMarkHelpful={handleMarkHelpful}
+                />
+              </Suspense>
             )}
           </div>
         </div>
 
-        {/* Related Products Section */}
-        {relatedProducts.length > 0 && (
-          <div className="bg-gradient-to-br from-white to-gray-50/50 rounded-2xl shadow-lg border border-gray-200/60 p-6 sm:p-8 mb-8 relative overflow-hidden animate-in slide-in-from-bottom-4 duration-700">
-            {/* Decorative background elements */}
-            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-r from-brand-primary/5 to-transparent rounded-full -translate-y-16 translate-x-16"></div>
-            <div className="absolute bottom-0 left-0 w-24 h-24 bg-gradient-to-tr from-brand-primary/3 to-transparent rounded-full translate-y-12 -translate-x-12"></div>
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-gradient-to-r from-brand-primary/10 to-brand-primary/5 rounded-lg">
-                  <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 text-brand-primary" />
-                </div>
-                <div>
-                  <h2 className="text-lg sm:text-xl font-bold text-gray-900">
-                    You might also like
-                  </h2>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Discover more products in this category
-                  </p>
-                </div>
-              </div>
-              {product?.category && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="group hover:bg-brand-primary hover:text-white hover:border-brand-primary transition-all duration-300 ease-in-out transform hover:scale-105 hover:shadow-lg border-2 font-medium px-4 py-2"
-                  onClick={() => {
-                    const categoryId = typeof product.category === "object" && product.category !== null && "_id" in product.category ? (product.category as ProductCategory)._id : product.category;
-                    router.push(`/products?category=${categoryId}`);
-                  }}
-                >
-                  <span className="flex items-center justify-center gap-2">
-                    View All
-                    <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform duration-300 flex-shrink-0" />
-                  </span>
-                </Button>
-              )}
-            </div>
-
-            <div className="grid gap-4 sm:gap-5 grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 relative z-10">
-              {relatedProducts.slice(0, 6).map((relProd) => {
-                // Enhance product with variant information if it has variants
-                const enhancedProduct = (() => {
-                  if (relProd.variants && Object.keys(relProd.variants).length > 0) {
-                    const firstVariantKey = Object.keys(relProd.variants)[0];
-                    const firstVariant = relProd.variants[firstVariantKey];
-                    return {
-                      ...relProd,
-                      variantId: firstVariantKey,
-                      variantName: firstVariant.name || firstVariantKey.replace(/::/g, ' '),
-                      selectedVariant: firstVariant,
-                      price: (firstVariant.price !== undefined ? firstVariant.price : relProd.price),
-                      unit: (firstVariant as any).unit || relProd.unit || '1 Unit'
-                    };
-                  }
-                  return {
-                    ...relProd,
-                    unit: relProd.unit || '1 Unit'
-                  };
-                })();
-
-                return (
-                  <ProductCard
-                    key={relProd._id}
-                    product={enhancedProduct}
-                    isInWishlist={isInWishlist}
-                    handleWishlistClick={(product, e) => {
-                      e.stopPropagation();
-                      addToWishlist({
-                        id: product._id,
-                        name: product.name,
-                        price: product.price,
-                        mrp: product.mrp,
-                        image: product.image,
-                        category: typeof product.category === "object" ? product.category?.name : product.category,
-                        brand: typeof product.brand === "object" ? product.brand?.name : product.brand,
-                        sku: product.sku,
-                        stock: product.stock,
-                        warehouse: product.warehouse,
-                        variantId: product.variantId,
-                        variantName: product.variantName,
-                        selectedVariant: product.selectedVariant,
-                      });
-                    }}
-                    handleAddToCart={async (product) => {
-                      try {
-                        await addToCart({
-                          id: product._id,
-                          name: product.name,
-                          price: product.price,
-                          mrp: product.mrp,
-                          image: product.image,
-                          category: typeof product.category === "object" ? product.category?.name : product.category,
-                          brand: typeof product.brand === "object" ? product.brand?.name : product.brand,
-                          sku: product.sku,
-                          quantity: 1,
-                          stock: product.stock,
-                          warehouse: product.warehouse,
-                          variantId: product.variantId,
-                          variantName: product.variantName,
-                          selectedVariant: product.selectedVariant,
-                        });
-                      } catch (error: any) {
-                        if (error.isVariantRequired) {
-                          toast.error(`Please select a variant for ${product.name} before adding to cart`);
-                        } else if (error.isWarehouseConflict) {
-                          toast.error(error.message);
-                        } else {
-                          toast.error('Failed to add item to cart');
-                        }
-                      }
-                    }}
-                    quantity={0}
-                    locationState={null}
-                    isGlobalMode={true}
-                    viewMode="grid"
-                    onClick={() => router.push(`/products/${relProd._id}`)}
-                  />
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Empty State for Related Products */}
-        {relatedProducts.length === 0 && product?.category && (
-          <div className="bg-gradient-to-br from-white to-gray-50/50 rounded-2xl shadow-lg border border-gray-200/60 p-6 sm:p-8 mb-8 text-center">
-            <div className="flex flex-col items-center gap-4">
-              <div className="p-3 bg-gradient-to-r from-brand-primary/10 to-brand-primary/5 rounded-full">
-                <TrendingUp className="h-8 w-8 text-brand-primary" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  Explore More Products
-                </h3>
-                <p className="text-gray-600 mb-4">
-                  Discover more products in this category
-                </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="group hover:bg-brand-primary hover:text-white hover:border-brand-primary transition-all duration-300 ease-in-out transform hover:scale-105 hover:shadow-lg border-2 font-medium px-6 py-2"
-                  onClick={() => {
-                    const categoryId = typeof product.category === "object" && product.category !== null && "_id" in product.category ? (product.category as ProductCategory)._id : product.category;
-                    router.push(`/products?category=${categoryId}`);
-                  }}
-                >
-                  <span className="flex items-center justify-center gap-2">
-                    Browse Category
-                    <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform duration-300 flex-shrink-0" />
-                  </span>
-                </Button>
+        {/* Related Products Section - Lazy Loaded */}
+        <Suspense fallback={
+          <div className="bg-gradient-to-br from-white to-gray-50/50 rounded-2xl shadow-lg border border-gray-200/60 p-6 sm:p-8 mb-8">
+            <div className="animate-pulse">
+              <div className="h-6 bg-gray-200 rounded w-48 mb-4"></div>
+              <div className="grid gap-4 grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="h-48 bg-gray-200 rounded"></div>
+                ))}
               </div>
             </div>
           </div>
-        )}
+        }>
+          <LazyRelatedProducts
+            relatedProducts={relatedProducts}
+            product={product}
+            router={router}
+            isInWishlist={isInWishlist}
+            addToWishlist={addToWishlist}
+            addToCart={addToCart}
+          />
+        </Suspense>
+
+
       </div>
 
       {/* Review Modal */}
@@ -2381,8 +2106,9 @@ export default function ProductDetailsPage() {
         productImage={product.image}
         onReviewSubmitted={handleReviewSubmitted}
       />
+      </div>
     </div>
-    </div>
+  </>
   );
 }
 
