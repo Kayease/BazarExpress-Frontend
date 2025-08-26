@@ -39,11 +39,31 @@ function slugify(str: string) {
 // Helper to delete image from Cloudinary by imageUrl, with toast notifications
 async function deleteImageFromCloudinary(imageUrl: string): Promise<boolean> {
   if (!imageUrl) return false;
+  
   try {
+    // Extract public ID from Cloudinary URL
+    let publicId = '';
+    if (imageUrl.includes('cloudinary.com')) {
+      // Extract the path after the cloud name and before the file extension
+      const urlParts = imageUrl.split('/');
+      const cloudNameIndex = urlParts.findIndex(part => part.includes('cloudinary.com'));
+      if (cloudNameIndex !== -1 && cloudNameIndex + 2 < urlParts.length) {
+        // Get the folder path and filename without extension
+        const folderPath = urlParts.slice(cloudNameIndex + 2, -1).join('/');
+        const filename = urlParts[urlParts.length - 1].split('.')[0];
+        publicId = folderPath ? `${folderPath}/${filename}` : filename;
+      }
+    }
+    
+    if (!publicId) {
+      console.warn('Could not extract public ID from URL:', imageUrl);
+      return false;
+    }
+    
     const res = await fetch('/api/delete-image', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ imageUrl }),
+      body: JSON.stringify({ publicId }),
     });
     const data = await res.json();
     if (res.ok && data.success) {
@@ -117,8 +137,8 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
   const [galleryImagesToDelete, setGalleryImagesToDelete] = useState<string[]>([]);
   const [variantImagesToDelete, setVariantImagesToDelete] = useState<{ [key: string]: string[] }>({});
 
-  // --- Add state for gallery image files ---
-  const [galleryImageFiles, setGalleryImageFiles] = useState<(File | string)[]>([]);
+  // Track new gallery media (images and videos) separately from existing ones
+  const [newGalleryMedia, setNewGalleryMedia] = useState<File[]>([]);
 
   // --- Add state for modal open/close ---
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -331,11 +351,14 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
         codAvailable: !!initialProduct.codAvailable,
         locationName: initialProduct.locationName || '', // New field
       }));
+      
+      
+      
       // Normalize attributes and variant keys to uppercase
       setAttributes(normalizeAttributes(initialProduct.attributes || []));
       setVariants(normalizeVariants(initialProduct.variants || {}));
     }
-  }, [initialProduct]);
+  }, [initialProduct, mode]);
 
   // Fetch subcategories when category changes
   useEffect(() => {
@@ -469,6 +492,8 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
 
 
 
+
+
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -477,13 +502,43 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
     }
   };
 
-  // --- Update handleGalleryImagesChange ---
-  const handleGalleryImagesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // --- Update handleGalleryMediaChange ---
+  const handleGalleryMediaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    setGalleryImageFiles((prev: (File | string)[]) => [...prev, ...files]);
+    
+    // Validate file types and size
+    const validFiles = files.filter(file => {
+      const isValidImage = file.type.startsWith('image/');
+      const isValidVideo = file.type.startsWith('video/');
+      
+      // Check file size (max 100MB for videos, 10MB for images)
+      const maxSize = isValidVideo ? 100 * 1024 * 1024 : 10 * 1024 * 1024;
+      if (file.size > maxSize) {
+        toast.error(`${file.name} is too large. Max size: ${isValidVideo ? '100MB' : '10MB'}`);
+        return false;
+      }
+      
+      return isValidImage || isValidVideo;
+    });
+    
+    if (validFiles.length !== files.length) {
+      toast.error('Some files were skipped. Only images and videos are supported.');
+    }
+    
+    // Add new files to newGalleryMedia
+    setNewGalleryMedia(prev => [...prev, ...validFiles]);
+    
+    // Update the product state to show preview with file type information
     setProduct((prev: any) => ({
       ...prev,
-      galleryImages: [...(prev.galleryImages || []), ...files.map(f => URL.createObjectURL(f))],
+      galleryImages: [
+        ...(prev.galleryImages || []), 
+        ...validFiles.map(f => ({
+          file: f,
+          preview: URL.createObjectURL(f),
+          type: f.type.startsWith('video/') ? 'video' : 'image'
+        }))
+      ],
     }));
   };
 
@@ -668,14 +723,33 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
         }
       }
       let galleryImageUrls: string[] = [];
-      for (const img of galleryImageFiles) {
-        if (img instanceof File) {
-          const result = await uploadToCloudinary(img, `products/${product.category}/${slugify(product.name)}/gallery`);
-          galleryImageUrls.push(result);
-        } else if (typeof img === 'string') {
-          galleryImageUrls.push(img);
-        }
+      // Process gallery images - keep existing URLs and upload new files
+      
+      // For edit mode, preserve existing images that haven't been deleted
+      if (mode === 'edit') {
+        const existingImages = (product.galleryImages || []).filter((img: any) => {
+          // Skip preview objects (new files) and deleted images
+          if (img && typeof img === 'object' && img.preview) {
+            return false; // Skip new file previews
+          }
+          const imgUrl = typeof img === 'string' ? img : img?.secure_url;
+          return imgUrl && !galleryImagesToDelete.includes(imgUrl);
+        });
+        galleryImageUrls.push(...existingImages);
       }
+      
+                    // Upload and add new gallery media (images and videos)
+       for (const media of newGalleryMedia) {
+         try {
+           const result = await uploadToCloudinary(media, `products/${product.category}/${slugify(product.name)}/gallery`);
+           galleryImageUrls.push(result);
+         } catch (error) {
+           console.error('Failed to upload media:', media.name, error);
+           toast.error(`Failed to upload ${media.name}. Please try again.`);
+           setLoading(false);
+           return;
+         }
+       }
       const { _id, createdAt, updatedAt, __v, stockStatus, ...rest } = product;
       const payload = {
         ...rest,
@@ -742,8 +816,8 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
       setMainImageToDelete(null);
       setGalleryImagesToDelete([]);
       setVariantImagesToDelete({});
-      // Clear galleryImageFiles after successful submit
-      setGalleryImageFiles([]);
+             // Clear new gallery media after successful submit
+       setNewGalleryMedia([]);
     }
   };
 
@@ -1671,35 +1745,112 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                         )}
                       </div>
                     )}
-                    {key === 'Media' && showMedia && (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Main Image</label>
-                          <input type="file" accept="image/*" onChange={handleImageChange} className="block w-full text-sm text-gray-500" />
-                          {product.image && <img src={product.image} alt="Main" className="w-24 h-24 object-cover mt-2 rounded" />}
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Gallery Images</label>
-                          <input type="file" accept="image/*" multiple onChange={handleGalleryImagesChange} className="block w-full text-sm text-gray-500" />
-                          <div className="flex gap-2 mt-2">
-                            {(product.galleryImages || []).map((img: any, idx: number) => (
-                              <div key={idx} className="relative">
-                                <img
-                                  src={typeof img === 'string' ? img : img?.secure_url}
-                                  alt={`Gallery ${idx + 1}`}
-                                  className="w-16 h-16 object-cover rounded"
-                                />
-                                <button type="button" onClick={() => {
-                                  const url = typeof img === 'string' ? img : img?.secure_url;
-                                  if (url) {
-                                    setGalleryImagesToDelete(prev => [...prev, url]);
-                                    setProduct((prev: any) => ({ ...prev, galleryImages: prev.galleryImages.filter((_: any, i: number) => i !== idx) }));
-                                  }
-                                }} className="absolute top-0 right-0 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center">&times;</button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
+                                         {key === 'Media' && showMedia && (
+                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                         <div>
+                           <label className="block text-sm font-medium text-gray-700 mb-1">Main Image</label>
+                           <input type="file" accept="image/*" onChange={handleImageChange} className="block w-full text-sm text-gray-500" />
+                           {product.image && <img src={product.image} alt="Main" className="w-24 h-24 object-cover mt-2 rounded" />}
+                         </div>
+                         <div>
+                           <label className="block text-sm font-medium text-gray-700 mb-1">Gallery Media (Images & Videos)</label>
+                           <input type="file" accept="image/*,video/*" multiple onChange={handleGalleryMediaChange} className="block w-full text-sm text-gray-500" />
+                           <p className="text-xs text-gray-500 mt-1">Supports images (JPG, PNG, GIF) and videos (MP4, MOV, AVI)</p>
+                           <div className="flex gap-2 mt-2">
+                             {(product.galleryImages || []).map((item: any, idx: number) => {
+                               // Handle both new preview objects and existing URLs
+                               let url: string;
+                               let isVideo: boolean;
+                               let isNewFile: boolean = false;
+                               
+                               if (item && typeof item === 'object' && item.preview) {
+                                 // New file with preview object
+                                 url = item.preview;
+                                 isVideo = item.type === 'video';
+                                 isNewFile = true;
+                               } else {
+                                 // Existing URL (from database)
+                                 url = typeof item === 'string' ? item : item?.secure_url;
+                                 isVideo = Boolean(url && (
+                                   url.includes('.mp4') || 
+                                   url.includes('.mov') || 
+                                   url.includes('.avi') || 
+                                   url.includes('video')
+                                 ));
+                               }
+                               
+                               return (
+                                 <div key={idx} className="relative">
+                                   {isVideo ? (
+                                     <video
+                                       src={url}
+                                       className="w-16 h-16 object-cover rounded"
+                                       muted
+                                       preload="metadata"
+                                       onLoadedData={(e) => {
+                                         // Pause at first frame
+                                         const video = e.target as HTMLVideoElement;
+                                         video.currentTime = 0;
+                                         video.pause();
+                                       }}
+                                     />
+                                   ) : (
+                                     <img
+                                       src={url}
+                                       alt={`Gallery ${idx + 1}`}
+                                       className="w-16 h-16 object-cover rounded"
+                                       onError={(e) => {
+                                         // If image fails to load, check if it's actually a video
+                                         const target = e.target as HTMLImageElement;
+                                         const src = target.src;
+                                         if (src && (src.includes('.mp4') || src.includes('.mov') || src.includes('.avi'))) {
+                                           // Replace broken image with video element
+                                           const parent = target.parentElement;
+                                           if (parent) {
+                                             const video = document.createElement('video');
+                                             video.src = src;
+                                             video.className = 'w-16 h-16 object-cover rounded';
+                                             video.muted = true;
+                                             video.preload = 'metadata';
+                                             video.onloadeddata = () => {
+                                               // Pause at first frame
+                                               video.currentTime = 0;
+                                               video.pause();
+                                             };
+                                             parent.replaceChild(video, target);
+                                           }
+                                         }
+                                       }}
+                                     />
+                                   )}
+                                   <button type="button" onClick={() => {
+                                     if (url) {
+                                       if (isNewFile) {
+                                         // Remove new file preview
+                                         setProduct((prev: any) => ({ 
+                                           ...prev, 
+                                           galleryImages: prev.galleryImages.filter((_: any, i: number) => i !== idx) 
+                                         }));
+                                         // Remove the corresponding file from newGalleryMedia
+                                         const fileIndex = idx - (product.galleryImages?.length || 0) + newGalleryMedia.length;
+                                         if (fileIndex >= 0 && fileIndex < newGalleryMedia.length) {
+                                           setNewGalleryMedia(prev => prev.filter((_, i) => i !== fileIndex));
+                                         }
+                                       } else {
+                                         // Mark existing media for deletion
+                                         setGalleryImagesToDelete(prev => [...prev, url]);
+                                         setProduct((prev: any) => ({ 
+                                           ...prev, 
+                                           galleryImages: prev.galleryImages.filter((_: any, i: number) => i !== idx) 
+                                         }));
+                                       }
+                                     }
+                                   }} className="absolute top-0 right-0 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center">&times;</button>
+                                 </div>
+                               );
+                             })}
+                           </div>
+                         </div>
                       </div>
                     )}
                     {key === 'SEO' && showSEO && (

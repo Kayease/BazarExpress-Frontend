@@ -224,7 +224,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
       <div
         role="dialog"
         aria-modal="true"
-        className="fixed inset-0 flex items-center justify-center bg-black/20 z-50 p-4"
+        className="fixed inset-0 flex items-center justify-center bg-black/20 z-[999] p-4"
       >
         <div 
           className="bg-white rounded-xl p-4 sm:p-6 w-full max-w-md relative shadow-xl max-h-[90vh] overflow-y-auto"

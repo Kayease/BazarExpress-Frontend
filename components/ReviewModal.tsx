@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Star, Send, X, AlertCircle, CheckCircle } from "lucide-react";
+import { Star, Send, X, AlertCircle, CheckCircle, MessageSquare, ThumbsUp, User } from "lucide-react";
 import { useAppContext } from "@/components/app-provider";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
@@ -43,8 +43,10 @@ export function ReviewModal({
     e.preventDefault();
     
     if (!user) {
-      toast.error("Please log in to submit a review.");
+      // Close review modal and open login modal
+      onClose();
       setIsLoginModalOpen(true);
+      toast.error("Please log in to submit a review.");
       return;
     }
 
@@ -117,6 +119,8 @@ export function ReviewModal({
           errorMessage = "You have already reviewed this product.";
         } else if (error.message.includes('login') || error.message.includes('authentication')) {
           errorMessage = "Please log in to submit a review.";
+          // Close review modal and open login modal
+          onClose();
           setIsLoginModalOpen(true);
         } else {
           errorMessage = error.message;
@@ -140,21 +144,28 @@ export function ReviewModal({
     }
   };
 
+  const handleLoginModalClose = () => {
+    setIsLoginModalOpen(false);
+  };
+
   if (submitStatus === 'success') {
     return (
       <Dialog open={isOpen} onOpenChange={handleClose}>
-        <DialogContent className="w-[95vw] max-w-md mx-auto sm:mx-0 sm:w-full max-h-[90vh] overflow-y-auto bg-white rounded-xl border border-gray-200 shadow-xl [&>button]:hidden">
-          <div className="text-center py-6 sm:py-8 px-4 sm:px-6">
-            <CheckCircle className="h-12 w-12 sm:h-16 sm:w-16 text-brand-primary mx-auto mb-3 sm:mb-4" />
-            <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
-              Review Submitted Successfully!
+        <DialogContent className="w-[95vw] max-w-xs mx-auto sm:mx-0 sm:w-full max-h-[90vh] overflow-y-auto bg-gradient-to-br from-white to-gray-50 rounded-xl border-0 shadow-xl [&>button]:hidden">
+          <div className="text-center py-4 px-3">
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-r from-green-400 to-emerald-500 rounded-full blur-lg opacity-30 animate-pulse"></div>
+              <CheckCircle className="relative h-10 w-10 text-emerald-500 mx-auto mb-3" />
+            </div>
+            <h3 className="text-base font-bold text-gray-900 mb-2 bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
+              Review Submitted!
             </h3>
-            <p className="text-sm sm:text-base text-gray-600 mb-4 px-2">
-              Thank you for your feedback. Your review is now pending approval and will be visible once approved by our team.
+            <p className="text-xs text-gray-600 mb-3 px-1 leading-relaxed">
+              Thank you for your valuable feedback! Your review is now pending approval and will be visible once approved by our team.
             </p>
             <Button 
               onClick={handleClose} 
-              className="bg-gradient-to-r from-brand-primary to-brand-primary-dark hover:from-brand-primary-dark hover:to-brand-primary text-white font-medium shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 border-0 px-6 py-2"
+              className="bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 border-0 px-5 py-2 rounded-lg text-sm"
             >
               Close
             </Button>
@@ -165,143 +176,182 @@ export function ReviewModal({
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="w-[95vw] z-[999] max-w-md mx-auto sm:mx-0 sm:w-full max-h-[90vh] overflow-y-auto bg-white rounded-xl border border-gray-200 shadow-xl [&>button]:hidden">
-        <DialogHeader className="px-4 sm:px-6 pt-4 sm:pt-6">
-          <DialogTitle className="text-base sm:text-lg font-semibold text-gray-900">Write a Review</DialogTitle>
-          <p className="text-sm text-gray-600 mt-1">{productName}</p>
-        </DialogHeader>
-
-        <form onSubmit={handleSubmit} className="space-y-3 px-4 sm:px-6 pb-4 sm:pb-6">
-          {/* Rating */}
-          <div className="space-y-1">
-            <Label className="text-sm font-medium text-gray-700">
-              Rating <span className="text-red-500">*</span>
-            </Label>
-            <div className="flex items-center gap-1 flex-wrap">
-              {[1, 2, 3, 4, 5].map((star) => (
-                <button
-                  key={star}
-                  type="button"
-                  className="p-1 transition-all duration-200 hover:scale-110"
-                  onMouseEnter={() => setHoveredRating(star)}
-                  onMouseLeave={() => setHoveredRating(0)}
-                  onClick={() => setRating(star)}
-                  disabled={isSubmitting}
-                >
-                  <Star
-                    className={`h-5 w-5 sm:h-6 sm:w-6 transition-all duration-200 ${
-                      star <= (hoveredRating || rating)
-                        ? "text-yellow-400 fill-yellow-400"
-                        : "text-gray-300 hover:text-yellow-200"
-                    }`}
-                  />
-                </button>
-              ))}
-              {rating > 0 && (
-                <span className="ml-2 text-xs sm:text-sm text-gray-600 font-medium">
-                  {rating === 1 && "Poor"}
-                  {rating === 2 && "Fair"}
-                  {rating === 3 && "Good"}
-                  {rating === 4 && "Very Good"}
-                  {rating === 5 && "Excellent"}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Title */}
-          <div className="space-y-1">
-            <Label htmlFor="title" className="text-sm font-medium text-gray-700">
-              Review Title <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              id="title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Summarize your experience"
-              maxLength={60}
-              disabled={isSubmitting}
-              className="w-full border border-gray-300 hover:border-gray-400 focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 transition-colors duration-200 rounded-lg"
-            />
-            <p className="text-xs text-gray-500">{title.length}/60</p>
-          </div>
-
-          {/* Comment */}
-          <div className="space-y-1">
-            <Label htmlFor="comment" className="text-sm font-medium text-gray-700">
-              Your Review <span className="text-red-500">*</span>
-            </Label>
-            <Textarea
-              id="comment"
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              placeholder="Share your thoughts about this product..."
-              rows={3}
-              maxLength={500}
-              disabled={isSubmitting}
-              className="w-full resize-none border border-gray-300 hover:border-gray-400 focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 transition-colors duration-200 rounded-lg"
-            />
-            <p className="text-xs text-gray-500">{comment.length}/500</p>
-          </div>
-
-          {/* Submit Buttons */}
-          <div className="flex flex-col sm:flex-row gap-3 pt-1">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleClose}
-              disabled={isSubmitting}
-              className="flex-1 h-11 border-2 border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all duration-200 font-medium"
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={isSubmitting || rating === 0 || !title.trim() || !comment.trim()}
-              className="flex-1 h-11 bg-gradient-to-r from-brand-primary to-brand-primary-dark hover:from-brand-primary-dark hover:to-brand-primary text-white font-medium shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 border-0"
-            >
-              {isSubmitting ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Submitting...
-                </>
-              ) : (
-                <>
-                  <Send className="h-4 w-4 mr-2" />
-                  Submit
-                </>
-              )}
-            </Button>
-          </div>
-        </form>
-
-        {!user && (
-          <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-3 mx-4 sm:mx-6 mb-4 sm:mb-6">
-            <div className="flex flex-col sm:flex-row items-start justify-between gap-3">
-              <div className="flex items-start gap-2 flex-1">
-                <AlertCircle className="h-4 w-4 text-yellow-600 flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-yellow-800 leading-relaxed">
-                  Please log in to submit a review. Only customers who have purchased and received this product can write reviews.
-                </p>
+    <>
+      <Dialog open={isOpen} onOpenChange={handleClose}>
+        <DialogContent className="w-[95vw] z-[999] max-w-sm mx-auto sm:mx-0 sm:w-full max-h-[90vh] overflow-y-auto bg-gradient-to-br from-white to-gray-50 rounded-xl border-0 shadow-xl [&>button]:hidden">
+          <DialogHeader className="px-3 pt-3 pb-1">
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <div className="p-1 bg-gradient-to-r from-blue-500 to-purple-600 rounded-md">
+                    <MessageSquare className="h-3.5 w-3.5 text-white" />
+                  </div>
+                  <div>
+                    <DialogTitle className="text-base font-bold text-gray-900">
+                      Write a Review
+                    </DialogTitle>
+                    <p className="text-xs text-gray-600 mt-0 flex items-center gap-1">
+                      <User className="h-3 w-3" />
+                      {productName}
+                    </p>
+                  </div>
+                </div>
               </div>
               <Button
+                variant="ghost"
                 size="sm"
-                onClick={() => setIsLoginModalOpen(true)}
-                className="bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-white text-xs px-4 py-2 h-auto font-medium shadow-md hover:shadow-lg transition-all duration-200 border-0"
+                onClick={handleClose}
+                disabled={isSubmitting}
+                className="h-6 w-6 p-0 hover:bg-gray-100 rounded-full"
               >
-                Login
+                <X className="h-3 w-3" />
               </Button>
             </div>
-          </div>
-        )}
-      </DialogContent>
+          </DialogHeader>
+
+          <form onSubmit={handleSubmit} className="space-y-3 px-3 pb-3">
+            {/* Rating Section */}
+            <div className="space-y-1.5">
+              <Label className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                <Star className="h-3.5 w-3.5 text-yellow-500" />
+                Rating <span className="text-red-500">*</span>
+              </Label>
+              <div className="flex items-center gap-1 flex-wrap">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    className="group p-1 transition-all duration-300 hover:scale-110 hover:rotate-12"
+                    onMouseEnter={() => setHoveredRating(star)}
+                    onMouseLeave={() => setHoveredRating(0)}
+                    onClick={() => setRating(star)}
+                    disabled={isSubmitting}
+                  >
+                    <Star
+                      className={`h-5 w-5 transition-all duration-300 ${
+                        star <= (hoveredRating || rating)
+                          ? "text-yellow-400 fill-yellow-400 drop-shadow-lg"
+                          : "text-gray-300 group-hover:text-yellow-200"
+                      }`}
+                    />
+                  </button>
+                ))}
+                {rating > 0 && (
+                  <div className="ml-1.5 px-1.5 py-0.5 bg-gradient-to-r from-yellow-100 to-orange-100 rounded-full">
+                    <span className="text-xs font-medium text-yellow-800">
+                      {rating === 1 && "Poor"}
+                      {rating === 2 && "Fair"}
+                      {rating === 3 && "Good"}
+                      {rating === 4 && "Very Good"}
+                      {rating === 5 && "Excellent"}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Title Section */}
+            <div className="space-y-1">
+              <Label htmlFor="title" className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                <ThumbsUp className="h-3.5 w-3.5 text-blue-500" />
+                Review Title <span className="text-red-500">*</span>
+              </Label>
+              <div className="relative">
+                <Input
+                  id="title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Summarize your experience in a few words..."
+                  maxLength={60}
+                  disabled={isSubmitting}
+                  className="w-full border-2 border-gray-200 hover:border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all duration-300 rounded-md h-9 text-sm placeholder:text-xs"
+                />
+                <div className="absolute right-1.5 top-1/2 transform -translate-y-1/2">
+                  <span className={`text-xs font-medium px-1 py-0.5 rounded-full ${
+                    title.length > 45 ? 'bg-red-100 text-red-700' : 
+                    title.length > 30 ? 'bg-yellow-100 text-yellow-700' : 
+                    'bg-green-100 text-green-700'
+                  }`}>
+                    {title.length}/60
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Comment Section */}
+            <div className="space-y-1">
+              <Label htmlFor="comment" className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                <MessageSquare className="h-3.5 w-3.5 text-purple-500" />
+                Your Review <span className="text-red-500">*</span>
+              </Label>
+              <div className="relative">
+                <Textarea
+                  id="comment"
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  placeholder="Share your detailed thoughts about this product... What did you like? What could be improved?"
+                  rows={2}
+                  maxLength={500}
+                  disabled={isSubmitting}
+                  className="w-full resize-none border-2 border-gray-200 hover:border-gray-300 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all duration-300 rounded-md text-sm placeholder:text-xs"
+                />
+                <div className="absolute right-1.5 bottom-1.5">
+                  <span className={`text-xs font-medium px-1 py-0.5 rounded-full ${
+                    comment.length > 400 ? 'bg-red-100 text-red-700' : 
+                    comment.length > 300 ? 'bg-yellow-100 text-yellow-700' : 
+                    'bg-green-100 text-green-700'
+                  }`}>
+                    {comment.length}/500
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Submit Buttons */}
+            <div className="flex flex-col sm:flex-row gap-1.5 pt-1">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleClose}
+                disabled={isSubmitting}
+                className="flex-1 h-9 border-2 border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all duration-300 font-medium rounded-md text-gray-700 text-sm"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={isSubmitting || rating === 0 || !title.trim() || !comment.trim()}
+                className="flex-1 h-9 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 border-0 rounded-md disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none text-sm"
+              >
+                {isSubmitting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1.5"></div>
+                    Submitting...
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-3 w-3 mr-1.5" />
+                    Submit Review
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {/* Help Text */}
+            <div className="text-center pt-0.5">
+              <p className="text-xs text-gray-500">
+                Your review will be visible to other customers after approval
+              </p>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Login Modal */}
       <LoginModal 
         isOpen={isLoginModalOpen} 
-        onClose={() => setIsLoginModalOpen(false)} 
+        onClose={handleLoginModalClose} 
       />
-    </Dialog>
+    </>
   );
 }

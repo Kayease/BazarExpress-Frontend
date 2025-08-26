@@ -47,6 +47,7 @@ import ProductCard from "@/components/product-card";
 import toast from "react-hot-toast";
 import { useRecentlyViewed } from "@/hooks/use-recently-viewed";
 import { useIsMobile } from "@/hooks/use-mobile";
+import ProductPageSkeleton from "@/components/ProductPageSkeleton";
 
 interface ProductDimensions {
   l: string;
@@ -164,7 +165,9 @@ function MobileProductPage({
   isItemBeingAdded, 
   router, 
   addToRecentlyViewed,
-  categories
+  categories,
+  isVideo,
+  isMobile
 }: any) {
   const [activeTab, setActiveTab] = useState<'details' | 'description' | 'reviews'>('details');
   const [showGallery, setShowGallery] = useState(false);
@@ -211,23 +214,7 @@ function MobileProductPage({
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="animate-pulse">
-          <div className="h-16 bg-gray-200"></div>
-          <div className="aspect-square bg-gray-200"></div>
-          <div className="p-4 space-y-4">
-            <div className="h-6 bg-gray-200 rounded w-3/4"></div>
-            <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-            <div className="h-8 bg-gray-200 rounded w-1/4"></div>
-            <div className="space-y-2">
-              <div className="h-4 bg-gray-200 rounded"></div>
-              <div className="h-4 bg-gray-200 rounded w-5/6"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+    return <ProductPageSkeleton isMobile={isMobile} />;
   }
 
   return (
@@ -312,13 +299,24 @@ function MobileProductPage({
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
         >
-          <Image
-            src={allImages[mainImageIdx] || "/placeholder.svg"}
-            alt={product.name}
-            fill
-            className="object-contain p-4"
-            priority
-          />
+          {isVideo(allImages[mainImageIdx]) ? (
+            <video
+              src={allImages[mainImageIdx]}
+              className="w-full h-full object-contain p-4"
+              controls
+              muted
+              autoPlay
+              loop
+            />
+          ) : (
+            <Image
+              src={allImages[mainImageIdx] || "/placeholder.svg"}
+              alt={product.name}
+              fill
+              className="object-contain p-4"
+              priority
+            />
+          )}
           {discountPercent > 0 && (
             <div className="absolute left-4 top-4 z-10 flex items-center justify-center scale-100" style={{ width: '40px', height: '40px', pointerEvents: 'none' }}>
               <svg width="40" height="40" viewBox="0 0 29 28" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -743,14 +741,20 @@ function MobileProductPage({
                   {product.tax && (
                     <div className="flex justify-between items-center py-2 border-b border-gray-100">
                       <span className="text-gray-600 text-sm">Tax Rate</span>
-                      <span className="font-medium text-gray-900 text-sm">{product.tax.rate}%</span>
+                      <span className="font-medium text-gray-900 text-sm">
+                        {(() => {
+                          const t = product.tax as any;
+                          const val = typeof t === 'object' ? (t.rate ?? t.percentage) : (typeof t === 'number' ? t : undefined);
+                          return val != null && val !== '' ? `${val}%` : '—';
+                        })()}
+                      </span>
                     </div>
                   )}
                   
-                  {product.tax && product.tax.name && (
+                  {product.tax && (typeof product.tax === 'object' ? product.tax.name : null) && (
                     <div className="flex justify-between items-center py-2 border-b border-gray-100">
                       <span className="text-gray-600 text-sm">Tax Name</span>
-                      <span className="font-medium text-gray-900 text-sm">{product.tax.name}</span>
+                      <span className="font-medium text-gray-900 text-sm">{typeof product.tax === 'object' ? product.tax.name : ''}</span>
                     </div>
                   )}
                 </div>
@@ -1303,27 +1307,7 @@ export default function ProductDetailsPage() {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="container mx-auto px-4 py-8">
-          <div className="animate-pulse">
-            <div className="h-4 bg-gray-200 rounded w-1/3 mb-6"></div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <div className="aspect-square bg-gray-200 rounded-2xl"></div>
-              <div className="space-y-4">
-                <div className="h-8 bg-gray-200 rounded w-3/4"></div>
-                <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-                <div className="h-6 bg-gray-200 rounded w-1/4"></div>
-                <div className="space-y-2">
-                  <div className="h-4 bg-gray-200 rounded"></div>
-                  <div className="h-4 bg-gray-200 rounded w-5/6"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+    return <ProductPageSkeleton isMobile={isMobile} />;
   }
 
   if (!product) {
@@ -1347,6 +1331,12 @@ export default function ProductDetailsPage() {
   const variants = product.variants && Object.keys(product.variants).length > 0 ? product.variants : null;
   const variantImages = selectedVariant && variants && variants[selectedVariant]?.images ? variants[selectedVariant].images : [];
   const allImages = variantImages.length > 0 ? variantImages : images;
+  
+  // Helper function to check if a media item is a video
+  const isVideo = (url: string) => {
+    if (!url) return false;
+    return url.includes('.mp4') || url.includes('.mov') || url.includes('.avi') || url.includes('video');
+  };
 
   const currentPrice = selectedVariant && variants ? variants[selectedVariant].price : product.price;
   const currentMrp = selectedVariant && variants ? variants[selectedVariant].mrp : product.mrp;
@@ -1404,6 +1394,8 @@ export default function ProductDetailsPage() {
         router={router}
         addToRecentlyViewed={addToRecentlyViewed}
         categories={categories}
+        isVideo={isVideo}
+        isMobile={isMobile}
       />
     );
   }
@@ -1447,15 +1439,23 @@ export default function ProductDetailsPage() {
                         }`}
                       onClick={() => handleMainImageChange(actualIdx)}
                     >
-                      <Image
-                        src={img || "/placeholder.svg"}
-                        alt={`Gallery ${actualIdx + 1}`}
-                        width={64}
-                        height={64}
-                        // Ensure equal dimensions for all image types by using object-cover
-                        // This will maintain consistent visual size regardless of image aspect ratio
-                        className="w-full h-full object-contain"
-                      />
+                      {isVideo(img) ? (
+                        <div className="w-full h-full flex items-center justify-center bg-gray-100">
+                          <div className="w-8 h-8 bg-brand-primary/20 rounded-full flex items-center justify-center">
+                            <svg className="w-4 h-4 text-brand-primary" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M8 5v14l11-7z"/>
+                            </svg>
+                          </div>
+                        </div>
+                      ) : (
+                        <Image
+                          src={img || "/placeholder.svg"}
+                          alt={`Gallery ${actualIdx + 1}`}
+                          width={64}
+                          height={64}
+                          className="w-full h-full object-contain"
+                        />
+                      )}
                     </div>
                   );
                 })}
@@ -1482,13 +1482,24 @@ export default function ProductDetailsPage() {
             <div className="sticky top-24 space-y-4">
             <Card className="overflow-hidden">
               <div className="relative aspect-video bg-white group">
-                <Image
-                  src={allImages[mainImageIdx] || "/placeholder.svg"}
-                  alt={product.name}
-                  fill
-                  className="object-contain p-6 transition-transform duration-500 group-hover:scale-105"
-                  priority
-                />
+                {isVideo(allImages[mainImageIdx]) ? (
+                  <video
+                    src={allImages[mainImageIdx]}
+                    className="w-full h-full object-contain p-6"
+                    controls
+                    muted
+                    autoPlay
+                    loop
+                  />
+                ) : (
+                  <Image
+                    src={allImages[mainImageIdx] || "/placeholder.svg"}
+                    alt={product.name}
+                    fill
+                    className="object-contain p-6 transition-transform duration-500 group-hover:scale-105"
+                    priority
+                  />
+                )}
                 {discountPercent > 0 && (
                   <div className="absolute left-4 -top-1 z-10 flex items-center justify-center scale-100" style={{ width: '50px', height: '50px', pointerEvents: 'none' }}>
                     <svg width="50" height="50" viewBox="0 0 29 28" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1935,14 +1946,20 @@ export default function ProductDetailsPage() {
                         {product.tax && (
                           <div className="flex justify-between items-center py-2 border-b border-gray-100">
                             <span className="text-gray-600 text-sm">Tax Rate</span>
-                            <span className="font-medium text-gray-900 text-sm">{product.tax.rate}%</span>
+                            <span className="font-medium text-gray-900 text-sm">
+                              {(() => {
+                                const t = product.tax as any;
+                                const val = typeof t === 'object' ? (t.rate ?? t.percentage) : (typeof t === 'number' ? t : undefined);
+                                return val != null && val !== '' ? `${val}%` : '—';
+                              })()}
+                            </span>
                           </div>
                         )}
                         
-                        {product.tax && product.tax.name && (
+                        {product.tax && (typeof product.tax === 'object' ? product.tax.name : null) && (
                           <div className="flex justify-between items-center py-2 border-b border-gray-100">
                             <span className="text-gray-600 text-sm">Tax Name</span>
-                            <span className="font-medium text-gray-900 text-sm">{product.tax.name}</span>
+                            <span className="font-medium text-gray-900 text-sm">{typeof product.tax === 'object' ? product.tax.name : ''}</span>
                           </div>
                         )}
                       </div>
