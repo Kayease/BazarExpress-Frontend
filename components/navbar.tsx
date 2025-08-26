@@ -640,28 +640,43 @@ export default function Navbar() {
         )}
       </header>
 
-      {/* Mobile Sticky Cart Bar */}
-      {cartItemCount > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 bg-purple-600 text-white p-4 z-50 md:hidden">
-          <button
-            onClick={() => setIsCartOpen(true)}
-            className="w-full flex items-center justify-between"
-          >
-            <div className="flex items-center">
-              <ShoppingCart size={20} className="mr-3" />
-              <span className="font-medium">
-                {cartItemCount} item{cartItemCount !== 1 ? 's' : ''}
-              </span>
-              <span className="ml-2 text-sm opacity-90">
-                ₹{Math.round(cartTotal)}
-              </span>
+                           {/* Mobile Sticky Cart Bar */}
+        {cartItemCount > 0 && (
+          <div className="fixed bottom-4 left-4 right-4 bg-gradient-to-r from-brand-primary to-brand-primary-dark text-white p-3 z-50 md:hidden shadow-2xl rounded-2xl cart-slide-up group hover:shadow-[0_25px_50px_-12px_rgba(147,51,234,0.4)] transition-shadow duration-300">
+            <div className="max-w-md mx-auto">
+              <button
+                onClick={() => setIsCartOpen(true)}
+                className="w-full flex items-center justify-between group hover:scale-[1.02] transition-all duration-200"
+              >
+                {/* Left Section - Cart Summary */}
+                <div className="flex items-center gap-2">
+                  {/* Cart Icon Container */}
+                  <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur-sm border border-white/20 group-hover:bg-white/30 transition-colors duration-200 cart-icon-pulse">
+                    <ShoppingCart size={16} className="text-white" />
+                  </div>
+                  
+                  {/* Item Count and Price */}
+                  <div className="flex flex-col items-start">
+                    <span className="font-semibold text-white text-xs">
+                      {cartItemCount} item{cartItemCount !== 1 ? 's' : ''}
+                    </span>
+                    <span className="text-white/90 text-xs font-medium">
+                      ₹{Math.round(cartTotal)}
+                    </span>
+                  </div>
+                </div>
+                
+                {/* Right Section - View Cart Button */}
+                <div className="flex items-center gap-2 group-hover:gap-3 transition-all duration-200">
+                  <span className="font-semibold text-white text-xs">View Cart</span>
+                  <svg className="w-4 h-4 text-white animate-arrow-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </div>
+              </button>
             </div>
-            <span className="font-medium bg-white text-purple-600 px-4 py-2 rounded">
-              View Cart
-            </span>
-          </button>
-        </div>
-      )}
+          </div>
+        )}
 
       {/* Cart Drawer rendered globally */}
         <CartDrawer isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />

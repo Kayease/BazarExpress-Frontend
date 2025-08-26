@@ -572,3 +572,67 @@ div[data-sonner-toast],
 }
   
   
+/* Mobile cart backdrop blur support */
+@supports (backdrop-filter: blur(8px)) {
+  .backdrop-blur-sm {
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+}
+
+/* Fallback for browsers that don't support backdrop-filter */
+@supports not (backdrop-filter: blur(8px)) {
+  .backdrop-blur-sm {
+    background-color: rgba(255, 255, 255, 0.3);
+  }
+}
+  
+  
+/* Mobile cart entrance animation */
+@keyframes slideUpCart {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.cart-slide-up {
+  animation: slideUpCart 0.3s ease-out;
+}
+
+/* Cart icon pulse animation */
+@keyframes cartPulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+.cart-icon-pulse {
+  animation: cartPulse 2s ease-in-out infinite;
+}
+
+/* Arrow bounce animation */
+@keyframes arrowBounce {
+  0%, 20%, 50%, 80%, 100% {
+    transform: translateX(0);
+  }
+  40% {
+    transform: translateX(4px);
+  }
+  60% {
+    transform: translateX(2px);
+  }
+}
+
+.animate-arrow-bounce {
+  animation: arrowBounce 2s ease-in-out infinite;
+}
+  
+  
