@@ -46,6 +46,7 @@ export default function AdminProducts() {
   const [filterStatus, setFilterStatus] = useState("all")
   const [filterSubcategory, setFilterSubcategory] = useState("all");
   const [filterWarehouse, setFilterWarehouse] = useState("all");
+  const [filterBrand, setFilterBrand] = useState("all");
   const router = useRouter()
   const searchRef = useRef<HTMLDivElement>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -152,10 +153,11 @@ export default function AdminProducts() {
     fetchProducts();
   }, [user, router, API])
 
-  // Deduplicate categories and warehouses by ID or value
+  // Deduplicate categories, brands, and warehouses by ID or value
   const categoryMap = new Map();
   const subcategoryMap = new Map();
   const warehouseMap = new Map();
+  const brandMap = new Map();
   productList.forEach((p) => {
     // Extract warehouse
     const wh = p.warehouse;
@@ -180,8 +182,16 @@ export default function AdminProducts() {
     } else if (subcat) {
       subcategoryMap.set(subcat, subcat);
     }
+    // Brand extraction
+    const brand = p.brand;
+    if (brand && typeof brand === "object" && "_id" in brand) {
+      brandMap.set(brand._id, brand);
+    } else if (brand) {
+      brandMap.set(brand, brand);
+    }
   });
   const categories = ["all", ...Array.from(categoryMap.values())];
+  const brands = ["all", ...Array.from(brandMap.values())];
   // Subcategories for selected category
   const subcategories = [
     "all",
@@ -246,10 +256,18 @@ export default function AdminProducts() {
       (filterStatus === "in-stock" && product.inStock) ||
       (filterStatus === "out-of-stock" && !product.inStock);
     
+    // Brand filter
+    const brandId = product.brand ? 
+      (typeof product.brand === 'object' && product.brand !== null && '_id' in product.brand ? 
+        (product.brand as { _id: string })._id : 
+        String(product.brand)) 
+      : '';
+    const matchesBrand = filterBrand === "all" || brandId === filterBrand;
+    
     // Warehouse filter
     const matchesWarehouse = filterWarehouse === "all" || warehouse === filterWarehouse;
     
-    return matchesSearch && matchesCategory && matchesSubcategory && matchesStatus && matchesWarehouse;
+    return matchesSearch && matchesCategory && matchesSubcategory && matchesStatus && matchesBrand && matchesWarehouse;
   })
 
   const searchSuggestions = productList
@@ -260,7 +278,7 @@ export default function AdminProducts() {
       const name = typeof product.name === 'string' ? product.name : '';
       
       // Safe brand extraction
-      const brand = product.brand ? 
+      const brandName = product.brand ? 
         (typeof product.brand === 'object' && product.brand !== null && 'name' in product.brand ? 
           product.brand.name : 
           String(product.brand)) 
@@ -268,7 +286,7 @@ export default function AdminProducts() {
         
       return (
         name.toLowerCase().includes(searchLower) ||
-        (brand && brand.toLowerCase().includes(searchLower))
+        (brandName && brandName.toLowerCase().includes(searchLower))
       );
     })
     .slice(0, 5); // Limit to 5 suggestions
@@ -429,8 +447,8 @@ export default function AdminProducts() {
 
                  {/* Filters */}
          <div className="bg-white rounded-lg p-6 shadow-md space-y-4">
-           {/* First Row: Search (spans 2 columns) and Status Filter */}
-           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+           {/* First Row: Search (spans 2 columns), Brand Filter, and Status Filter */}
+           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
              <div className="relative md:col-span-2" ref={searchRef}>
                <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
                <input
@@ -475,6 +493,17 @@ export default function AdminProducts() {
                  </div>
                )}
              </div>
+             <select
+               value={filterBrand}
+               onChange={(e) => setFilterBrand(e.target.value)}
+               className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+             >
+               {brands.map((brand) => (
+                 <option key={typeof brand === 'object' && brand !== null && '_id' in brand ? brand._id : brand} value={typeof brand === 'object' && brand !== null && '_id' in brand ? brand._id : brand}>
+                   {brand === "all" ? "All Brands" : brand && typeof brand === 'object' && brand !== null && 'name' in brand ? brand.name : brand}
+                 </option>
+               ))}
+             </select>
              <select
                value={filterStatus}
                onChange={(e) => setFilterStatus(e.target.value)}

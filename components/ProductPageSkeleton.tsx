@@ -39,17 +39,7 @@ export function MobileProductPageSkeleton() {
           </div>
         </div>
         
-        {/* Image Gallery Dots Skeleton */}
-        <div className="flex justify-center gap-2 pb-4">
-          {[...Array(5)].map((_, idx) => (
-            <div 
-              key={idx} 
-              className={`w-2 h-2 rounded-full animate-pulse ${
-                idx === 0 ? 'bg-gray-400' : 'bg-gray-200'
-              }`}
-            ></div>
-          ))}
-        </div>
+
       </div>
 
       {/* Product Info Skeleton */}
@@ -90,28 +80,6 @@ export function MobileProductPageSkeleton() {
             <div className="h-3 bg-gray-200 rounded w-28 animate-pulse"></div>
           </div>
           <div className="w-4 h-4 bg-gray-200 rounded animate-pulse"></div>
-        </div>
-
-        {/* Variant Selection Skeleton */}
-        <div className="space-y-4">
-          <div className="h-5 bg-gray-200 rounded w-28 animate-pulse"></div>
-          <div className="space-y-4">
-            {[...Array(2)].map((_, attrIdx) => (
-              <div key={attrIdx} className="space-y-3">
-                <div className="h-4 bg-gray-200 rounded w-20 animate-pulse"></div>
-                <div className="flex flex-wrap gap-2">
-                  {[...Array(4)].map((_, valIdx) => (
-                    <div 
-                      key={valIdx} 
-                      className={`h-9 rounded-lg animate-pulse ${
-                        valIdx === 0 ? 'w-20 bg-gray-300' : 'w-16 bg-gray-200'
-                      }`}
-                    ></div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
 
         {/* Quantity & Actions Skeleton */}

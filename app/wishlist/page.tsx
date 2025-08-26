@@ -68,6 +68,10 @@ export default function WishlistPage() {
     }
   );
 
+  // State for location-filtered recently viewed products
+  const [locationFilteredRecentlyViewed, setLocationFilteredRecentlyViewed] = useState<any[]>([]);
+  const [isLoadingRecentlyViewed, setIsLoadingRecentlyViewed] = useState(false);
+
 
 
   // Generate related products based on wishlist categories
@@ -110,6 +114,44 @@ export default function WishlistPage() {
       setIsLoadingRelated(false);
     }
   }, [wishlistItems, locationProducts]);
+
+  // Filter recently viewed products based on location availability
+  useEffect(() => {
+    if (recentlyViewed.length > 0 && locationState?.pincode && locationState?.isLocationDetected) {
+      setIsLoadingRecentlyViewed(true);
+      
+      // Get unique product IDs from recently viewed
+      const recentlyViewedIds = recentlyViewed.map(product => product._id);
+      
+      // Filter location products to only include recently viewed products
+      if (locationProducts?.products) {
+        const availableRecentlyViewed = locationProducts.products
+          .filter(product => recentlyViewedIds.includes(product._id))
+          .slice(0, 8); // Show max 8 products
+        
+        setLocationFilteredRecentlyViewed(availableRecentlyViewed);
+      } else {
+        // If no location products available, fall back to basic filtering
+        const filtered = recentlyViewed.filter(product => {
+          if (product.warehouse) {
+            if (isGlobalMode) {
+              return product.warehouse.deliverySettings?.is24x7Delivery === true;
+            }
+            return true; // In custom mode, show all products with warehouse info
+          }
+          return true; // Fallback for products without warehouse info
+        });
+        setLocationFilteredRecentlyViewed(filtered.slice(0, 8));
+      }
+      
+      setIsLoadingRecentlyViewed(false);
+    } else if (recentlyViewed.length > 0) {
+      // No location detected, show all recently viewed products
+      setLocationFilteredRecentlyViewed(recentlyViewed.slice(0, 8));
+    } else {
+      setLocationFilteredRecentlyViewed([]);
+    }
+  }, [recentlyViewed, locationState?.pincode, locationState?.isLocationDetected, locationProducts?.products, isGlobalMode]);
 
   const moveToCart = async (item: any) => {
     console.log('moveToCart called with item:', item);
@@ -526,111 +568,120 @@ export default function WishlistPage() {
         )}
 
         {/* Recently Viewed Products Section */}
-        {recentlyViewed.length > 0 && (
+        {locationFilteredRecentlyViewed.length > 0 && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">
             <div className="flex items-center justify-between mb-3 sm:mb-4">
               <h2 className="text-lg sm:text-xl font-semibold text-gray-900 flex items-center gap-2">
                 <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600" />
                 Recently Viewed
+                {locationState?.pincode && locationState?.isLocationDetected && (
+                  <span className="text-sm font-normal text-gray-500">
+                    (Available at your location)
+                  </span>
+                )}
               </h2>
             </div>
             
-            <div className={`${viewMode === 'grid'
-              ? 'grid gap-2 sm:gap-3 grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7'
-              : 'space-y-2 sm:space-y-3'
-            }`}>
-              {recentlyViewed.slice(0, 8).map((product) => {
-                                 // Enhance product with variant information if it has variants
-                 const enhancedProduct = (() => {
-                   // Debug: Log the product structure
-                   console.log('Enhancing recently viewed product:', {
-                     name: product.name,
-                     variantId: product.variantId,
-                     variantName: product.variantName,
-                     hasVariants: !!product.variants,
-                     variantsKeys: product.variants ? Object.keys(product.variants) : [],
-                     currentUnit: product.unit,
-                     variants: product.variants,
-                     category: product.category,
-                     brand: product.brand,
-                     categoryType: typeof product.category,
-                     brandType: typeof product.brand,
-                     categoryKeys: product.category && typeof product.category === 'object' ? Object.keys(product.category) : null,
-                     brandKeys: product.brand && typeof product.brand === 'object' ? Object.keys(product.brand) : null
-                   });
-                   
-                   // First check if product already has variant info (from recently viewed)
-                   if (product.variantId && product.variantName) {
-                     // For recently viewed products, ensure unit is properly set
-                     // Check if we need to extract unit from variants
-                     if (product.variants && Object.keys(product.variants).length > 0 && product.variantId) {
-                       const variant = product.variants[product.variantId];
-                       if (variant && variant.unit) {
-                         console.log('Found variant with unit:', variant.unit);
-                         return {
-                           ...product,
-                           unit: variant.unit,
-                           // Ensure category and brand objects are preserved
-                           category: product.category,
-                           brand: product.brand
-                         };
-                       }
-                     }
-                     // If no unit found in variant, use fallback
-                     console.log('Using fallback unit for recently viewed product');
-                     return {
-                       ...product,
-                       unit: product.unit || '1 Unit',
-                       // Ensure category and brand objects are preserved
-                       category: product.category,
-                       brand: product.brand
-                     };
-                   }
-                   
-                                        // If not, check if it has variants object and extract first variant
-                     if (product.variants && Object.keys(product.variants).length > 0) {
-                       const firstVariantKey = Object.keys(product.variants)[0];
-                       const firstVariant = product.variants[firstVariantKey];
-                       return {
-                         ...product,
-                         variantId: firstVariantKey,
-                         variantName: firstVariant.name || firstVariantKey.replace(/::/g, ' '),
-                         selectedVariant: firstVariant,
-                         price: (firstVariant.price !== undefined ? firstVariant.price : product.price),
-                         // Preserve unit information from variant or product
-                         unit: firstVariant.unit || product.unit || '1 Unit', // Fallback to default unit
-                         // Ensure category and brand objects are preserved
-                         category: product.category,
-                         brand: product.brand
-                       };
-                     }
-                     
-                     // For products without variants, ensure unit is set
-                     return {
-                       ...product,
-                       unit: product.unit || '1 Unit', // Fallback to default unit
-                       // Ensure category and brand objects are preserved
-                       category: product.category,
-                       brand: product.brand
-                     };
-                 })();
+            {isLoadingRecentlyViewed ? (
+              <ProductGridSkeleton count={8} viewMode={viewMode} />
+            ) : (
+              <div className={`${viewMode === 'grid'
+                ? 'grid gap-2 sm:gap-3 grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7'
+                : 'space-y-2 sm:space-y-3'
+              }`}>
+                {locationFilteredRecentlyViewed.map((product) => {
+                  // Enhance product with variant information if it has variants
+                  const enhancedProduct = (() => {
+                    // Debug: Log the product structure
+                    console.log('Enhancing recently viewed product:', {
+                      name: product.name,
+                      variantId: product.variantId,
+                      variantName: product.variantName,
+                      hasVariants: !!product.variants,
+                      variantsKeys: product.variants ? Object.keys(product.variants) : [],
+                      currentUnit: product.unit,
+                      variants: product.variants,
+                      category: product.category,
+                      brand: product.brand,
+                      categoryType: typeof product.category,
+                      brandType: typeof product.brand,
+                      categoryKeys: product.category && typeof product.category === 'object' ? Object.keys(product.category) : null,
+                      brandKeys: product.brand && typeof product.brand === 'object' ? Object.keys(product.brand) : null
+                    });
+                    
+                    // First check if product already has variant info (from recently viewed)
+                    if (product.variantId && product.variantName) {
+                      // For recently viewed products, ensure unit is properly set
+                      // Check if we need to extract unit from variants
+                      if (product.variants && Object.keys(product.variants).length > 0 && product.variantId) {
+                        const variant = product.variants[product.variantId];
+                        if (variant && variant.unit) {
+                          console.log('Found variant with unit:', variant.unit);
+                          return {
+                            ...product,
+                            unit: variant.unit,
+                            // Ensure category and brand objects are preserved
+                            category: product.category,
+                            brand: product.brand
+                          };
+                        }
+                      }
+                      // If no unit found in variant, use fallback
+                      console.log('Using fallback unit for recently viewed product');
+                      return {
+                        ...product,
+                        unit: product.unit || '1 Unit',
+                        // Ensure category and brand objects are preserved
+                        category: product.category,
+                        brand: product.brand
+                      };
+                    }
+                    
+                    // If not, check if it has variants object and extract first variant
+                    if (product.variants && Object.keys(product.variants).length > 0) {
+                      const firstVariantKey = Object.keys(product.variants)[0];
+                      const firstVariant = product.variants[firstVariantKey];
+                      return {
+                        ...product,
+                        variantId: firstVariantKey,
+                        variantName: firstVariant.name || firstVariantKey.replace(/::/g, ' '),
+                        selectedVariant: firstVariant,
+                        price: (firstVariant.price !== undefined ? firstVariant.price : product.price),
+                        // Preserve unit information from variant or product
+                        unit: firstVariant.unit || product.unit || '1 Unit', // Fallback to default unit
+                        // Ensure category and brand objects are preserved
+                        category: product.category,
+                        brand: product.brand
+                      };
+                    }
+                    
+                    // For products without variants, ensure unit is set
+                    return {
+                      ...product,
+                      unit: product.unit || '1 Unit', // Fallback to default unit
+                      // Ensure category and brand objects are preserved
+                      category: product.category,
+                      brand: product.brand
+                    };
+                  })();
 
-                return (
-                  <ProductCard
-                    key={product._id}
-                    product={enhancedProduct}
-                    isInWishlist={isInWishlist}
-                    handleWishlistClick={handleWishlistClick}
-                    handleAddToCart={handleAddToCart}
-                    quantity={0}
-                    locationState={locationState}
-                    isGlobalMode={isGlobalMode}
-                    viewMode={viewMode}
-                    onClick={() => router.push(`/products/${product._id}`)}
-                  />
-                );
-              })}
-            </div>
+                  return (
+                    <ProductCard
+                      key={product._id}
+                      product={enhancedProduct}
+                      isInWishlist={isInWishlist}
+                      handleWishlistClick={handleWishlistClick}
+                      handleAddToCart={handleAddToCart}
+                      quantity={0}
+                      locationState={locationState}
+                      isGlobalMode={isGlobalMode}
+                      viewMode={viewMode}
+                      onClick={() => router.push(`/products/${product._id}`)}
+                    />
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 

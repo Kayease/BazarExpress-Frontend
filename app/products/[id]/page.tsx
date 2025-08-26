@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useCartContext, useWishlistContext, useAppContext } from "@/components/app-provider";
+import { useLocation } from "@/components/location-provider";
 import {
   Check,
   Heart,
@@ -167,7 +168,9 @@ function MobileProductPage({
   addToRecentlyViewed,
   categories,
   isVideo,
-  isMobile
+  isMobile,
+  locationState,
+  isGlobalMode
 }: any) {
   const [activeTab, setActiveTab] = useState<'details' | 'description' | 'reviews'>('details');
   const [showGallery, setShowGallery] = useState(false);
@@ -1063,6 +1066,7 @@ export default function ProductDetailsPage() {
   const [isInitialLoad, setIsInitialLoad] = useState(true);
 
   const { addToRecentlyViewed } = useRecentlyViewed();
+  const { locationState, isGlobalMode } = useLocation();
   const APIURL = process.env.NEXT_PUBLIC_API_URL;
 
   // Function to get available variants based on selected attributes
@@ -1244,13 +1248,29 @@ export default function ProductDetailsPage() {
               : productData.category;
 
           try {
-            const relatedResponse = await fetch(`${APIURL}/products/public?category=${categoryId}&limit=8`);
-            const relatedProducts = await relatedResponse.json();
+            // Use location-aware product fetching for related products
+            if (locationState?.pincode && locationState?.isLocationDetected) {
+              const mode = isGlobalMode ? 'global' : 'auto';
+              const relatedResponse = await fetch(`${APIURL}/warehouses/products-by-pincode?pincode=${locationState.pincode}&category=${categoryId}&limit=8&mode=${mode}`);
+              const relatedData = await relatedResponse.json();
 
-            if (Array.isArray(relatedProducts)) {
-              setRelatedProducts(
-                relatedProducts.filter((p: ExtendedProduct) => p._id !== productData._id)
-              );
+              if (relatedData.success && Array.isArray(relatedData.products)) {
+                setRelatedProducts(
+                  relatedData.products.filter((p: ExtendedProduct) => p._id !== productData._id)
+                );
+              } else {
+                setRelatedProducts([]);
+              }
+            } else {
+              // Fallback to global products if no location detected
+              const relatedResponse = await fetch(`${APIURL}/products/public?category=${categoryId}&limit=8`);
+              const relatedProducts = await relatedResponse.json();
+
+              if (Array.isArray(relatedProducts)) {
+                setRelatedProducts(
+                  relatedProducts.filter((p: ExtendedProduct) => p._id !== productData._id)
+                );
+              }
             }
           } catch (error) {
             console.error("Error fetching related products:", error);
@@ -1267,7 +1287,7 @@ export default function ProductDetailsPage() {
     };
 
     fetchProductData();
-  }, [id, APIURL]);
+  }, [id, APIURL, locationState?.pincode, locationState?.isLocationDetected, isGlobalMode]);
 
   const handleReviewSubmitted = () => {
     if (product) {
@@ -1396,6 +1416,8 @@ export default function ProductDetailsPage() {
         categories={categories}
         isVideo={isVideo}
         isMobile={isMobile}
+        locationState={locationState}
+        isGlobalMode={isGlobalMode}
       />
     );
   }
