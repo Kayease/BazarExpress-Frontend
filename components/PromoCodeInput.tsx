@@ -85,22 +85,22 @@ export default function PromoCodeInput({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2.5 sm:space-y-3">
       {/* Applied Promo Code Display */}
       {appliedPromoCode && (
-        <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
-          <div className="flex items-center gap-2">
-            <Check className="h-4 w-4 text-green-600" />
+        <div className="flex items-center justify-between p-2 sm:p-2.5 md:p-3 bg-brand-primary/5 border border-brand-primary/20 rounded-lg">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <Check className="h-3 w-3 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4 text-brand-primary" />
             <div>
-              <span className="text-sm font-medium text-green-800">
+              <span className="text-xs font-medium text-brand-primary">
                 {appliedPromoCode.code}
               </span>
-              <div className="text-xs text-green-600">
+              <div className="text-xs text-brand-primary">
                 {appliedPromoCode.type === 'percentage' 
                   ? `${appliedPromoCode.discount}% off` 
                   : `₹${appliedPromoCode.discount} off`}
                 {appliedPromoCode.usageType === 'single_use' && (
-                  <Badge variant="secondary" className="ml-2 text-xs">
+                  <Badge variant="secondary" className="ml-1.5 sm:ml-2 text-xs">
                     Single Use
                   </Badge>
                 )}
@@ -111,38 +111,38 @@ export default function PromoCodeInput({
             variant="ghost"
             size="sm"
             onClick={removePromoCode}
-            className="text-green-600 hover:text-green-800 hover:bg-green-100"
+            className="text-brand-primary hover:text-brand-primary-dark hover:bg-brand-primary/10 p-1 sm:p-1.5 md:p-2"
           >
-            <X className="h-4 w-4" />
+            <X className="h-3 w-3 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4" />
           </Button>
         </div>
       )}
 
       {/* Promo Code Input */}
       {!appliedPromoCode && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <Tag className="h-4 w-4 text-gray-500" />
+        <div className="space-y-2 sm:space-y-2.5 md:space-y-3">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <Tag className="h-3 w-3 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4 text-gray-500" />
             <span className="text-sm font-medium text-gray-700">Have a promo code?</span>
           </div>
           
-          <div className="flex gap-2">
+          <div className="flex gap-1.5 sm:gap-2">
             <Input
               type="text"
               placeholder="Enter promo code"
               value={promoCode}
               onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
               onKeyPress={handleKeyPress}
-              className="flex-1"
+              className="flex-1 focus:ring-2 focus:ring-brand-primary focus:border-brand-primary text-sm"
               disabled={isValidating}
             />
             <Button
               onClick={validatePromoCode}
               disabled={isValidating || !promoCode.trim()}
-              className="px-6"
+              className="px-3 sm:px-4 md:px-6 py-2 bg-brand-primary hover:bg-brand-primary-dark text-white text-sm"
             >
               {isValidating ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-3 w-3 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4 animate-spin" />
               ) : (
                 'Apply'
               )}

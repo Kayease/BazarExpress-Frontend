@@ -1,12 +1,36 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { X, ShoppingBag, LogIn, Plus, Minus, Trash2, Heart, ShoppingCart, MapPin, Clock } from "lucide-react";
+import { X, ShoppingBag, LogIn, Plus, Minus, Trash2, Heart, ShoppingCart, MapPin, Home, Briefcase, Hotel, MapPinOff, Edit, ChevronRight } from "lucide-react";
 import { getCartItems, updateCartQuantity, removeFromCart, getCartTotals } from "../lib/cart";
 import { useAppContext, useCartContext, useWishlistContext } from "@/components/app-provider";
 import { useAppSelector } from "@/lib/store";
 import Image from "next/image";
 import toast from "react-hot-toast";
+import AddressModal from "./AddressModal";
+
+interface Address {
+  id: number;
+  type: "Office" | "Home" | "Hotel" | "Other";
+  building: string;
+  floor?: string;
+  area: string;
+  landmark?: string;
+  city: string;
+  state: string;
+  country: string;
+  pincode: string;
+  phone?: string;
+  name: string;
+  lat?: number;
+  lng?: number;
+  isDefault?: boolean;
+  addressLabel?: string;
+  additionalInstructions?: string;
+  isActive?: boolean;
+  createdAt?: number;
+  updatedAt?: number;
+}
 
 export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const { isLoggedIn, setIsLoginOpen } = useAppContext();
@@ -15,9 +39,50 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
   const router = useRouter();
   const user = useAppSelector((state: any) => state?.auth?.user);
 
+  // Address selection states
+  const [showAddressSelection, setShowAddressSelection] = useState(false);
+  const [addresses, setAddresses] = useState<Address[]>([]);
+  const [selectedAddress, setSelectedAddress] = useState<Address | null>(null);
+  const [isLoadingAddresses, setIsLoadingAddresses] = useState(false);
+  const [showAddressModal, setShowAddressModal] = useState(false);
+  const [isAddingAddress, setIsAddingAddress] = useState(false);
 
+  const fetchUserAddresses = useCallback(async () => {
+    try {
+      setIsLoadingAddresses(true);
+      const response = await fetch(`/api/user/addresses`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        cache: 'no-store'
+      });
 
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to fetch addresses');
+      }
 
+      const data = await response.json();
+      if (Array.isArray(data.addresses)) {
+        const validAddresses = data.addresses.filter((address: any) =>
+          address &&
+          address.id &&
+          (address.building || address.area) &&
+          address.city &&
+          address.state &&
+          address.pincode
+        );
+        setAddresses(validAddresses);
+      }
+    } catch (error) {
+      console.error('Error fetching addresses:', error);
+      setAddresses([]);
+    } finally {
+      setIsLoadingAddresses(false);
+    }
+  }, []);
 
   // Add effect to prevent body scrolling when cart is open
   useEffect(() => {
@@ -35,6 +100,18 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
     };
   }, [isOpen]);
 
+  // Prevent background scroll when address modal is open
+  useEffect(() => {
+    if (showAddressModal) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [showAddressModal]);
+
   // Load delivery settings on mount
   // Auto-close cart drawer when it becomes empty (with a small delay)
   useEffect(() => {
@@ -47,6 +124,21 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
       return () => clearTimeout(timer);
     }
   }, [isOpen, cartItems.length, onClose]);
+
+  // Fetch user addresses when cart opens
+  useEffect(() => {
+    if (isOpen && isLoggedIn && addresses.length === 0) {
+      fetchUserAddresses();
+    }
+  }, [isOpen, isLoggedIn, addresses.length, fetchUserAddresses]);
+
+  // Set default address when addresses are loaded
+  useEffect(() => {
+    if (addresses.length > 0 && !selectedAddress) {
+      const defaultAddr = addresses.find(addr => addr.isDefault);
+      setSelectedAddress(defaultAddr || addresses[0]);
+    }
+  }, [addresses, selectedAddress]);
 
   const handleUpdate = (id: string, quantity: number, variantId?: string) => {
     updateCartItem(id, quantity, variantId);
@@ -114,12 +206,80 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
     }
   };
 
+  const getAddressIcon = (type: string) => {
+    switch (type) {
+      case 'Home':
+        return <Home className="h-4 w-4 text-yellow-500" />;
+      case 'Office':
+        return <Briefcase className="h-4 w-4 text-blue-500" />;
+      case 'Hotel':
+        return <Hotel className="h-4 w-4 text-brand-primary" />;
+      default:
+        return <MapPinOff className="h-4 w-4 text-gray-500" />;
+    }
+  };
+
+  const formatAddress = (address: Address) => {
+    const parts = [
+      address.name,
+      address.building,
+      address.area,
+      address.city,
+      address.state,
+      address.pincode
+    ].filter(Boolean);
+    return parts.join(', ');
+  };
+
+  // Add new address
+  const handleAddAddress = async (newAddress: Omit<Address, 'id'>) => {
+    try {
+      setIsAddingAddress(true);
+
+      const response = await fetch(`/api/user/addresses`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify(newAddress),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to add address');
+      }
+
+      const data = await response.json();
+      if (data.address) {
+        await fetchUserAddresses();
+        if (newAddress.isDefault) {
+          setSelectedAddress(data.address.id);
+        }
+        setShowAddressModal(false);
+        toast.success('Address added successfully!');
+      }
+    } catch (error) {
+      console.error('Error adding address:', error);
+      const errorMsg = typeof error === "object" && error !== null && "message" in error ? (error as any).message : String(error);
+      toast.error(`Failed to add address: ${errorMsg}`);
+      throw error;
+    } finally {
+      setIsAddingAddress(false);
+    }
+  };
+
+
   return (
     <>
       {isOpen && <div className="fixed inset-0 bg-black/20 z-[151] backdrop-blur-sm" onClick={onClose} />}
-      <div
-        className={`fixed top-0 right-0 h-full w-full max-w-xs sm:max-w-sm bg-white transform transition-all duration-300 ease-out z-[152] ${isOpen ? "translate-x-0" : "translate-x-full"} flex flex-col`}
-      >
+      
+      {/* Address Selection Sidebar */}
+      {showAddressSelection && (
+        <div className="fixed inset-0 bg-black/20 z-[153] backdrop-blur-sm" onClick={() => setShowAddressSelection(false)} />
+      )}
+      
+      <div className={`fixed top-0 right-0 h-full w-full max-w-xs sm:max-w-sm bg-white transform transition-all duration-300 ease-out z-[152] ${isOpen ? "translate-x-0" : "translate-x-full"} flex flex-col`}>
         {/* Header */}
         <div className="flex items-center justify-between p-4 bg-white border-b border-gray-100 flex-shrink-0">
           <div className="flex items-center gap-3">
@@ -248,61 +408,142 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
           )}
         </div>
 
-        {/* Simplified Cart Summary - Non-scrollable */}
+        {/* Enhanced Cart Summary - Non-scrollable */}
         {cartItems.length > 0 && (
-          <div className="bg-white border-t border-gray-100 p-4 flex-shrink-0">
-            {/* Delivery Address */}
-            {user?.defaultAddress && (
-              <div className="mb-3 p-2 bg-gray-50 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-purple-600" />
+          <div className="bg-white border-t border-gray-100 p-4 flex-shrink-0 space-y-4">
+            {/* Delivery Address Card */}
+            <div className="bg-white rounded-lg p-3 border border-gray-200">
+              <div className="flex items-start justify-between">
+                <div className="flex items-start gap-2 flex-1">
+                  <MapPin className="h-4 w-4 text-purple-600 mt-0.5" />
                   <div className="flex-1">
-                    <div className="text-xs font-medium text-gray-900">Delivering to:</div>
-                    <div className="text-xs text-gray-600 truncate">
-                      {user.defaultAddress.building && `${user.defaultAddress.building}, `}
-                      {user.defaultAddress.area}
-                    </div>
+                    <div className="text-sm font-semibold text-gray-900">Delivering to {selectedAddress?.type || 'Home'}</div>
+                    {selectedAddress ? (
+                      <div className="text-xs text-gray-600 mt-1 line-clamp-2">
+                        {formatAddress(selectedAddress)}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-gray-500 mt-1">No address selected</div>
+                    )}
                   </div>
                 </div>
-                {/* Delivery Time */}
-                <div className="flex items-center gap-1 mt-1">
-                  <Clock className="h-3 w-3 text-gray-500" />
-                  <span className="text-xs text-gray-500">Delivery in 15-20 mins</span>
-                </div>
-              </div>
-            )}
-            
-            {/* Total Amount */}
-            <div className="border-t border-gray-100 pt-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="font-bold text-lg text-gray-900">Total</div>
-                  <div className="text-xs text-gray-500">{cartItems.length} items</div>
-                </div>
-                <div className="text-xl font-bold text-purple-600">
-                  ₹{cartTotal}
-                </div>
+                <button
+                  onClick={() => setShowAddressSelection(true)}
+                  className="text-sm text-brand-primary font-medium hover:text-brand-primary-dark transition-colors"
+                >
+                  Change
+                </button>
               </div>
             </div>
+
             
+            {/* Action Button */}
             <button
-              className="w-full bg-purple-600 text-white font-bold py-3.5 rounded-lg hover:bg-purple-700 transition-colors flex items-center justify-center mt-4"
+              className="w-full bg-gradient-to-r from-brand-primary to-brand-primary-dark text-white font-bold py-3.5 rounded-xl hover:from-brand-primary-dark hover:to-purple-600 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 flex items-center justify-between px-4 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-lg"
               onClick={handleProceed}
             >
-              {isLoggedIn ? (
-                <>
-                  <span>Proceed to Payment</span>
-                </>
-              ) : (
-                <>
-                  <LogIn size={18} className="mr-2" />
-                  <span>Login to Continue</span>
-                </>
-              )}
+              <span className="flex items-center">
+                Proceed To Pay
+              </span>
+              <ChevronRight className="h-4 w-4" />
             </button>
           </div>
         )}
       </div>
+
+      {/* Address Selection Sidebar */}
+      {showAddressSelection && (
+        <div className={`fixed top-0 right-0 h-full w-full max-w-xs sm:max-w-sm bg-white transform transition-all duration-300 ease-out z-[154] translate-x-0 flex flex-col`}>
+          {/* Address Selection Header */}
+          <div className="flex items-center gap-3 p-4 bg-white border-b border-gray-100 flex-shrink-0">
+            <button 
+              onClick={() => setShowAddressSelection(false)}
+              className="p-1 rounded-full hover:bg-gray-100 transition-colors"
+            >
+              <ChevronRight className="h-5 w-5 text-gray-600 rotate-180" />
+            </button>
+            <h2 className="text-lg font-bold text-gray-900">Select delivery address</h2>
+          </div>
+
+          {/* Add New Address Option */}
+          <div className="p-4 border-b border-gray-100">
+            <button
+              onClick={() => setShowAddressModal(true)}
+              className="w-full border-2 border-dashed border-gray-300 bg-white rounded-lg p-3 hover:border-brand-primary hover:bg-brand-primary/5 transition-all duration-200 flex items-center justify-center gap-2 text-gray-600 hover:text-brand-primary"
+            >
+              <Plus className="h-5 w-5" />
+              <span className="font-medium">Add New Address</span>
+            </button>
+          </div>
+
+          {/* Saved Addresses */}
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="text-sm text-gray-500 mb-3">Your saved address</div>
+            
+            {isLoadingAddresses ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-primary"></div>
+              </div>
+            ) : addresses.length > 0 ? (
+              <div className="space-y-3">
+                {addresses.map((address) => (
+                  <div
+                    key={address.id}
+                    className={`bg-white rounded-lg p-3 border-2 cursor-pointer transition-all ${
+                      selectedAddress?.id === address.id 
+                        ? 'border-brand-primary bg-brand-primary/10' 
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                    onClick={() => {
+                      setSelectedAddress(address);
+                      setShowAddressSelection(false);
+                    }}
+                  >
+                    <div className="flex items-start gap-2">
+                      {getAddressIcon(address.type)}
+                      <div className="flex-1">
+                        <div className="font-semibold text-gray-900 capitalize">{address.type}</div>
+                        <div className="text-sm text-gray-600 mt-1">
+                          {formatAddress(address)}
+                        </div>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // Handle edit address
+                          setShowAddressModal(true);
+                        }}
+                        className="p-1 text-brand-primary hover:text-brand-primary-dark transition-colors"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <MapPin className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-500 mb-4">No saved addresses</p>
+                <button
+                  onClick={() => setShowAddressModal(true)}
+                  className="px-4 py-2 bg-gradient-to-r from-brand-primary to-brand-primary-dark text-white rounded-lg hover:from-brand-primary-dark hover:to-purple-600 transition-all duration-200 shadow-md hover:shadow-lg"
+                >
+                  Add Your First Address
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Address Modal */}
+      <AddressModal
+        isOpen={showAddressModal}
+        onClose={() => setShowAddressModal(false)}
+        onAddAddress={handleAddAddress}
+        isSubmitting={isAddingAddress}
+      />
     </>
   );
 }

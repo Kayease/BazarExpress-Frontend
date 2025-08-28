@@ -39,7 +39,10 @@ import {
   Loader2,
   Store,
   Globe,
-  X
+  X,
+  ChevronDown,
+  Gift,
+  Copy
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -55,6 +58,7 @@ import CartValidationAlert from "@/components/CartValidationAlert";
 import { calculateCartTax, CartTaxCalculation, isInterStateTransaction, formatTaxAmount } from "@/lib/tax-calculation";
 import OrderSuccessModal from "@/components/OrderSuccessModal";
 import AddressModal from "@/components/AddressModal";
+import PaymentMethodSelector from "@/components/payment/PaymentMethodSelector";
 
 interface PaymentMethod {
   id: string;
@@ -334,7 +338,7 @@ export default function PaymentPage() {
   }, [cartItemsWithCODInfo]);
 
   // Payment method states
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('upi');
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('online');
   const [selectedWallet, setSelectedWallet] = useState<string>('');
   const [selectedBank, setSelectedBank] = useState<string>('');
   const [upiId, setUpiId] = useState<string>('9058442532@ptyes');
@@ -343,6 +347,14 @@ export default function PaymentPage() {
   const [expiryDate, setExpiryDate] = useState<string>('');
   const [cvv, setCvv] = useState<string>('');
   const [cardHolderName, setCardHolderName] = useState<string>('');
+
+  // Clear validation errors when switching to online payment
+  useEffect(() => {
+    if (selectedPaymentMethod === 'online') {
+      // Clear COD-related validation errors when online payment is selected
+      setValidationErrors(prev => ({ ...prev, codNotAvailable: undefined }));
+    }
+  }, [selectedPaymentMethod]);
 
   // Address states
   const [addresses, setAddresses] = useState<Address[]>([]);
@@ -434,6 +446,19 @@ export default function PaymentPage() {
   // State for undeliverable items modal
   const [showUndeliverableItemsModal, setShowUndeliverableItemsModal] = useState(false);
   const [undeliverableItems, setUndeliverableItems] = useState<any[]>([]);
+  const [showAvailableOffers, setShowAvailableOffers] = useState(false);
+
+  // Load Razorpay script
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    document.body.appendChild(script);
+
+    return () => {
+      document.body.removeChild(script);
+    };
+  }, []);
 
   // Helper function to show error toast only if not shown recently
   const showErrorToast = useCallback((message: string, cooldownMs: number = 3000) => {
@@ -498,19 +523,21 @@ export default function PaymentPage() {
     return true;
   });
 
+
+
   // Switch payment method if COD is selected but not available
   useEffect(() => {
     if (selectedPaymentMethod === 'cod' && deliverySettings?.codAvailable === false) {
-      setSelectedPaymentMethod('upi');
-      toast('COD is currently not available. Switched to UPI payment.');
+      setSelectedPaymentMethod('online');
+      toast('COD is currently not available. Switched to Online payment.');
     }
   }, [deliverySettings, selectedPaymentMethod]);
 
   // Switch payment method if COD is selected but cart items are not eligible for COD
   useEffect(() => {
     if (selectedPaymentMethod === 'cod' && !isCODAvailableForCart) {
-      setSelectedPaymentMethod('upi');
-      toast('COD is not available for some items in your cart. Switched to UPI payment.');
+      setSelectedPaymentMethod('online');
+      toast('COD is not available for some items in your cart. Switched to Online payment.');
     }
   }, [selectedPaymentMethod, isCODAvailableForCart]);
 
@@ -523,7 +550,11 @@ export default function PaymentPage() {
 
   // Validation functions
   const validateCODAvailability = (): boolean => {
-    if (selectedPaymentMethod !== 'cod') return true;
+    // If payment method is not COD, clear any COD-related validation errors
+    if (selectedPaymentMethod !== 'cod') {
+      setValidationErrors(prev => ({ ...prev, codNotAvailable: undefined }));
+      return true;
+    }
 
     const nonCODItems = cartItemsWithCODInfo.filter((item: CartItem) => item.codAvailable === false);
     if (nonCODItems.length > 0) {
@@ -975,7 +1006,10 @@ export default function PaymentPage() {
 
   // Run validations when relevant states change
   useEffect(() => {
-    validateCODAvailability();
+    // Only validate COD availability if COD is selected or if we need to check if COD should be available
+    if (selectedPaymentMethod === 'cod' || cartItems.some(item => item.codAvailable === false)) {
+      validateCODAvailability();
+    }
   }, [selectedPaymentMethod, cartItems]);
 
   useEffect(() => {
@@ -1171,7 +1205,8 @@ export default function PaymentPage() {
           name: item.name,
           warehouseId: item.warehouseId || item.warehouse?._id || item.warehouse?.id,
           quantity: item.quantity,
-          warehouse: item.warehouse
+          warehouse: item.warehouse,
+          selectedVariant: item.selectedVariant
         }));
 
         const result = await Promise.race([
@@ -1368,15 +1403,9 @@ export default function PaymentPage() {
     setIsValidatingPayment(true);
     console.log('Validation state set to true');
 
-    // Add a safety timeout to prevent indefinite loading
-    let timeoutId: NodeJS.Timeout | undefined = undefined;
-    let emergencyTimeoutId: NodeJS.Timeout | undefined = undefined;
-
     try {
       console.log('Starting validation...');
       
-      // TEMPORARY: Skip validation for debugging - uncomment the line below to bypass validation
-      // const isValid = true;
       const isValid = await validatePayment();
       console.log('Payment validation result:', isValid);
 
@@ -1410,31 +1439,11 @@ export default function PaymentPage() {
         return;
       }
 
-      console.log('Validation passed, proceeding with order creation...');
-
-      // Set up timeout for order creation
-      timeoutId = setTimeout(() => {
-        if (isMountedRef.current && isValidatingPayment) {
-          console.error('Order creation timeout after 15 seconds');
-          setIsValidatingPayment(false);
-          toast.error('Order creation is taking too long. Please try again.');
-        }
-      }, 15000); // 15 second timeout
-
-      // Emergency fallback timeout - force clear loading state
-      emergencyTimeoutId = setTimeout(() => {
-        if (isMountedRef.current && isValidatingPayment) {
-          console.error('EMERGENCY: Forcing clear of loading state after 20 seconds');
-          setIsValidatingPayment(false);
-          toast.error('Something went wrong during order processing. Please check your order history.');
-        }
-      }, 20000); // 20 second emergency timeout
+      console.log('Validation passed, proceeding with payment...');
 
       // Get selected address
       const selectedAddressData = addresses.find(addr => addr.id === selectedAddress);
       if (!selectedAddressData) {
-        if (timeoutId) clearTimeout(timeoutId);
-        if (emergencyTimeoutId) clearTimeout(emergencyTimeoutId);
         toast.error('Please select a delivery address.');
         setIsValidatingPayment(false);
         return;
@@ -1457,10 +1466,7 @@ export default function PaymentPage() {
           tax: item.tax,
           warehouse: item.warehouse,
           warehouseId: item.warehouseId || item.warehouse?._id || item.warehouse?.id,
-          // Include variant information
-          variantId: item.variantId,
-          variantName: item.variantName,
-          selectedVariant: item.selectedVariant
+          selectedVariant: item.selectedVariant,
         })),
         
         customerInfo: {
@@ -1475,7 +1481,7 @@ export default function PaymentPage() {
           discountAmount: discountAmount,
           deliveryCharge: deliveryInfo?.totalDeliveryCharge || 0,
           codCharge: selectedPaymentMethod === 'cod' ? (deliveryInfo?.codCharge || 0) : 0,
-          total: Math.ceil(finalTotalWithDelivery) // Round up to avoid decimal payments
+          total: Math.ceil(finalTotalWithDelivery)
         },
         
         promoCode: appliedPromoCode ? {
@@ -1524,21 +1530,27 @@ export default function PaymentPage() {
         }
       };
 
-      // Validate API URL and token before making the call
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-      if (!apiUrl) {
-        throw new Error('API URL is not configured');
-      }
-      
-      if (!token) {
-        throw new Error('Authentication token is missing');
+      if (selectedPaymentMethod === 'cod') {
+        // Handle COD order
+        await handleCODOrder(orderData);
+      } else {
+        // Handle online payment with Razorpay
+        await handleRazorpayPayment(orderData);
       }
 
-      // Create the order with proper error handling
-      console.log('Creating order with data:', orderData);
-      console.log('API URL:', `${apiUrl}/orders/create`);
-      console.log('Token present:', !!token);
-      
+    } catch (error) {
+      console.error('Payment error:', error);
+      if (isMountedRef.current) {
+        const errorMessage = error instanceof Error ? error.message : 'Payment failed. Please try again.';
+        toast.error(errorMessage);
+        setIsValidatingPayment(false);
+      }
+    }
+  };
+
+  const handleCODOrder = async (orderData: any) => {
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
       const response = await fetch(`${apiUrl}/orders/create`, {
         method: 'POST',
         headers: {
@@ -1546,119 +1558,244 @@ export default function PaymentPage() {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(orderData)
-      }).catch(networkError => {
-        console.error('Network error during order creation:', networkError);
-        throw new Error(`Network error: ${networkError.message}`);
       });
 
-      console.log('Order creation response status:', response.status);
-      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Order creation failed:', {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorText
-        });
-        throw new Error(`Failed to create order: ${response.status} ${response.statusText}`);
-      }
-
       const result = await response.json();
-      console.log('Order creation result:', result);
-      console.log('Order creation SUCCESS! Processing success flow...');
 
-      // Apply promo code if exists
-      if (appliedPromoCode && user?._id) {
-        try {
-          await fetch(`${process.env.NEXT_PUBLIC_API_URL}/promocodes/apply`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              code: appliedPromoCode.code,
-              userId: user._id,
-              orderId: result.order.orderId
-            }),
-          });
-        } catch (error) {
-          console.error('Error applying promo code:', error);
+      if (result.success) {
+        // Apply promo code if exists
+        if (appliedPromoCode && user?._id) {
+          try {
+            await fetch(`${apiUrl}/promocodes/apply`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                code: appliedPromoCode.code,
+                userId: user._id,
+                orderId: result.order.orderId
+              }),
+            });
+          } catch (error) {
+            console.error('Error applying promo code:', error);
+          }
         }
-      }
 
-      // Prepare success modal data BEFORE clearing cart to avoid state issues
-      console.log('Preparing success modal data...');
-      const successData = {
-        orderId: result?.order?.orderId || 'Unknown',
-        total: Math.ceil(finalTotalWithDelivery || 0), // Use Math.ceil to match backend calculation
-        paymentMethod: selectedPaymentMethod,
-        estimatedDelivery: deliveryInfo?.estimatedDeliveryTime,
-        itemCount: cartItemsWithCODInfo.length
-      };
-      console.log('Success data prepared:', successData);
+        // Show success and clear cart
+        const successData = {
+          orderId: result?.order?.orderId || 'Unknown',
+          total: Math.ceil(finalTotalWithDelivery || 0),
+          paymentMethod: selectedPaymentMethod,
+          estimatedDelivery: deliveryInfo?.estimatedDeliveryTime,
+          itemCount: cartItemsWithCODInfo.length
+        };
 
-      // Clear both timeouts since we succeeded
-      if (timeoutId) {
-        console.log('Clearing timeout...');
-        clearTimeout(timeoutId);
-      }
-      if (emergencyTimeoutId) clearTimeout(emergencyTimeoutId);
-
-      // Handle success regardless of component mount state
-      console.log('Checking if component is mounted:', isMountedRef.current);
-      
-      if (isMountedRef.current) {
-        console.log('Component mounted - Setting success modal state...');
-        setIsValidatingPayment(false); // Stop loading first
-        console.log('Loading state set to false');
-        
+        setIsValidatingPayment(false);
         setSuccessOrderData(successData);
-        console.log('Success order data set');
-        
         setShowSuccessModal(true);
-        console.log('Success modal visibility set to true');
 
-        // Clear the cart after setting success modal (prevents state access issues)
         setTimeout(() => {
           if (isMountedRef.current) {
-            console.log('Clearing cart context and Redux...');
             dispatch(clearCart());
             clearCartContext();
           }
         }, 100);
       } else {
-        console.log('Component not mounted - Still showing success modal...');
-        // Component unmounted during order creation, but order was successful
-        // Clear cart but still show the modal by persisting data
-        dispatch(clearCart());
-        clearCartContext();
-        
-        // Store success data in localStorage to persist across navigation
-        localStorage.setItem('orderSuccessData', JSON.stringify(successData));
-        
-        // Redirect to home page and trigger modal there
-        setTimeout(() => {
-          router.push('/?showOrderSuccess=true');
-        }, 1000);
+        throw new Error(result.error || 'Failed to place order');
+      }
+    } catch (error: any) {
+      throw error;
+    }
+  };
+
+  const handleRazorpayPayment = async (orderData: any) => {
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+      
+      // Create Razorpay order
+      const response = await fetch(`${apiUrl}/payments/create-order`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          amount: orderData.pricing.total,
+          currency: 'INR',
+          receipt: `order_${Date.now()}`,
+          orderData
+        })
+      });
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to create payment order');
       }
 
-    } catch (error) {
-      // Clear both timeouts since we're handling the error
-      if (timeoutId) clearTimeout(timeoutId);
-      if (emergencyTimeoutId) clearTimeout(emergencyTimeoutId);
-      
-      console.error('Order creation error:', error);
-      if (isMountedRef.current) {
-        const errorMessage = error instanceof Error ? error.message : 'Failed to create order. Please try again.';
-        toast.error(errorMessage);
+      // Initialize Razorpay
+      const options = {
+        key: result.key,
+        amount: result.amount,
+        currency: result.currency,
+        name: result.name,
+        description: result.description,
+        order_id: result.order.id,
+        prefill: result.prefill,
+        theme: {
+          color: '#7c3aed' // Purple theme
+        },
+        handler: async (response: any) => {
+          // Payment successful, verify on backend
+          await verifyPayment(response, orderData);
+        },
+        modal: {
+          ondismiss: () => {
+            setIsValidatingPayment(false);
+            toast.error('Payment cancelled');
+          }
+        }
+      };
+
+      const razorpay = new (window as any).Razorpay(options);
+      razorpay.open();
+    } catch (error: any) {
+      throw error;
+    }
+  };
+
+  const verifyPayment = async (paymentResponse: any, orderData: any) => {
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+      const response = await fetch(`${apiUrl}/payments/verify`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          ...paymentResponse,
+          orderData
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Apply promo code if exists
+        if (appliedPromoCode && user?._id) {
+          try {
+            await fetch(`${apiUrl}/promocodes/apply`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                code: appliedPromoCode.code,
+                userId: user._id,
+                orderId: result.order.orderId
+              }),
+            });
+          } catch (error) {
+            console.error('Error applying promo code:', error);
+          }
+        }
+
+        // Show success and clear cart
+        const successData = {
+          orderId: result?.order?.orderId || 'Unknown',
+          total: Math.ceil(finalTotalWithDelivery || 0),
+          paymentMethod: selectedPaymentMethod,
+          estimatedDelivery: deliveryInfo?.estimatedDeliveryTime,
+          itemCount: cartItemsWithCODInfo.length
+        };
+
         setIsValidatingPayment(false);
+        setSuccessOrderData(successData);
+        setShowSuccessModal(true);
+
+        setTimeout(() => {
+          if (isMountedRef.current) {
+            dispatch(clearCart());
+            clearCartContext();
+          }
+        }, 100);
+
+        toast.success('Payment successful! Order placed.');
+      } else {
+        throw new Error(result.error || 'Payment verification failed');
       }
+    } catch (error: any) {
+      console.error('Payment verification error:', error);
+      toast.error(error.message || 'Payment verification failed');
+      setIsValidatingPayment(false);
     }
   };
 
   const renderPaymentMethodContent = () => {
     switch (selectedPaymentMethod) {
+      case 'online':
+        return (
+          <div className="space-y-4">
+            <h3 className="font-semibold text-gray-900 mb-4">Select Online Payment Method</h3>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                {walletOptions.map((wallet) => (
+                  <div
+                    key={wallet.name}
+                    onClick={() => setSelectedWallet(wallet.name)}
+                    className={`p-4 border-2 rounded-xl cursor-pointer transition-all ${selectedWallet === wallet.name
+                        ? 'border-green-500 bg-green-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                  >
+                    <div className="text-center">
+                      <div className="w-12 h-12 bg-gray-100 rounded-lg mx-auto mb-2 flex items-center justify-center">
+                        <span className="text-xs font-medium">{wallet.name}</span>
+                      </div>
+                      <span className="text-sm font-medium">{wallet.name}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              <div className="border-t pt-4">
+                <h4 className="font-medium text-gray-900 mb-3">Other Payment Options</h4>
+                <div className="grid grid-cols-1 gap-2">
+                  <div
+                    onClick={() => setSelectedPaymentMethod('card')}
+                    className="p-3 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-gray-300 transition-all"
+                  >
+                    <div className="flex items-center gap-3">
+                      <CreditCard className="h-5 w-5 text-gray-600" />
+                      <span className="font-medium">Credit/Debit Card</span>
+                    </div>
+                  </div>
+                  <div
+                    onClick={() => setSelectedPaymentMethod('netbanking')}
+                    className="p-3 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-gray-300 transition-all"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Building2 className="h-5 w-5 text-gray-600" />
+                      <span className="font-medium">Net Banking</span>
+                    </div>
+                  </div>
+                  <div
+                    onClick={() => setSelectedPaymentMethod('upi')}
+                    className="p-3 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-gray-300 transition-all"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Smartphone className="h-5 w-5 text-gray-600" />
+                      <span className="font-medium">UPI Payment</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+        
       case 'wallet':
         return (
           <div className="space-y-4">
@@ -1873,254 +2010,64 @@ export default function PaymentPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
-      <div className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="flex items-center gap-4 mb-8">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => router.back()}
-            className="rounded-full hover:scale-105 transition-transform"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <h1 className="text-3xl font-bold text-gray-900">Payment</h1>
-        </div>
+      <div className="container mx-auto px-2 sm:px-10 py-2 sm:py-8">
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 lg:items-start">
-          {/* Payment Methods - Left Panel */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Payment Method Selection */}
-            <div className="bg-white rounded-2xl p-6 shadow-xl border border-gray-100">
-              <h2 className="text-xl font-bold text-gray-900 mb-6">Select Payment Method</h2>
-
-              <div className="space-y-3 mb-6">
-                {paymentMethods.map((method) => {
-                  const IconComponent = method.icon;
-                  const isCODDisabled = method.id === 'cod' && (!isCODAvailableForCart || validationErrors.codNotAvailable);
-
-                  return (
-                    <div
-                      key={method.id}
-                      onClick={() => !isCODDisabled && setSelectedPaymentMethod(method.id)}
-                      className={`p-4 border-2 rounded-xl transition-all ${isCODDisabled
-                          ? 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60'
-                          : selectedPaymentMethod === method.id
-                            ? 'border-green-500 bg-green-50 cursor-pointer'
-                            : 'border-gray-200 hover:border-gray-300 cursor-pointer'
-                        }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className={`p-2 rounded-lg ${selectedPaymentMethod === method.id ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-600'
-                            }`}>
-                            <IconComponent className="h-5 w-5" />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h3 className="font-semibold text-gray-900">{method.name}</h3>
-                              {method.popular && (
-                                <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full font-medium">
-                                  Popular
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-sm text-gray-600">{method.description}</p>
-                          </div>
-                        </div>
-                        <ChevronRight className={`h-5 w-5 transition-transform ${selectedPaymentMethod === method.id ? 'rotate-90 text-green-500' : 'text-gray-400'
-                          }`} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Payment Method Details */}
-              <div className="border-t pt-6">
-                {renderPaymentMethodContent()}
-              </div>
-            </div>
-
-            {/* Loading Delivery Calculation */}
-            {loadingDelivery && selectedAddress && (
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                <div className="flex items-center gap-3">
-                  <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
-                  <div>
-                    <h3 className="font-semibold text-blue-800">Calculating Delivery</h3>
-                    <p className="text-sm text-blue-700">Please wait while we calculate delivery charges for your selected address...</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-
-
-            {/* Pay Now Button */}
-            <Button
-              onClick={handlePayment}
-              disabled={isValidatingPayment || loadingDelivery || Object.values(validationErrors).some(error => error)}
-              className={`w-full py-4 text-lg rounded-xl shadow-lg transition-all duration-300 ${isValidatingPayment || loadingDelivery || Object.values(validationErrors).some(error => error)
-                  ? 'bg-gray-400 cursor-not-allowed opacity-60'
-                  : 'bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white hover:shadow-xl hover:scale-105'
-                }`}
-            >
-              {isValidatingPayment ? (
-                <div className="flex items-center gap-2 text-white">
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  Validating...
-                </div>
-              ) : loadingDelivery ? (
-                <div className="flex items-center gap-2 text-white">
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  Calculating Delivery...
-                </div>
-              ) : (
-                <span className={Object.values(validationErrors).some(error => error) ? "text-gray-600" : "text-white"}>
-                  {selectedPaymentMethod === 'cod' 
-                    ? `Place Your Order - ₹${Math.ceil(finalTotalWithDelivery)}`
-                    : `Pay ₹${Math.ceil(finalTotalWithDelivery)}`
-                  }
-                </span>
-              )}
-            </Button>
-          </div>
-
-          {/* Order Summary - Right Panel */}
-          <div className="lg:col-span-1 space-y-6 lg:sticky lg:top-4 lg:max-h-screen lg:overflow-y-auto">
-            {/* Delivery Address */}
-            <div className="bg-white rounded-2xl p-6 shadow-xl border border-gray-100">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-bold text-gray-900">Delivery Address</h2>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowAddressModal(true)}
-                  className="text-green-600 border-green-600 hover:bg-green-50"
-                  disabled={isLoadingAddresses}
-                >
-                  <Edit className="h-4 w-4 mr-1" />
-                  Change
-                </Button>
-              </div>
-
-              {isLoadingAddresses ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-                  <span className="ml-2 text-gray-600">Loading addresses...</span>
-                </div>
-              ) : addresses.length === 0 ? (
-                <div className="text-center py-6">
-                  <MapPin className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                  <p className="text-gray-600 mb-4">No delivery address found</p>
-                  <Button
-                    onClick={() => setShowAddAddressModal(true)}
-                    className="bg-green-600 hover:bg-green-700"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Address
-                  </Button>
-                </div>
-              ) : (
-                <>
-                  {selectedAddress && addresses.find(addr => addr.id === selectedAddress) && (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <MapPin className="h-4 w-4 text-gray-500" />
-                        <span className="font-bold text-gray-900">
-                          {addresses.find(addr => addr.id === selectedAddress)?.type}
-                        </span>
-                        {addresses.find(addr => addr.id === selectedAddress)?.isDefault && (
-                          <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
-                            Default
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-sm text-gray-700 leading-relaxed">
-                        <p>
-                          {addresses.find(addr => addr.id === selectedAddress)?.building}
-                          {addresses.find(addr => addr.id === selectedAddress)?.floor && `, Floor ${addresses.find(addr => addr.id === selectedAddress)?.floor}`},
-                          {addresses.find(addr => addr.id === selectedAddress)?.area}
-                          {addresses.find(addr => addr.id === selectedAddress)?.landmark && `, Near ${addresses.find(addr => addr.id === selectedAddress)?.landmark}`}
-                        </p>
-
-                      </div>
-                      {addresses.find(addr => addr.id === selectedAddress)?.phone && (
-                        <p className="text-sm font-bold text-gray-600 flex items-center gap-1">
-                          <Smartphone className="h-4 w-4 mr-1 text-gray-500" />
-                          {addresses.find(addr => addr.id === selectedAddress)?.phone}
-                        </p>
-                      )}
-                      {addresses.find(addr => addr.id === selectedAddress)?.additionalInstructions && (
-                        <p className="text-sm text-gray-600 italic">
-                          Note: {addresses.find(addr => addr.id === selectedAddress)?.additionalInstructions}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-
-            {/* Order Summary */}
-            <div className="bg-white rounded-2xl p-6 shadow-xl border border-gray-100">
-              <h2 className="text-lg font-bold text-gray-900 mb-4">Order Summary</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 lg:items-start">
+          {/* Left Panel - Order Summary with Products */}
+          <div className="space-y-4">
+            {/* Order Summary with Products */}
+            <div className="bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-lg border border-gray-100">
+              <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-4">Order Summary</h2>
 
               {/* Single Warehouse Order Items */}
               {Object.entries(itemsByWarehouse).map(([warehouseId, { items, warehouse }]) => {
                 const isGlobal = warehouse.deliverySettings?.is24x7Delivery === true;
                 
                 return (
-                  <div key={warehouseId} className="mb-6">
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="flex items-center gap-2">
-                        {isGlobal ? (
-                          <Globe className="h-4 w-4 text-blue-600" />
-                        ) : (
-                          <Store className="h-4 w-4 text-green-600" />
-                        )}
-                        <h3 className="font-semibold text-gray-900">{warehouse.name}</h3>
+                  <div key={warehouseId} className="mb-4">
+                    {/* Warehouse Header */}
+                    <div className="flex items-center gap-2 mb-3 p-2 sm:p-3 bg-gray-50 rounded-lg">
+                      <Building2 className="h-4 w-4 sm:h-5 sm:w-5 text-gray-600" />
+                      <div>
+                        <h3 className="font-semibold text-gray-900 text-sm sm:text-base">{warehouse.name}</h3>
+                        <p className="text-xs sm:text-sm text-gray-600">
+                          {isGlobal ? '24x7 Delivery Available' : 'Standard Delivery'}
+                        </p>
                       </div>
-                      {isGlobal && (
-                        <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-800">
-                          24x7 Delivery
-                        </Badge>
-                      )}
                     </div>
 
-                    <div className="space-y-3">
-                      {items.map((item: CartItem, index: number) => (
-                        <div key={`${item.id || item._id}-${index}`} className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg">
-                          {item.image && (
-                            <div className="w-12 h-12 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
-                              <Image
-                                src={item.image}
-                                alt={item.name}
-                                width={48}
-                                height={48}
-                                className="w-full h-full object-cover"
-                              />
-                            </div>
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-medium text-gray-900 text-sm truncate">{item.name}</h4>
-                            <p className="text-xs text-gray-500 mb-1">
-                              {warehouse.name || 'Unknown Warehouse'}
-                            </p>
-                            <div className="flex items-center gap-2 text-xs text-gray-600">
-                              <span>Qty: {item.quantity}</span>
-                              {item.tax && item.tax.percentage && (
-                                <>
-                                  <span>•</span>
-                                  <span>{item.tax.percentage}%-{item.priceIncludesTax ? 'Incl.' : 'Excl.'}</span>
-                                </>
-                              )}
-                            </div>
+                    {/* Products in this warehouse */}
+                    <div className="space-y-2 sm:space-y-3">
+                      {items.map((item, idx) => (
+                        <div key={item.id || idx} className="flex gap-2 sm:gap-3 p-2 sm:p-3 border border-gray-100 rounded-lg">
+                          {/* Product Image */}
+                          <div className="relative w-12 h-12 sm:w-16 sm:h-16 rounded-md overflow-hidden bg-gray-100 flex-shrink-0">
+                            <Image
+                              src={item.image || "/placeholder.svg"}
+                              alt={item.name}
+                              fill
+                              className="object-cover"
+                            />
                           </div>
-                          <div className="text-right">
-                            <div className="font-semibold text-gray-900">
-                              ₹{(item.price * item.quantity).toFixed(2)}
+
+                          {/* Product Details */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <h4 className="font-semibold text-gray-900 text-xs sm:text-sm leading-tight">
+                                  {item.name}
+                                </h4>
+                                <p className="text-xs text-gray-500 mt-0.5 sm:mt-1">
+                                  {warehouse.name}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-0.5 sm:mt-1">
+                                  Qty: {item.quantity} • {typeof item.tax === 'number' ? item.tax : 5}%-Incl.
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-xs sm:text-sm font-bold text-gray-900">₹{(item.price * item.quantity).toLocaleString()}</div>
+                                <div className="text-xs text-gray-400">₹{item.price} each</div>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -2130,243 +2077,343 @@ export default function PaymentPage() {
                 );
               })}
 
-              <div className="border-t pt-4 space-y-3">
-                {/* Subtotal */}
-                <div className="flex justify-between text-lg">
-                  <span className="text-gray-700">Subtotal (Before Tax)</span>
-                  <span className="font-semibold text-gray-900">₹{subtotalBeforeTax.toFixed(2)}</span>
+              {/* Promo Code Section */}
+              <div className="border-t border-gray-200 pt-3 mt-4">
+                <PromoCodeInput
+                  cartTotal={cartTotal}
+                  cartItems={cartItems}
+                  userId={user?._id}
+                  onPromoCodeApplied={handlePromoCodeApplied}
+                  onPromoCodeRemoved={handlePromoCodeRemoved}
+                  appliedPromoCode={appliedPromoCode}
+                />
+                
+                {/* View Available Offers Link */}
+                <div className="mt-2 text-left">
+                  <button
+                    onClick={() => setShowAvailableOffers(true)}
+                    className="text-brand-primary hover:text-brand-primary-dark text-sm font-medium flex items-center gap-1 transition-colors"
+                  >
+                    View available offers
+                    <ChevronDown className="h-4 w-4" />
+                  </button>
                 </div>
+              </div>
 
-                {/* Discount */}
-                {discountAmount > 0 && (
-                  <div className="flex justify-between text-green-600">
-                    <span>Discount Applied</span>
-                    <span>-₹{discountAmount.toFixed(2)}</span>
-                  </div>
-                )}
 
+            </div>
+          </div>
+
+          {/* Right Panel - Promo Code, Charges, Payment Method */}
+          <div className="space-y-3 sm:space-y-4 lg:sticky lg:top-4 lg:max-h-screen lg:overflow-y-auto">
+            {/* Delivery Address */}
+            <div className="bg-white rounded-lg sm:rounded-xl md:rounded-2xl p-3 sm:p-4 md:p-6 shadow-md sm:shadow-lg border border-gray-100">
+              <div className="flex items-center justify-between mb-2.5 sm:mb-3 md:mb-4">
+                <h2 className="text-base sm:text-lg font-bold text-gray-900">Delivery Address</h2>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowAddressModal(true)}
+                  className="text-brand-primary border-brand-primary hover:bg-brand-primary/5"
+                  disabled={isLoadingAddresses}
+                >
+                  <Edit className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" />
+                  Change
+                </Button>
+              </div>
+
+              {isLoadingAddresses ? (
+                <div className="flex items-center justify-center py-4 sm:py-6 md:py-8">
+                  <Loader2 className="h-5 w-5 sm:h-6 sm:w-6 animate-spin text-gray-400" />
+                  <span className="ml-2 text-gray-600 text-sm">Loading addresses...</span>
+                </div>
+              ) : addresses.length === 0 ? (
+                <div className="text-center py-4 sm:py-6">
+                  <MapPin className="h-10 w-10 sm:h-12 sm:w-12 text-gray-300 mx-auto mb-2 sm:mb-3" />
+                  <p className="text-gray-600 mb-3 sm:mb-4 text-sm">No delivery address found</p>
+                  <Button
+                    onClick={() => setShowAddAddressModal(true)}
+                    className="bg-brand-primary hover:bg-brand-primary-dark"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Address
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  {selectedAddress && addresses.find(addr => addr.id === selectedAddress) && (
+                    <div className="space-y-1.5 sm:space-y-2">
+                      <div className="flex items-center gap-2">
+                        <MapPin className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-500" />
+                        <span className="font-bold text-gray-900 text-sm">
+                          {addresses.find(addr => addr.id === selectedAddress)?.type}
+                        </span>
+                        {addresses.find(addr => addr.id === selectedAddress)?.isDefault && (
+                          <span className="bg-brand-primary/10 text-brand-primary text-xs px-2 py-1 rounded-full">
+                            Default
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs sm:text-sm text-gray-700 leading-relaxed">
+                        <p>
+                          {addresses.find(addr => addr.id === selectedAddress)?.building}
+                          {addresses.find(addr => addr.id === selectedAddress)?.floor && `, Floor ${addresses.find(addr => addr.id === selectedAddress)?.floor}`},
+                          {addresses.find(addr => addr.id === selectedAddress)?.area}
+                          {addresses.find(addr => addr.id === selectedAddress)?.landmark && `, Near ${addresses.find(addr => addr.id === selectedAddress)?.landmark}`}
+                        </p>
+                      </div>
+                      {addresses.find(addr => addr.id === selectedAddress)?.phone && (
+                        <p className="text-xs sm:text-sm font-bold text-gray-600 flex items-center gap-1">
+                          <Smartphone className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1 text-gray-500" />
+                          {addresses.find(addr => addr.id === selectedAddress)?.phone}
+                        </p>
+                      )}
+                      {addresses.find(addr => addr.id === selectedAddress)?.additionalInstructions && (
+                        <p className="text-xs sm:text-sm text-gray-600 italic">
+                          Note: {addresses.find(addr => addr.id === selectedAddress)?.additionalInstructions}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Bill Details */}
+            <div className="bg-white rounded-lg sm:rounded-xl md:rounded-2xl p-3 sm:p-4 md:p-6 shadow-md sm:shadow-lg border border-gray-100">
+              <h2 className="text-base sm:text-lg font-bold text-gray-900 mb-2.5 sm:mb-3 md:mb-4">Bill Details</h2>
+              
+              <div className="space-y-2 sm:space-y-2.5">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Subtotal (Before Tax)</span>
+                  <span className="font-medium">₹{cartTotal.toLocaleString()}</span>
+                </div>
+                
                 {/* Tax Breakdown */}
                 {taxCalculation && (
-                  <div className="space-y-2">
+                  <>
                     {taxCalculation.isInterState ? (
-                      // Interstate - Show IGST
-                      taxCalculation.totalIGST > 0 && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">
-                            IGST
-                          </span>
-                          <span className="text-gray-900">₹{taxCalculation.totalIGST.toFixed(2)}</span>
-                        </div>
-                      )
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">IGST</span>
+                        <span className="font-medium">₹{taxCalculation.totalIGST.toLocaleString()}</span>
+                      </div>
                     ) : (
-                      // Intrastate - Show CGST + SGST
                       <>
-                        {taxCalculation.totalCGST > 0 && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">
-                              CGST
-                            </span>
-                            <span className="text-gray-900">₹{taxCalculation.totalCGST.toFixed(2)}</span>
-                          </div>
-                        )}
-                        {taxCalculation.totalSGST > 0 && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">
-                              SGST
-                            </span>
-                            <span className="text-gray-900">₹{taxCalculation.totalSGST.toFixed(2)}</span>
-                          </div>
-                        )}
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">CGST</span>
+                          <span className="font-medium">₹{taxCalculation.totalCGST.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">SGST</span>
+                          <span className="font-medium">₹{taxCalculation.totalSGST.toLocaleString()}</span>
+                        </div>
                       </>
                     )}
-                    
-                    {taxCalculation.totalTax > 0 && (
-                      <div className="flex justify-between text-sm font-medium border-t pt-2">
-                        <span className="text-gray-700">Total Tax</span>
-                        <span className="text-gray-900">₹{taxCalculation.totalTax.toFixed(2)}</span>
-                      </div>
-                    )}
-                  </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Total Tax</span>
+                      <span className="font-medium">₹{taxCalculation.totalTax.toLocaleString()}</span>
+                    </div>
+                  </>
                 )}
 
                 {/* Delivery Charges */}
-                <div className="flex justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-gray-700">Delivery Charges</span>
-                  </div>
-                  <div className="text-right">
-                    {loadingDelivery ? (
-                      <span className="text-gray-400">Calculating...</span>
-                    ) : deliveryInfo ? (
-                      <span className={deliveryInfo.isFreeDelivery ? "text-green-600 font-medium" : "text-gray-900"}>
-                        {formatDeliveryChargeWithDecimals(deliveryInfo.deliveryCharge)}
-                      </span>
-                    ) : (
-                      <span className="text-gray-400">--</span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="border-t pt-3 mt-2">
-                  <div className="flex justify-between text-xl font-bold text-gray-900">
-                    <span>Total</span>
-                    <span className="text-green-600">
-                      ₹{Math.ceil(finalTotalWithDelivery)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-
-              {/* Delivery Eligibility Message */}
-              {deliveryInfo && (
-                <div className={`mt-4 p-4 rounded-xl border ${deliveryInfo.isFreeDelivery
-                    ? 'bg-green-50 border-green-200'
-                    : deliveryInfo.freeDeliveryEligible
-                      ? 'bg-blue-50 border-blue-200'
-                      : 'bg-gray-50 border-gray-200'
-                  }`}>
-                  <div className={`text-sm ${deliveryInfo.isFreeDelivery
-                      ? 'text-green-800'
-                      : deliveryInfo.freeDeliveryEligible
-                        ? 'text-blue-800'
-                        : 'text-gray-800'
-                    }`}>
+                {deliveryInfo && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Delivery Charges</span>
                     {deliveryInfo.isFreeDelivery ? (
-                      <>
-                        <div className="font-semibold mb-1 flex items-center gap-2">
-                          <MapPin className="h-4 w-4" />
-                          🎉 Free Delivery!
-                        </div>
-                        <div>Your order qualifies for free delivery!</div>
-                        <div className="text-xs mt-2 flex items-center gap-1 text-green-600">
-                          <Clock className="h-3 w-3" />
-                          Estimated delivery: {getDeliveryTimeEstimate(deliveryInfo.distance)}
-                        </div>
-                      </>
-                    ) : deliveryInfo.freeDeliveryEligible && deliveryInfo.amountNeededForFreeDelivery > 0 && deliveryInfo.distance <= 25 ? (
-                      <>
-                        <div className="font-semibold mb-2 flex items-center gap-2">
-                          <Shield className="h-4 w-4" />
-                          Add ₹{deliveryInfo.amountNeededForFreeDelivery.toFixed(2)} more to get free delivery
-                        </div>
-                        <Link href="/search" className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 underline text-sm font-medium">
-                          Continue shopping →
-                        </Link>
-                        <div className="text-xs mt-2 flex items-center gap-1 text-blue-600">
-                          <Clock className="h-3 w-3" />
-                          Estimated delivery: {getDeliveryTimeEstimate(deliveryInfo.distance)}
-                        </div>
-                      </>
+                      <span className="font-medium text-brand-primary">Free</span>
                     ) : (
-                      <>
-                        <div className="font-semibold mb-1 flex items-center gap-2">
-                          <Truck className="h-4 w-4" />
-                          Delivery Charge: {formatDeliveryChargeWithDecimals(deliveryInfo.deliveryCharge)}
-                        </div>
-                        <div className="mb-2">Distance: {deliveryInfo.distance.toFixed(1)} km from warehouse</div>
-                        <div className="text-xs flex items-center gap-1 text-gray-600">
-                          <Clock className="h-3 w-3" />
-                          Estimated delivery: 30-45 minutes
-                        </div>
-                      </>
+                      <span className="font-medium">₹{deliveryInfo.totalDeliveryCharge.toLocaleString()}</span>
                     )}
                   </div>
-                </div>
-              )}
+                )}
 
-              {loadingDelivery && (
-                <div className="mt-4 p-4 bg-gray-50 rounded-xl border border-gray-200">
-                  <div className="text-sm text-gray-600 flex items-center gap-2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400"></div>
-                    Calculating delivery charges...
+                {/* Promo Code Discount */}
+                {discountAmount > 0 && (
+                  <div className="flex justify-between text-sm text-brand-primary">
+                    <span>Promo Code Discount</span>
+                    <span className="font-medium">-₹{discountAmount.toLocaleString()}</span>
+                  </div>
+                )}
+
+                <div className="border-t border-gray-200 pt-2 mt-3">
+                  <div className="flex justify-between text-lg font-bold text-brand-primary">
+                    <span>Total</span>
+                    <span>₹{Math.ceil(finalTotalWithDelivery).toLocaleString()}</span>
                   </div>
                 </div>
-              )}
-
-
-
-              {/* Promo Code Section - Compact */}
-              <div className="border-t pt-4 mt-4 space-y-3">
-                <div className="space-y-2">
-                  <PromoCodeInput
-                    cartTotal={cartTotal}
-                    cartItems={cartItems}
-                    userId={user?._id}
-                    onPromoCodeApplied={handlePromoCodeApplied}
-                    onPromoCodeRemoved={handlePromoCodeRemoved}
-                    appliedPromoCode={appliedPromoCode}
-                  />
-                </div>
-
-                {/* Available Promocodes - Collapsible */}
-                <details className="group">
-                  <summary className="cursor-pointer text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1">
-                    <span>View available offers</span>
-                    <ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90" />
-                  </summary>
-                  <div className="mt-2 max-h-48 overflow-y-auto">
-                    <AvailablePromocodes
-                      cartTotal={cartTotal}
-                      cartItems={cartItems}
-                      userId={user?._id}
-                      onPromoCodeSelect={handlePromoCodeSelect}
-                      appliedPromoCode={appliedPromoCode}
-                    />
-                  </div>
-                </details>
               </div>
             </div>
 
+            {/* Simplified Payment Method */}
+            <div className="bg-white rounded-lg sm:rounded-xl md:rounded-2xl p-3 sm:p-4 md:p-6 shadow-md sm:shadow-lg border border-gray-100">
+              <h2 className="text-base sm:text-lg font-bold text-gray-900 mb-2.5 sm:mb-3 md:mb-4">Payment Method</h2>
+              
+              <div className="space-y-2 sm:space-y-2.5 md:space-y-3">
+                {/* Cash on Delivery */}
+                <div
+                  onClick={() => {
+                    if (isCODAvailableForCart && !validationErrors.codNotAvailable) {
+                      setSelectedPaymentMethod('cod');
+                    }
+                  }}
+                  className={`p-2.5 sm:p-3 md:p-4 border-2 rounded-xl transition-all ${
+                    !isCODAvailableForCart || validationErrors.codNotAvailable
+                      ? 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60'
+                      : selectedPaymentMethod === 'cod'
+                      ? 'border-brand-primary bg-brand-primary/10'
+                      : 'border-gray-200 hover:border-gray-300 cursor-pointer'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 sm:gap-2.5 md:gap-3">
+                    <div className={`p-1.5 sm:p-2 rounded-lg ${
+                      selectedPaymentMethod === 'cod' ? 'bg-brand-primary text-white' : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      <Truck className="h-3.5 w-3.5 sm:h-4 sm:w-4 md:h-5 md:w-5" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-gray-900 text-xs sm:text-sm md:text-base">Cash on Delivery</h3>
+                        {!isCODAvailableForCart || validationErrors.codNotAvailable ? (
+                          <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full font-medium">
+                            Not Available
+                          </span>
+                        ) : (
+                          <span className="bg-brand-primary/10 text-brand-primary text-xs px-2 py-1 rounded-full font-medium">
+                            Available
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs sm:text-sm text-gray-600">Pay when you receive your order</p>
+                      {(!isCODAvailableForCart || validationErrors.codNotAvailable) && (
+                        <p className="text-xs text-red-500 mt-0.5 sm:mt-1">
+                          {validationErrors.codNotAvailable || 'Not available for some items in your cart'}
+                        </p>
+                      )}
+                    </div>
+                    {selectedPaymentMethod === 'cod' && (
+                      <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5 bg-brand-primary rounded-full flex items-center justify-center">
+                        <Check className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-white" />
+                      </div>
+                    )}
+                  </div>
+                </div>
 
+                {/* Online Payment */}
+                <div
+                  onClick={() => {
+                    setSelectedPaymentMethod('online');
+                    // Clear COD-related validation errors when switching to online payment
+                    setValidationErrors(prev => ({ ...prev, codNotAvailable: undefined }));
+                  }}
+                  className={`p-2.5 sm:p-3 md:p-4 border-2 rounded-xl transition-all cursor-pointer ${
+                    selectedPaymentMethod === 'online'
+                      ? 'border-brand-primary bg-brand-primary/10'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 sm:gap-2.5 md:gap-3">
+                    <div className={`p-1.5 sm:p-2 rounded-lg ${
+                      selectedPaymentMethod === 'online' ? 'bg-brand-primary text-white' : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      <CreditCard className="h-3.5 w-3.5 sm:h-4 sm:w-4 md:h-5 md:w-5" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-gray-900 text-xs sm:text-sm md:text-base">Online Payment</h3>
+                        <span className="bg-brand-primary/10 text-brand-primary text-xs px-2 py-1 rounded-full font-medium">
+                          Secure
+                        </span>
+                      </div>
+                      <p className="text-xs sm:text-sm text-gray-600">Pay securely with cards, UPI, or net banking</p>
+                    </div>
+                    {selectedPaymentMethod === 'online' && (
+                      <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5 bg-brand-primary rounded-full flex items-center justify-center">
+                        <Check className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-white" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
 
+            {/* Pay Now Button */}
+            <Button
+              onClick={handlePayment}
+              disabled={isValidatingPayment || loadingDelivery || (selectedPaymentMethod === 'cod' && !!validationErrors.codNotAvailable) || !!validationErrors.deliveryNotAvailable || !!validationErrors.warehouseNotOperational || !!validationErrors.addressRequired}
+              className={`w-full py-2.5 sm:py-3 md:py-4 text-sm sm:text-base md:text-lg rounded-xl shadow-lg transition-all duration-300 ${
+                isValidatingPayment || loadingDelivery || (selectedPaymentMethod === 'cod' && !!validationErrors.codNotAvailable) || !!validationErrors.deliveryNotAvailable || !!validationErrors.warehouseNotOperational || !!validationErrors.addressRequired
+                  ? 'bg-gray-400 cursor-not-allowed opacity-60'
+                  : 'bg-gradient-to-r from-brand-primary to-brand-primary-dark hover:from-brand-primary-dark hover:to-purple-600 text-white hover:shadow-xl hover:scale-105'
+              }`}
+            >
+
+              {isValidatingPayment ? (
+                <div className="flex items-center gap-2 text-white">
+                  <Loader2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 md:h-5 md:w-5 animate-spin" />
+                  <span className="text-xs sm:text-sm md:text-base">Validating...</span>
+                </div>
+              ) : loadingDelivery ? (
+                <div className="flex items-center gap-2 text-white">
+                  <Loader2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 md:h-5 md:w-5 animate-spin" />
+                  <span className="text-xs sm:text-sm md:text-base">Calculating Delivery...</span>
+                </div>
+              ) : (
+                <span className={(selectedPaymentMethod === 'cod' && !!validationErrors.codNotAvailable) || !!validationErrors.deliveryNotAvailable || !!validationErrors.warehouseNotOperational || !!validationErrors.addressRequired ? "text-gray-600" : "text-white"}>
+                  {selectedPaymentMethod === 'cod' 
+                    ? `Place Your Order - ₹${Math.ceil(finalTotalWithDelivery)}`
+                    : `Pay ₹${Math.ceil(finalTotalWithDelivery)}`
+                  }
+                </span>
+              )}
+            </Button>
           </div>
         </div>
       </div>
 
       {/* Address Selection Modal */}
       {showAddressModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[999] p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full max-h-[80vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-gray-900">Select Delivery Address</h2>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[999] p-3 sm:p-4">
+          <div className="bg-white rounded-xl sm:rounded-2xl max-w-md w-full max-h-[80vh] overflow-y-auto">
+            <div className="p-4 sm:p-6">
+              <div className="flex items-center justify-between mb-4 sm:mb-6">
+                <h2 className="text-lg sm:text-xl font-bold text-gray-900">Select Delivery Address</h2>
                 <button
                   onClick={() => setShowAddressModal(false)}
                   className="text-gray-400 hover:text-gray-600 transition-colors"
                 >
-                  <X className="h-6 w-6" />
+                  <X className="h-5 w-5 sm:h-6 sm:w-6" />
                 </button>
               </div>
 
               {isLoadingAddresses ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-                  <span className="ml-2 text-gray-600">Loading addresses...</span>
+                <div className="flex items-center justify-center py-6 sm:py-8">
+                  <Loader2 className="h-5 w-5 sm:h-6 sm:w-6 animate-spin text-gray-400" />
+                  <span className="ml-2 text-gray-600 text-sm sm:text-base">Loading addresses...</span>
                 </div>
               ) : addresses.length === 0 ? (
-                <div className="text-center py-8">
-                  <MapPin className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                  <p className="text-gray-600 mb-4">No addresses found</p>
+                <div className="text-center py-4 sm:py-6">
+                  <MapPin className="h-10 w-10 sm:h-12 sm:w-12 text-gray-300 mx-auto mb-2 sm:mb-3" />
+                  <p className="text-gray-600 mb-3 sm:mb-4 text-sm">No addresses found</p>
                   <Button
                     onClick={() => {
                       setShowAddAddressModal(true);
                       setShowAddressModal(false);
                     }}
-                    className="bg-green-600 hover:bg-green-700"
+                    className="bg-brand-primary hover:bg-brand-primary-dark"
                   >
                     <Plus className="h-4 w-4 mr-2" />
                     Add New Address
                   </Button>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-2 sm:space-y-3">
                   {addresses.map((address) => (
                     <div
                       key={address.id}
-                      className={`p-4 border-2 rounded-xl cursor-pointer transition-all ${
+                      className={`p-3 sm:p-4 border-2 rounded-xl cursor-pointer transition-all ${
                         selectedAddress === address.id
-                          ? 'border-green-500 bg-green-50'
+                          ? 'border-brand-primary bg-brand-primary/10'
                           : 'border-gray-200 hover:border-gray-300'
                       }`}
                       onClick={() => {
@@ -2376,16 +2423,16 @@ export default function PaymentPage() {
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
+                          <div className="flex items-center gap-2 mb-1.5 sm:mb-2">
                             <MapPin className="h-4 w-4 text-gray-500" />
-                            <span className="font-semibold text-gray-900">{address.type}</span>
+                            <span className="font-semibold text-gray-900 text-sm sm:text-base">{address.type}</span>
                             {address.isDefault && (
-                              <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
+                              <span className="bg-brand-primary/10 text-brand-primary text-xs px-2 py-1 rounded-full">
                                 Default
                               </span>
                             )}
                           </div>
-                          <div className="text-sm text-gray-700 leading-relaxed">
+                          <div className="text-xs sm:text-sm text-gray-700 leading-relaxed">
                             <p>
                               {address.building}
                               {address.floor && `, Floor ${address.floor}`},
@@ -2397,14 +2444,14 @@ export default function PaymentPage() {
                             </p>
                           </div>
                           {address.phone && (
-                            <p className="text-sm text-gray-600 mt-1 flex items-center gap-1">
-                              <Smartphone className="h-3 w-3" />
+                            <p className="text-xs sm:text-sm text-gray-600 mt-1 flex items-center gap-1">
+                              <Smartphone className="h-3 w-3 sm:h-4 sm:w-4" />
                               {address.phone}
                             </p>
                           )}
                         </div>
                         {selectedAddress === address.id && (
-                          <Check className="h-5 w-5 text-green-600 flex-shrink-0" />
+                          <Check className="h-4 w-4 sm:h-5 sm:w-5 text-brand-primary flex-shrink-0" />
                         )}
                       </div>
                     </div>
@@ -2416,7 +2463,7 @@ export default function PaymentPage() {
                       setShowAddressModal(false);
                     }}
                     variant="outline"
-                    className="w-full mt-4 border-dashed border-2 border-gray-300 hover:border-green-500 hover:bg-green-50"
+                    className="w-full mt-3 sm:mt-4 border-dashed border-2 border-gray-300 hover:border-brand-primary hover:bg-brand-primary/5"
                   >
                     <Plus className="h-4 w-4 mr-2" />
                     Add New Address
@@ -2567,8 +2614,8 @@ export default function PaymentPage() {
       {isValidatingPayment && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl p-8 max-w-sm w-full mx-4 text-center">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Loader2 className="h-8 w-8 text-green-600 animate-spin" />
+            <div className="w-16 h-16 bg-brand-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Loader2 className="h-8 w-8 text-brand-primary animate-spin" />
             </div>
             <h3 className="text-xl font-semibold text-gray-900 mb-2">
               Processing Your Order
@@ -2601,6 +2648,78 @@ export default function PaymentPage() {
             router.push('/account?tab=orders');
           }}
         />
+      )}
+
+      {/* Available Offers Modal */}
+      {showAvailableOffers && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full max-h-[80vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                  <Gift className="h-6 w-6 text-brand-primary" />
+                  Available Offers
+                </h2>
+                <button
+                  onClick={() => setShowAvailableOffers(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* Sample Offer Card */}
+                <div className="border border-brand-primary/20 rounded-lg p-4 bg-white">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="bg-brand-primary/10 text-brand-primary text-xs px-2 py-1 rounded-full font-medium">
+                        SINGLE50
+                      </span>
+                      <span className="bg-gray-100 text-gray-800 text-xs px-3 py-1 rounded-full border border-gray-300 font-bold">
+                        ₹50 OFF
+                      </span>
+                      <span className="text-gray-600 text-xs">Single Use</span>
+                    </div>
+                    <button className="text-gray-400 hover:text-gray-600">
+                      <Copy className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <p className="text-gray-800 text-sm mb-1">Save ₹50 on this order</p>
+                  <p className="text-gray-600 text-xs mb-2">Single use 50 rupees off</p>
+                  <div className="flex items-center gap-1 text-orange-600 text-xs">
+                    <Clock className="h-3 w-3" />
+                    <span>Expires in 3 days</span>
+                  </div>
+                </div>
+
+                {/* Another Sample Offer */}
+                <div className="border border-brand-primary/20 rounded-lg p-4 bg-white">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="bg-brand-primary/10 text-brand-primary text-xs px-2 py-1 rounded-full font-medium">
+                        WELCOME100
+                      </span>
+                      <span className="bg-gray-100 text-gray-800 text-xs px-3 py-1 rounded-full border border-gray-300 font-bold">
+                        ₹100 OFF
+                      </span>
+                      <span className="text-gray-600 text-xs">First Order</span>
+                    </div>
+                    <button className="text-gray-400 hover:text-gray-600">
+                      <Copy className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <p className="text-gray-800 text-sm mb-1">Save ₹100 on your first order</p>
+                  <p className="text-gray-600 text-xs mb-2">New customer exclusive offer</p>
+                  <div className="flex items-center gap-1 text-orange-600 text-xs">
+                    <Clock className="h-3 w-3" />
+                    <span>Expires in 7 days</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
