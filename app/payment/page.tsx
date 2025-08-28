@@ -41,14 +41,14 @@ import {
   Globe,
   X,
   ChevronDown,
-  Gift,
   Copy
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import PromoCodeInput from "@/components/PromoCodeInput";
-import AvailablePromocodes from "@/components/AvailablePromocodes";
+
+import PromocodeSuggestions from "@/components/PromocodeSuggestions";
 import toast from "react-hot-toast";
 import { calculateDeliveryChargeAPI, formatDeliveryCharge, getDeliveryTimeEstimate, fetchDeliverySettings, DeliveryCalculationResult } from "@/lib/delivery";
 import DeliveryAvailabilityChecker from "@/components/DeliveryAvailabilityChecker";
@@ -267,6 +267,7 @@ function extractStateFromAddress(address: string): string {
 export default function PaymentPage() {
   const { cartItems, cartTotal, isLoadingCart, clearCart: clearCartContext } = useCartContext();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const dispatch = useAppDispatch();
   const user = useAppSelector((state: any) => state?.auth?.user);
   const token = useAppSelector((state: any) => state?.auth?.token);
@@ -446,7 +447,7 @@ export default function PaymentPage() {
   // State for undeliverable items modal
   const [showUndeliverableItemsModal, setShowUndeliverableItemsModal] = useState(false);
   const [undeliverableItems, setUndeliverableItems] = useState<any[]>([]);
-  const [showAvailableOffers, setShowAvailableOffers] = useState(false);
+  const [showAvailableOffers, setShowAvailableOffers] = useState(true);
 
   // Load Razorpay script
   useEffect(() => {
@@ -823,11 +824,27 @@ export default function PaymentPage() {
         );
         setAddresses(validAddresses);
 
+        // Get address ID from URL parameter (from cart sidebar selection)
+        const addressIdFromUrl = searchParams.get('addressId');
+        
+        if (addressIdFromUrl) {
+          // Try to find the address from URL parameter first
+          const selectedAddressFromUrl = validAddresses.find((addr: Address) => addr.id.toString() === addressIdFromUrl);
+          if (selectedAddressFromUrl) {
+            setSelectedAddress(selectedAddressFromUrl.id);
+            return;
+          }
+        }
+        
+        // Fallback to default address if no URL parameter or address not found
         const defaultAddress = validAddresses.find((addr: Address) => addr.isDefault);
         if (defaultAddress) {
           setSelectedAddress(defaultAddress.id);
         } else if (validAddresses.length > 0) {
           setSelectedAddress(validAddresses[0].id);
+        } else {
+          // No addresses available, set to null so "Proceed to Pay" is disabled
+          setSelectedAddress(null);
         }
       } else {
         setAddresses([]);
@@ -1028,11 +1045,16 @@ export default function PaymentPage() {
   const handlePromoCodeApplied = (discount: number, promoCode: any) => {
     setDiscountAmount(discount);
     setAppliedPromoCode(promoCode);
+    // Hide offers when promocode is applied so button shows "View available offers"
+    // Users can then click to see other available offers and switch between them
+    setShowAvailableOffers(false);
   };
 
   const handlePromoCodeRemoved = () => {
     setDiscountAmount(0);
     setAppliedPromoCode(null);
+    // Show offers when promocode is removed so user can see what other promocodes are available
+    setShowAvailableOffers(true);
   };
 
   const handlePromoCodeSelect = async (code: string) => {
@@ -1280,7 +1302,7 @@ export default function PaymentPage() {
             (!deliveryInfo ||
               Math.abs(deliveryInfo.distance - result.distance) > 0.1 ||
               deliveryInfo.warehouse?.name !== result.warehouse?.name)) {
-            showSuccessToast(`Delivery calculated: ${result.distance.toFixed(2)}km, ${result.duration?.toFixed(0) || 'N/A'} min via ${result.warehouse?.name || 'warehouse'}`);
+          //  showSuccessToast(`Delivery calculated: ${result.distance.toFixed(2)}km, ${result.duration?.toFixed(0) || 'N/A'} min via ${result.warehouse?.name || 'warehouse'}`);
           }
         } else if (result && result.error) {
           console.error('API returned error:', result.error);
@@ -1582,7 +1604,14 @@ export default function PaymentPage() {
           }
         }
 
-        // Show success and clear cart
+        // Clear cart immediately after successful COD order creation
+        console.log('🛒 COD Order successful, clearing cart...');
+        console.log('🛒 Cart items before clearing:', cartItems.length);
+        dispatch(clearCart());
+        await clearCartContext();
+        console.log('🛒 Cart clearing completed for COD order');
+
+        // Show success modal
         const successData = {
           orderId: result?.order?.orderId || 'Unknown',
           total: Math.ceil(finalTotalWithDelivery || 0),
@@ -1594,13 +1623,6 @@ export default function PaymentPage() {
         setIsValidatingPayment(false);
         setSuccessOrderData(successData);
         setShowSuccessModal(true);
-
-        setTimeout(() => {
-          if (isMountedRef.current) {
-            dispatch(clearCart());
-            clearCartContext();
-          }
-        }, 100);
       } else {
         throw new Error(result.error || 'Failed to place order');
       }
@@ -1667,6 +1689,11 @@ export default function PaymentPage() {
 
   const verifyPayment = async (paymentResponse: any, orderData: any) => {
     try {
+      console.log('🔐 Starting payment verification...', {
+        payment_id: paymentResponse.razorpay_payment_id,
+        order_id: paymentResponse.razorpay_order_id
+      });
+      
       const apiUrl = process.env.NEXT_PUBLIC_API_URL;
       const response = await fetch(`${apiUrl}/payments/verify`, {
         method: 'POST',
@@ -1680,7 +1707,12 @@ export default function PaymentPage() {
         })
       });
 
+      if (!response.ok) {
+        throw new Error(`Payment verification API failed: ${response.status} ${response.statusText}`);
+      }
+
       const result = await response.json();
+      console.log('🔐 Payment verification response:', result);
 
       if (result.success) {
         // Apply promo code if exists
@@ -1702,7 +1734,14 @@ export default function PaymentPage() {
           }
         }
 
-        // Show success and clear cart
+        // Clear cart immediately after successful payment verification
+        console.log('🛒 Online payment verified successfully, clearing cart...');
+        console.log('🛒 Cart items before clearing:', cartItems.length);
+        dispatch(clearCart());
+        await clearCartContext();
+        console.log('🛒 Cart clearing completed for online payment');
+
+        // Show success modal
         const successData = {
           orderId: result?.order?.orderId || 'Unknown',
           total: Math.ceil(finalTotalWithDelivery || 0),
@@ -1715,20 +1754,47 @@ export default function PaymentPage() {
         setSuccessOrderData(successData);
         setShowSuccessModal(true);
 
-        setTimeout(() => {
-          if (isMountedRef.current) {
-            dispatch(clearCart());
-            clearCartContext();
-          }
-        }, 100);
-
         toast.success('Payment successful! Order placed.');
       } else {
+        // Payment verification failed - this is critical!
+        console.error('❌ Payment verification failed:', result);
+        
+        // Show critical error message to user
+        toast.error(
+          'Payment verification failed! Your payment may have been processed. Please contact support with your payment details.',
+          { duration: 10000 }
+        );
+        
+        // Store payment details for manual verification
+        const failedPaymentData = {
+          razorpay_payment_id: paymentResponse.razorpay_payment_id,
+          razorpay_order_id: paymentResponse.razorpay_order_id,
+          razorpay_signature: paymentResponse.razorpay_signature,
+          orderData: orderData,
+          timestamp: new Date().toISOString(),
+          error: result.error || 'Payment verification failed'
+        };
+        
+        // Store in localStorage for support team
+        const failedPayments = JSON.parse(localStorage.getItem('failedPayments') || '[]');
+        failedPayments.push(failedPaymentData);
+        localStorage.setItem('failedPayments', JSON.stringify(failedPayments));
+        
         throw new Error(result.error || 'Payment verification failed');
       }
     } catch (error: any) {
-      console.error('Payment verification error:', error);
-      toast.error(error.message || 'Payment verification failed');
+      console.error('❌ Payment verification error:', error);
+      
+      // Check if this is a network error vs verification failure
+      if (error.message.includes('fetch') || error.message.includes('network')) {
+        toast.error(
+          'Network error during payment verification. Your payment may have been processed. Please check your order history or contact support.',
+          { duration: 10000 }
+        );
+      } else {
+        toast.error(error.message || 'Payment verification failed');
+      }
+      
       setIsValidatingPayment(false);
     }
   };
@@ -2009,39 +2075,69 @@ export default function PaymentPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
-      <div className="container mx-auto px-2 sm:px-10 py-2 sm:py-8">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 payment-page">
+      <div className="container mx-auto px-2 sm:px-8 py-2 sm:py-6">
+        <style jsx>{`
+          .sticky-panel {
+            position: sticky;
+            top: 1rem;
+            max-height: calc(100vh - 2rem);
+            overflow-y: auto;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+          }
+          .sticky-panel::-webkit-scrollbar {
+            width: 0px;
+            background: transparent;
+          }
+          .sticky-panel::-webkit-scrollbar-track {
+            background: transparent;
+          }
+          .sticky-panel::-webkit-scrollbar-thumb {
+            background: transparent;
+          }
+          .sticky-panel::-webkit-scrollbar-thumb:hover {
+            background: transparent;
+          }
+          
+          /* Hide floating cart on payment page */
+          .payment-page .floating-cart,
+          .payment-page [data-floating-cart],
+          .payment-page .cart-summary-float {
+            display: none !important;
+          }
+        `}</style>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 lg:items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 lg:gap-4 lg:items-start">
           {/* Left Panel - Order Summary with Products */}
-          <div className="space-y-4">
+          <div className="space-y-3 lg:sticky-panel">
             {/* Order Summary with Products */}
-            <div className="bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-lg border border-gray-100">
-              <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-4">Order Summary</h2>
+            <div className="bg-white rounded-xl sm:rounded-2xl p-3 sm:p-4 border border-gray-200">
+              <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-3">Order Summary</h2>
 
               {/* Single Warehouse Order Items */}
               {Object.entries(itemsByWarehouse).map(([warehouseId, { items, warehouse }]) => {
                 const isGlobal = warehouse.deliverySettings?.is24x7Delivery === true;
                 
                 return (
-                  <div key={warehouseId} className="mb-4">
+                  <div key={warehouseId} className="mb-3">
                     {/* Warehouse Header */}
-                    <div className="flex items-center gap-2 mb-3 p-2 sm:p-3 bg-gray-50 rounded-lg">
-                      <Building2 className="h-4 w-4 sm:h-5 sm:w-5 text-gray-600" />
+                    <div className="flex items-center gap-2 mb-2 p-2 bg-gray-50 rounded-lg">
+                      <Building2 className="h-4 w-4 text-gray-600" />
                       <div>
-                        <h3 className="font-semibold text-gray-900 text-sm sm:text-base">{warehouse.name}</h3>
-                        <p className="text-xs sm:text-sm text-gray-600">
+                        <h3 className="font-semibold text-gray-900 text-sm">{warehouse.name}</h3>
+                        <p className="text-xs text-gray-600">
                           {isGlobal ? '24x7 Delivery Available' : 'Standard Delivery'}
                         </p>
                       </div>
                     </div>
 
                     {/* Products in this warehouse */}
-                    <div className="space-y-2 sm:space-y-3">
+                    <div className="space-y-2">
                       {items.map((item, idx) => (
-                        <div key={item.id || idx} className="flex gap-2 sm:gap-3 p-2 sm:p-3 border border-gray-100 rounded-lg">
+                        <div key={item.id || idx} className="flex gap-2 p-2 border border-gray-100 rounded-lg">
                           {/* Product Image */}
-                          <div className="relative w-12 h-12 sm:w-16 sm:h-16 rounded-md overflow-hidden bg-gray-100 flex-shrink-0">
+                          <div className="relative w-12 h-12 rounded-md overflow-hidden bg-gray-100 flex-shrink-0">
                             <Image
                               src={item.image || "/placeholder.svg"}
                               alt={item.name}
@@ -2054,18 +2150,18 @@ export default function PaymentPage() {
                           <div className="flex-1 min-w-0">
                             <div className="flex justify-between items-start">
                               <div>
-                                <h4 className="font-semibold text-gray-900 text-xs sm:text-sm leading-tight">
+                                <h4 className="font-semibold text-gray-900 text-sm leading-tight">
                                   {item.name}
                                 </h4>
-                                <p className="text-xs text-gray-500 mt-0.5 sm:mt-1">
+                                <p className="text-xs text-gray-500 mt-0.5">
                                   {warehouse.name}
                                 </p>
-                                <p className="text-xs text-gray-500 mt-0.5 sm:mt-1">
+                                <p className="text-xs text-gray-500 mt-0.5">
                                   Qty: {item.quantity} • {typeof item.tax === 'number' ? item.tax : 5}%-Incl.
                                 </p>
                               </div>
                               <div className="text-right">
-                                <div className="text-xs sm:text-sm font-bold text-gray-900">₹{(item.price * item.quantity).toLocaleString()}</div>
+                                <div className="text-sm font-bold text-gray-900">₹{(item.price * item.quantity).toLocaleString()}</div>
                                 <div className="text-xs text-gray-400">₹{item.price} each</div>
                               </div>
                             </div>
@@ -2078,7 +2174,7 @@ export default function PaymentPage() {
               })}
 
               {/* Promo Code Section */}
-              <div className="border-t border-gray-200 pt-3 mt-4">
+              <div className="border-t border-gray-200 pt-2 mt-3">
                 <PromoCodeInput
                   cartTotal={cartTotal}
                   cartItems={cartItems}
@@ -2089,101 +2185,131 @@ export default function PaymentPage() {
                 />
                 
                 {/* View Available Offers Link */}
-                <div className="mt-2 text-left">
+                <div className="mt-1.5 text-left">
                   <button
-                    onClick={() => setShowAvailableOffers(true)}
+                    onClick={() => setShowAvailableOffers(!showAvailableOffers)}
                     className="text-brand-primary hover:text-brand-primary-dark text-sm font-medium flex items-center gap-1 transition-colors"
                   >
-                    View available offers
-                    <ChevronDown className="h-4 w-4" />
+                    {showAvailableOffers ? 'Hide available offers' : 'View available offers'}
+                    <ChevronDown className={`h-4 w-4 transition-transform ${showAvailableOffers ? 'rotate-180' : ''}`} />
                   </button>
                 </div>
+
+                {/* Promocode Suggestions */}
+                {showAvailableOffers && (
+                  <PromocodeSuggestions
+                    cartTotal={cartTotal}
+                    cartItems={cartItems}
+                    userId={user?._id}
+                    onPromoCodeSelect={handlePromoCodeSelect}
+                    appliedPromoCode={appliedPromoCode}
+                  />
+                )}
               </div>
 
 
             </div>
           </div>
 
-          {/* Right Panel - Promo Code, Charges, Payment Method */}
-          <div className="space-y-3 sm:space-y-4 lg:sticky lg:top-4 lg:max-h-screen lg:overflow-y-auto">
-            {/* Delivery Address */}
-            <div className="bg-white rounded-lg sm:rounded-xl md:rounded-2xl p-3 sm:p-4 md:p-6 shadow-md sm:shadow-lg border border-gray-100">
-              <div className="flex items-center justify-between mb-2.5 sm:mb-3 md:mb-4">
-                <h2 className="text-base sm:text-lg font-bold text-gray-900">Delivery Address</h2>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowAddressModal(true)}
-                  className="text-brand-primary border-brand-primary hover:bg-brand-primary/5"
-                  disabled={isLoadingAddresses}
+          {/* Right Panel - Payment Method, Bill Details, Pay Button */}
+          <div className="space-y-2.5 ">
+            {/* Simplified Payment Method */}
+            <div className="bg-white rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-200">
+              <h2 className="text-base font-bold text-gray-900 mb-2">Payment Method</h2>
+              
+              <div className="space-y-2">
+                {/* Cash on Delivery */}
+                <div
+                  onClick={() => {
+                    if (isCODAvailableForCart && !validationErrors.codNotAvailable) {
+                      setSelectedPaymentMethod('cod');
+                    }
+                  }}
+                  className={`p-3 border-2 rounded-xl transition-all ${
+                    !isCODAvailableForCart || validationErrors.codNotAvailable
+                      ? 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60'
+                      : selectedPaymentMethod === 'cod'
+                      ? 'border-brand-primary bg-brand-primary/10'
+                      : 'border-gray-200 hover:border-gray-300 cursor-pointer'
+                  }`}
                 >
-                  <Edit className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" />
-                  Change
-                </Button>
-              </div>
-
-              {isLoadingAddresses ? (
-                <div className="flex items-center justify-center py-4 sm:py-6 md:py-8">
-                  <Loader2 className="h-5 w-5 sm:h-6 sm:w-6 animate-spin text-gray-400" />
-                  <span className="ml-2 text-gray-600 text-sm">Loading addresses...</span>
+                  <div className="flex items-center gap-2">
+                    <div className={`p-2 rounded-lg ${
+                      selectedPaymentMethod === 'cod' ? 'bg-brand-primary text-white' : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      <Truck className="h-4 w-4" />
                 </div>
-              ) : addresses.length === 0 ? (
-                <div className="text-center py-4 sm:py-6">
-                  <MapPin className="h-10 w-10 sm:h-12 sm:w-12 text-gray-300 mx-auto mb-2 sm:mb-3" />
-                  <p className="text-gray-600 mb-3 sm:mb-4 text-sm">No delivery address found</p>
-                  <Button
-                    onClick={() => setShowAddAddressModal(true)}
-                    className="bg-brand-primary hover:bg-brand-primary-dark"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Address
-                  </Button>
-                </div>
-              ) : (
-                <>
-                  {selectedAddress && addresses.find(addr => addr.id === selectedAddress) && (
-                    <div className="space-y-1.5 sm:space-y-2">
+                    <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <MapPin className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-500" />
-                        <span className="font-bold text-gray-900 text-sm">
-                          {addresses.find(addr => addr.id === selectedAddress)?.type}
+                        <h3 className="font-semibold text-gray-900 text-sm">Cash on Delivery</h3>
+                        {!isCODAvailableForCart || validationErrors.codNotAvailable ? (
+                          <span className="bg-red-100 text-red-800 text-xs px-1.5 py-0.5 rounded-full font-medium">
+                            Not Available
                         </span>
-                        {addresses.find(addr => addr.id === selectedAddress)?.isDefault && (
-                          <span className="bg-brand-primary/10 text-brand-primary text-xs px-2 py-1 rounded-full">
-                            Default
+                        ) : (
+                          <span className="bg-brand-primary/10 text-brand-primary text-xs px-1.5 py-0.5 rounded-full font-medium">
+                            Available
                           </span>
                         )}
                       </div>
-                      <div className="text-xs sm:text-sm text-gray-700 leading-relaxed">
-                        <p>
-                          {addresses.find(addr => addr.id === selectedAddress)?.building}
-                          {addresses.find(addr => addr.id === selectedAddress)?.floor && `, Floor ${addresses.find(addr => addr.id === selectedAddress)?.floor}`},
-                          {addresses.find(addr => addr.id === selectedAddress)?.area}
-                          {addresses.find(addr => addr.id === selectedAddress)?.landmark && `, Near ${addresses.find(addr => addr.id === selectedAddress)?.landmark}`}
+                      <p className="text-xs text-gray-600">Pay when you receive your order</p>
+                      {(!isCODAvailableForCart || validationErrors.codNotAvailable) && (
+                        <p className="text-xs text-red-500 mt-0.5">
+                          {validationErrors.codNotAvailable || 'Not available for some items in your cart'}
                         </p>
+                      )}
                       </div>
-                      {addresses.find(addr => addr.id === selectedAddress)?.phone && (
-                        <p className="text-xs sm:text-sm font-bold text-gray-600 flex items-center gap-1">
-                          <Smartphone className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1 text-gray-500" />
-                          {addresses.find(addr => addr.id === selectedAddress)?.phone}
-                        </p>
-                      )}
-                      {addresses.find(addr => addr.id === selectedAddress)?.additionalInstructions && (
-                        <p className="text-xs sm:text-sm text-gray-600 italic">
-                          Note: {addresses.find(addr => addr.id === selectedAddress)?.additionalInstructions}
-                        </p>
-                      )}
+                    {selectedPaymentMethod === 'cod' && (
+                      <div className="w-4 h-4 bg-brand-primary rounded-full flex items-center justify-center">
+                        <Check className="h-2.5 w-2.5 text-white" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Online Payment */}
+                <div
+                  onClick={() => {
+                    setSelectedPaymentMethod('online');
+                    // Clear COD-related validation errors when switching to online payment
+                    setValidationErrors(prev => ({ ...prev, codNotAvailable: undefined }));
+                  }}
+                  className={`p-3 border-2 rounded-xl transition-all cursor-pointer ${
+                    selectedPaymentMethod === 'online'
+                      ? 'border-brand-primary bg-brand-primary/10'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <div className={`p-2 rounded-lg ${
+                      selectedPaymentMethod === 'online' ? 'bg-brand-primary text-white' : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      <CreditCard className="h-4 w-4" />
                     </div>
-                  )}
-                </>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-gray-900 text-sm">Online Payment</h3>
+                        <span className="bg-brand-primary/10 text-brand-primary text-xs px-1.5 py-0.5 rounded-full font-medium">
+                          Secure
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-600">Pay securely with cards, UPI, or net banking</p>
+                    </div>
+                    {selectedPaymentMethod === 'online' && (
+                      <div className="w-4 h-4 bg-brand-primary rounded-full flex items-center justify-center">
+                        <Check className="h-2.5 w-2.5 text-white" />
+                    </div>
               )}
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Bill Details */}
-            <div className="bg-white rounded-lg sm:rounded-xl md:rounded-2xl p-3 sm:p-4 md:p-6 shadow-md sm:shadow-lg border border-gray-100">
-              <h2 className="text-base sm:text-lg font-bold text-gray-900 mb-2.5 sm:mb-3 md:mb-4">Bill Details</h2>
+            <div className="bg-white rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-200">
+              <h2 className="text-base font-bold text-gray-900 mb-2">Bill Details</h2>
               
-              <div className="space-y-2 sm:space-y-2.5">
+              <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Subtotal (Before Tax)</span>
                   <span className="font-medium">₹{cartTotal.toLocaleString()}</span>
@@ -2245,118 +2371,100 @@ export default function PaymentPage() {
               </div>
             </div>
 
-            {/* Simplified Payment Method */}
-            <div className="bg-white rounded-lg sm:rounded-xl md:rounded-2xl p-3 sm:p-4 md:p-6 shadow-md sm:shadow-lg border border-gray-100">
-              <h2 className="text-base sm:text-lg font-bold text-gray-900 mb-2.5 sm:mb-3 md:mb-4">Payment Method</h2>
-              
-              <div className="space-y-2 sm:space-y-2.5 md:space-y-3">
-                {/* Cash on Delivery */}
-                <div
-                  onClick={() => {
-                    if (isCODAvailableForCart && !validationErrors.codNotAvailable) {
-                      setSelectedPaymentMethod('cod');
-                    }
-                  }}
-                  className={`p-2.5 sm:p-3 md:p-4 border-2 rounded-xl transition-all ${
-                    !isCODAvailableForCart || validationErrors.codNotAvailable
-                      ? 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60'
-                      : selectedPaymentMethod === 'cod'
-                      ? 'border-brand-primary bg-brand-primary/10'
-                      : 'border-gray-200 hover:border-gray-300 cursor-pointer'
-                  }`}
+            {/* Delivery Address */}
+            <div className="bg-white rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-200">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-base font-bold text-gray-900">Delivery Address</h2>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowAddressModal(true)}
+                  className="text-brand-primary border-brand-primary hover:bg-brand-primary/5"
+                  disabled={isLoadingAddresses}
                 >
-                  <div className="flex items-center gap-2 sm:gap-2.5 md:gap-3">
-                    <div className={`p-1.5 sm:p-2 rounded-lg ${
-                      selectedPaymentMethod === 'cod' ? 'bg-brand-primary text-white' : 'bg-gray-100 text-gray-600'
-                    }`}>
-                      <Truck className="h-3.5 w-3.5 sm:h-4 sm:w-4 md:h-5 md:w-5" />
+                  <Edit className="h-4 w-4 mr-1" />
+                  Change
+                </Button>
+              </div>
+
+              {isLoadingAddresses ? (
+                <div className="flex items-center justify-center py-3">
+                  <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+                  <span className="ml-2 text-gray-600 text-sm">Loading addresses...</span>
+                </div>
+              ) : addresses.length === 0 ? (
+                <div className="text-center py-3">
+                  <MapPin className="h-10 w-10 text-gray-300 mx-auto mb-2" />
+                  <p className="text-gray-600 mb-2 text-sm">No delivery address found</p>
+                  <Button
+                    onClick={() => setShowAddAddressModal(true)}
+                    className="bg-brand-primary hover:bg-brand-primary-dark"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Address
+                  </Button>
                     </div>
-                    <div className="flex-1">
+              ) : (
+                <>
+                  {selectedAddress && addresses.find(addr => addr.id === selectedAddress) && (
+                    <div className="space-y-1.5">
                       <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-gray-900 text-xs sm:text-sm md:text-base">Cash on Delivery</h3>
-                        {!isCODAvailableForCart || validationErrors.codNotAvailable ? (
-                          <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full font-medium">
-                            Not Available
+                        <MapPin className="h-4 w-4 text-gray-500" />
+                        <span className="font-bold text-gray-900 text-sm">
+                          {addresses.find(addr => addr.id === selectedAddress)?.type}
                           </span>
-                        ) : (
-                          <span className="bg-brand-primary/10 text-brand-primary text-xs px-2 py-1 rounded-full font-medium">
-                            Available
+                        {addresses.find(addr => addr.id === selectedAddress)?.isDefault && (
+                          <span className="bg-brand-primary/10 text-brand-primary text-xs px-2 py-1 rounded-full">
+                            Default
                           </span>
                         )}
                       </div>
-                      <p className="text-xs sm:text-sm text-gray-600">Pay when you receive your order</p>
-                      {(!isCODAvailableForCart || validationErrors.codNotAvailable) && (
-                        <p className="text-xs text-red-500 mt-0.5 sm:mt-1">
-                          {validationErrors.codNotAvailable || 'Not available for some items in your cart'}
+                      <div className="text-xs text-gray-700 leading-relaxed">
+                        <p>
+                          {addresses.find(addr => addr.id === selectedAddress)?.building}
+                          {addresses.find(addr => addr.id === selectedAddress)?.floor && `, Floor ${addresses.find(addr => addr.id === selectedAddress)?.floor}`},
+                          {addresses.find(addr => addr.id === selectedAddress)?.area}
+                          {addresses.find(addr => addr.id === selectedAddress)?.landmark && `, Near ${addresses.find(addr => addr.id === selectedAddress)?.landmark}`}
+                        </p>
+                    </div>
+                      {addresses.find(addr => addr.id === selectedAddress)?.phone && (
+                        <p className="text-xs font-bold text-gray-600 flex items-center gap-1">
+                          <Smartphone className="h-4 w-4 mr-1 text-gray-500" />
+                          {addresses.find(addr => addr.id === selectedAddress)?.phone}
                         </p>
                       )}
-                    </div>
-                    {selectedPaymentMethod === 'cod' && (
-                      <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5 bg-brand-primary rounded-full flex items-center justify-center">
-                        <Check className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-white" />
+                      {addresses.find(addr => addr.id === selectedAddress)?.additionalInstructions && (
+                        <p className="text-xs text-gray-600 italic">
+                          Note: {addresses.find(addr => addr.id === selectedAddress)?.additionalInstructions}
+                        </p>
+                      )}
                       </div>
+                  )}
+                </>
                     )}
-                  </div>
-                </div>
-
-                {/* Online Payment */}
-                <div
-                  onClick={() => {
-                    setSelectedPaymentMethod('online');
-                    // Clear COD-related validation errors when switching to online payment
-                    setValidationErrors(prev => ({ ...prev, codNotAvailable: undefined }));
-                  }}
-                  className={`p-2.5 sm:p-3 md:p-4 border-2 rounded-xl transition-all cursor-pointer ${
-                    selectedPaymentMethod === 'online'
-                      ? 'border-brand-primary bg-brand-primary/10'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 sm:gap-2.5 md:gap-3">
-                    <div className={`p-1.5 sm:p-2 rounded-lg ${
-                      selectedPaymentMethod === 'online' ? 'bg-brand-primary text-white' : 'bg-gray-100 text-gray-600'
-                    }`}>
-                      <CreditCard className="h-3.5 w-3.5 sm:h-4 sm:w-4 md:h-5 md:w-5" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-gray-900 text-xs sm:text-sm md:text-base">Online Payment</h3>
-                        <span className="bg-brand-primary/10 text-brand-primary text-xs px-2 py-1 rounded-full font-medium">
-                          Secure
-                        </span>
-                      </div>
-                      <p className="text-xs sm:text-sm text-gray-600">Pay securely with cards, UPI, or net banking</p>
-                    </div>
-                    {selectedPaymentMethod === 'online' && (
-                      <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5 bg-brand-primary rounded-full flex items-center justify-center">
-                        <Check className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-white" />
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
             </div>
 
-            {/* Pay Now Button */}
+            {/* Pay Now Button - Hidden on Mobile */}
+            <div className="hidden lg:block">
             <Button
               onClick={handlePayment}
               disabled={isValidatingPayment || loadingDelivery || (selectedPaymentMethod === 'cod' && !!validationErrors.codNotAvailable) || !!validationErrors.deliveryNotAvailable || !!validationErrors.warehouseNotOperational || !!validationErrors.addressRequired}
-              className={`w-full py-2.5 sm:py-3 md:py-4 text-sm sm:text-base md:text-lg rounded-xl shadow-lg transition-all duration-300 ${
+                className={`w-full py-3 text-base rounded-xl shadow-lg transition-all duration-300 ${
                 isValidatingPayment || loadingDelivery || (selectedPaymentMethod === 'cod' && !!validationErrors.codNotAvailable) || !!validationErrors.deliveryNotAvailable || !!validationErrors.warehouseNotOperational || !!validationErrors.addressRequired
                   ? 'bg-gray-400 cursor-not-allowed opacity-60'
-                  : 'bg-gradient-to-r from-brand-primary to-brand-primary-dark hover:from-brand-primary-dark hover:to-purple-600 text-white hover:shadow-xl hover:scale-105'
+                    : 'bg-gradient-to-r from-brand-primary to-brand-primary-dark hover:from-brand-primary-dark hover:to-brand-primary text-white'
               }`}
             >
 
               {isValidatingPayment ? (
                 <div className="flex items-center gap-2 text-white">
-                  <Loader2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 md:h-5 md:w-5 animate-spin" />
-                  <span className="text-xs sm:text-sm md:text-base">Validating...</span>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="text-sm">Validating...</span>
                 </div>
               ) : loadingDelivery ? (
                 <div className="flex items-center gap-2 text-white">
-                  <Loader2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 md:h-5 md:w-5 animate-spin" />
-                  <span className="text-xs sm:text-sm md:text-base">Calculating Delivery...</span>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-sm">Calculating Delivery...</span>
                 </div>
               ) : (
                 <span className={(selectedPaymentMethod === 'cod' && !!validationErrors.codNotAvailable) || !!validationErrors.deliveryNotAvailable || !!validationErrors.warehouseNotOperational || !!validationErrors.addressRequired ? "text-gray-600" : "text-white"}>
@@ -2367,6 +2475,7 @@ export default function PaymentPage() {
                 </span>
               )}
             </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -2650,77 +2759,64 @@ export default function PaymentPage() {
         />
       )}
 
-      {/* Available Offers Modal */}
-      {showAvailableOffers && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full max-h-[80vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                  <Gift className="h-6 w-6 text-brand-primary" />
-                  Available Offers
-                </h2>
-                <button
-                  onClick={() => setShowAvailableOffers(false)}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  <X className="h-6 w-6" />
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                {/* Sample Offer Card */}
-                <div className="border border-brand-primary/20 rounded-lg p-4 bg-white">
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="bg-brand-primary/10 text-brand-primary text-xs px-2 py-1 rounded-full font-medium">
-                        SINGLE50
-                      </span>
-                      <span className="bg-gray-100 text-gray-800 text-xs px-3 py-1 rounded-full border border-gray-300 font-bold">
-                        ₹50 OFF
-                      </span>
-                      <span className="text-gray-600 text-xs">Single Use</span>
-                    </div>
-                    <button className="text-gray-400 hover:text-gray-600">
-                      <Copy className="h-4 w-4" />
-                    </button>
-                  </div>
-                  <p className="text-gray-800 text-sm mb-1">Save ₹50 on this order</p>
-                  <p className="text-gray-600 text-xs mb-2">Single use 50 rupees off</p>
-                  <div className="flex items-center gap-1 text-orange-600 text-xs">
-                    <Clock className="h-3 w-3" />
-                    <span>Expires in 3 days</span>
-                  </div>
+      {/* Floating Pay/Place Order Button - Mobile Only */}
+      <div className="lg:hidden fixed bottom-4 left-4 right-4 z-40">
+        <div className="bg-gradient-to-r from-brand-primary to-brand-primary-dark rounded-2xl p-4 shadow-2xl border border-white/20 backdrop-blur-sm">
+          <div className="flex items-center justify-between">
+            {/* Left Side - Order Info */}
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
+                <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
+                  <svg className="w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
                 </div>
-
-                {/* Another Sample Offer */}
-                <div className="border border-brand-primary/20 rounded-lg p-4 bg-white">
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="bg-brand-primary/10 text-brand-primary text-xs px-2 py-1 rounded-full font-medium">
-                        WELCOME100
-                      </span>
-                      <span className="bg-gray-100 text-gray-800 text-xs px-3 py-1 rounded-full border border-gray-300 font-bold">
-                        ₹100 OFF
-                      </span>
-                      <span className="text-gray-600 text-xs">First Order</span>
-                    </div>
-                    <button className="text-gray-400 hover:text-gray-600">
-                      <Copy className="h-4 w-4" />
-                    </button>
-                  </div>
-                  <p className="text-gray-800 text-sm mb-1">Save ₹100 on your first order</p>
-                  <p className="text-gray-600 text-xs mb-2">New customer exclusive offer</p>
-                  <div className="flex items-center gap-1 text-orange-600 text-xs">
-                    <Clock className="h-3 w-3" />
-                    <span>Expires in 7 days</span>
-                  </div>
+              </div>
+              <div className="text-white">
+                <div className="text-sm font-medium opacity-90">
+                  {selectedPaymentMethod === 'cod' ? 'Place Order' : 'Pay Now'}
+                </div>
+                <div className="text-lg font-bold">
+                  ₹{Math.ceil(finalTotalWithDelivery).toLocaleString()}
                 </div>
               </div>
             </div>
+            
+            {/* Right Side - Action Button */}
+            <button 
+              onClick={handlePayment}
+              disabled={isValidatingPayment || loadingDelivery || (selectedPaymentMethod === 'cod' && !!validationErrors.codNotAvailable) || !!validationErrors.deliveryNotAvailable || !!validationErrors.warehouseNotOperational || !!validationErrors.addressRequired}
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 font-medium transition-all duration-300 hover:scale-105 ${
+                isValidatingPayment || loadingDelivery || (selectedPaymentMethod === 'cod' && !!validationErrors.codNotAvailable) || !!validationErrors.deliveryNotAvailable || !!validationErrors.warehouseNotOperational || !!validationErrors.addressRequired
+                  ? 'bg-gray-400 cursor-not-allowed opacity-60 text-gray-600'
+                  : 'bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white'
+              }`}
+            >
+              {isValidatingPayment ? (
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <span className="text-sm">Validating...</span>
+                </div>
+              ) : loadingDelivery ? (
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <span className="text-sm">Calculating...</span>
+                </div>
+              ) : (
+                <>
+                  <span className="text-sm">
+                    {selectedPaymentMethod === 'cod' ? 'Place Order' : 'Pay Now'}
+                  </span>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </>
+              )}
+            </button>
           </div>
         </div>
-      )}
+      </div>
+      
     </div>
   );
 }

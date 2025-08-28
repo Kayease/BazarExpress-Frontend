@@ -693,30 +693,46 @@ function CartProvider({ children }: { children: ReactNode }) {
   }, [isLoggedIn, removingItems]);
 
   const clearCart = useCallback(async () => {
+    console.log('🛒 clearCart called, isLoggedIn:', isLoggedIn);
+    
     if (isLoggedIn) {
       try {
         setIsLoadingCart(true);
         // Get token from localStorage or redux state
         const token = localStorage.getItem('token');
+        console.log('🛒 Clearing cart in database for logged in user');
+        
         // Clear cart in database
-        await fetch(`${process.env.NEXT_PUBLIC_API_URL}/cart/clear`, {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/cart/clear`, {
           method: 'DELETE',
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
         });
+        
+        if (!response.ok) {
+          throw new Error(`Failed to clear cart: ${response.status}`);
+        }
+        
+        console.log('🛒 Cart cleared in database successfully');
         setCartItems([]);
+        console.log('🛒 Cart items state cleared');
       } catch (error) {
-        console.error('Failed to clear cart:', error);
-        toast.error('Failed to clear cart');
+        console.error('❌ Failed to clear cart in database:', error);
+        // Still clear local cart even if API fails
+        setCartItems([]);
+        console.log('🛒 Cart items state cleared despite API error');
+        toast.error('Failed to sync cart clear with server, but cart cleared locally');
       } finally {
         setIsLoadingCart(false);
       }
     } else {
+      console.log('🛒 Clearing local storage cart for non-logged user');
       // Clear local storage cart
       localStorage.removeItem('cart');
       setCartItems([]);
+      console.log('🛒 Local cart cleared');
       
       // Track cart clear for unregistered users
       try {

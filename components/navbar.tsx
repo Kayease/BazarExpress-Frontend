@@ -641,7 +641,7 @@ export default function Navbar() {
       </header>
 
                            {/* Mobile Sticky Cart Bar */}
-        {cartItemCount > 0 && (
+        {cartItemCount > 0 && pathname !== '/payment' && (
           <div className="fixed bottom-4 left-4 right-4 bg-gradient-to-r from-brand-primary to-brand-primary-dark text-white p-3 z-50 md:hidden shadow-2xl rounded-2xl cart-slide-up group hover:shadow-[0_25px_50px_-12px_rgba(147,51,234,0.4)] transition-shadow duration-300">
             <div className="max-w-md mx-auto">
               <button

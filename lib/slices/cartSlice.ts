@@ -50,7 +50,9 @@ const cartSlice = createSlice({
       }
     },
     clearCart(state) {
+      console.log('🛒 Redux clearCart called, clearing', state.items.length, 'items');
       state.items = [];
+      console.log('🛒 Redux cart cleared, items count:', state.items.length);
     },
     // New action to handle cart tracking
     updateCartTracking(state, action: PayloadAction<{ user?: any; sessionId?: string }>) {

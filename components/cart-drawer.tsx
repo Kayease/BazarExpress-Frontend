@@ -5,6 +5,7 @@ import { X, ShoppingBag, LogIn, Plus, Minus, Trash2, Heart, ShoppingCart, MapPin
 import { getCartItems, updateCartQuantity, removeFromCart, getCartTotals } from "../lib/cart";
 import { useAppContext, useCartContext, useWishlistContext } from "@/components/app-provider";
 import { useAppSelector } from "@/lib/store";
+import { getValidToken } from "@/lib/auth-utils";
 import Image from "next/image";
 import toast from "react-hot-toast";
 import AddressModal from "./AddressModal";
@@ -50,6 +51,18 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
   const fetchUserAddresses = useCallback(async () => {
     try {
       setIsLoadingAddresses(true);
+      
+      // Get the authentication token
+      const token = getValidToken();
+      if (!token) {
+        console.warn('No valid token found, cannot fetch addresses');
+        setAddresses([]);
+        return;
+      }
+
+      // Set token as cookie for API route
+      document.cookie = `token=${token}; path=/; max-age=604800; SameSite=strict`;
+
       const response = await fetch(`/api/user/addresses`, {
         method: 'GET',
         headers: {
@@ -125,12 +138,19 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
     }
   }, [isOpen, cartItems.length, onClose]);
 
-  // Fetch user addresses when cart opens
+  // Fetch user addresses when cart opens or when user logs in
   useEffect(() => {
     if (isOpen && isLoggedIn && addresses.length === 0) {
       fetchUserAddresses();
     }
   }, [isOpen, isLoggedIn, addresses.length, fetchUserAddresses]);
+
+  // Fetch addresses immediately when user logs in (even if cart was already open)
+  useEffect(() => {
+    if (isLoggedIn && addresses.length === 0) {
+      fetchUserAddresses();
+    }
+  }, [isLoggedIn, addresses.length, fetchUserAddresses]);
 
   // Set default address when addresses are loaded
   useEffect(() => {
@@ -197,13 +217,22 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
       return;
     }
 
-    if (isLoggedIn) {
-      router.push("/payment");
-      onClose();
-    } else {
+    // Check if user is logged in (this should always be true now since button is only shown when logged in)
+    if (!isLoggedIn) {
       setIsLoginOpen(true);
       onClose();
+      return;
     }
+
+    // Check if address is selected
+    if (!selectedAddress) {
+      toast.error('Please select a delivery address first!');
+      return;
+    }
+
+    // Pass the selected address ID to the payment page
+    router.push(`/payment?addressId=${selectedAddress.id}`);
+    onClose();
   };
 
   const getAddressIcon = (type: string) => {
@@ -235,6 +264,15 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
   const handleAddAddress = async (newAddress: Omit<Address, 'id'>) => {
     try {
       setIsAddingAddress(true);
+
+      // Get the authentication token
+      const token = getValidToken();
+      if (!token) {
+        throw new Error('No valid token found');
+      }
+
+      // Set token as cookie for API route
+      document.cookie = `token=${token}; path=/; max-age=604800; SameSite=strict`;
 
       const response = await fetch(`/api/user/addresses`, {
         method: 'POST',
@@ -411,42 +449,59 @@ export default function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
         {/* Enhanced Cart Summary - Non-scrollable */}
         {cartItems.length > 0 && (
           <div className="bg-white border-t border-gray-100 p-4 flex-shrink-0 space-y-4">
-            {/* Delivery Address Card */}
-            <div className="bg-white rounded-lg p-3 border border-gray-200">
-              <div className="flex items-start justify-between">
-                <div className="flex items-start gap-2 flex-1">
-                  <MapPin className="h-4 w-4 text-purple-600 mt-0.5" />
-                  <div className="flex-1">
-                    <div className="text-sm font-semibold text-gray-900">Delivering to {selectedAddress?.type || 'Home'}</div>
-                    {selectedAddress ? (
-                      <div className="text-xs text-gray-600 mt-1 line-clamp-2">
-                        {formatAddress(selectedAddress)}
+            {/* Show delivery section only when logged in */}
+            {isLoggedIn ? (
+              <>
+                {/* Delivery Address Card */}
+                <div className="bg-white rounded-lg p-3 border border-gray-200">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-2 flex-1">
+                      <MapPin className="h-4 w-4 text-purple-600 mt-0.5" />
+                      <div className="flex-1">
+                        <div className="text-sm font-semibold text-gray-900">Delivering to {selectedAddress?.type || 'Home'}</div>
+                        {selectedAddress ? (
+                          <div className="text-xs text-gray-600 mt-1 line-clamp-2">
+                            {formatAddress(selectedAddress)}
+                          </div>
+                        ) : (
+                          <div className="text-xs text-gray-500 mt-1">No address selected</div>
+                        )}
                       </div>
-                    ) : (
-                      <div className="text-xs text-gray-500 mt-1">No address selected</div>
-                    )}
+                    </div>
+                    <button
+                      onClick={() => setShowAddressSelection(true)}
+                      className="text-sm text-brand-primary font-medium hover:text-brand-primary-dark transition-colors"
+                    >
+                      Change
+                    </button>
                   </div>
                 </div>
-                <button
-                  onClick={() => setShowAddressSelection(true)}
-                  className="text-sm text-brand-primary font-medium hover:text-brand-primary-dark transition-colors"
-                >
-                  Change
-                </button>
-              </div>
-            </div>
 
-            
-            {/* Action Button */}
-            <button
-              className="w-full bg-gradient-to-r from-brand-primary to-brand-primary-dark text-white font-bold py-3.5 rounded-xl hover:from-brand-primary-dark hover:to-purple-600 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 flex items-center justify-between px-4 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-lg"
-              onClick={handleProceed}
-            >
-              <span className="flex items-center">
-                Proceed To Pay
-              </span>
-              <ChevronRight className="h-4 w-4" />
-            </button>
+                {/* Action Button for logged in users */}
+                <button
+                  className="w-full bg-gradient-to-r from-brand-primary to-brand-primary-dark text-white font-bold py-3.5 rounded-xl hover:from-brand-primary-dark hover:to-purple-600 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 flex items-center justify-between px-4 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-lg"
+                  onClick={handleProceed}
+                  disabled={!selectedAddress}
+                >
+                  <span className="flex items-center">
+                    {!selectedAddress ? 'Select Address First' : 'Proceed To Pay'}
+                  </span>
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </>
+            ) : (
+              /* Login button for non-logged in users */
+              <button
+                className="w-full bg-gradient-to-r from-brand-primary to-brand-primary-dark text-white font-bold py-3.5 rounded-xl hover:from-brand-primary-dark hover:to-purple-600 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 flex items-center justify-center gap-2"
+                onClick={() => {
+                  setIsLoginOpen(true);
+                  onClose();
+                }}
+              >
+                <LogIn className="h-4 w-4" />
+                <span>Login to Continue</span>
+              </button>
+            )}
           </div>
         )}
       </div>
