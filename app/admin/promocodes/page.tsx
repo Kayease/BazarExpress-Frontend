@@ -698,7 +698,11 @@ export default function PromoCodesPage() {
                   className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
                   placeholder="Code"
                   value={form.code}
-                  onChange={e => setForm({ ...form, code: e.target.value })}
+                  onChange={e => {
+                    // Remove whitespace and convert to uppercase
+                    const cleanedValue = e.target.value.replace(/\s/g, '').toUpperCase();
+                    setForm({ ...form, code: cleanedValue });
+                  }}
                   required
                   disabled={formLoading}
                 />

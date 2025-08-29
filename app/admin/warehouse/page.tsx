@@ -417,6 +417,7 @@ export default function AdminWarehouse() {
             open={showModal}
             onClose={() => setShowModal(false)}
             warehouse={editing}
+            allWarehouses={warehouses}
             onSuccess={async (newWarehouse) => {
               setShowModal(false);
               await fetchWarehouses();

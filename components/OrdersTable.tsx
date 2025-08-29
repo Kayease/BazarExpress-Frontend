@@ -683,29 +683,71 @@ export default function OrdersTable({
   }
 
   // Function to validate status transitions for warehouse managers
-  const isValidStatusTransition = (currentStatus: string, newStatus: string): boolean => {
+  const isValidStatusTransition = (currentStatus: string, newStatus: string, paymentMethod?: string): boolean => {
     // Always allow the current status to be shown in dropdown
     if (currentStatus === newStatus) {
       return true
     }
 
+    // For CANCELLED status validation
+    if (newStatus === 'cancelled') {
+      // 1. Delivered orders (any payment method) cannot be cancelled
+      if (currentStatus === 'delivered') {
+        return false
+      }
+
+      // 2. Online payment orders (new/processing/shipped) cannot be cancelled
+      if (paymentMethod === 'online' && ['new', 'processing', 'shipped'].includes(currentStatus)) {
+        return false
+      }
+
+      // 3. Refunded orders (any payment method) cannot be cancelled
+      if (currentStatus === 'refunded') {
+        return false
+      }
+
+      // 4. Only Cash on Delivery orders (new/processing/shipped) can be cancelled
+      if (paymentMethod === 'cod' && ['new', 'processing', 'shipped'].includes(currentStatus)) {
+        return true
+      }
+
+      // If none of the valid conditions are met, it's invalid
+      return false
+    }
+
+    // For REFUNDED status validation
+    if (newStatus === 'refunded') {
+      // 1. Online payment orders (new/processing/shipped) can be refunded
+      if (paymentMethod === 'online' && ['new', 'processing', 'shipped'].includes(currentStatus)) {
+        return true
+      }
+
+      // 2. Delivered orders (any payment method) can be refunded
+      if (currentStatus === 'delivered') {
+        return true
+      }
+
+      // 3. Cancelled orders (any payment method) cannot be refunded
+      if (currentStatus === 'cancelled') {
+        return false
+      }
+
+      // 4. Cash on Delivery orders (new/processing/shipped) cannot be refunded
+      if (paymentMethod === 'cod' && ['new', 'processing', 'shipped'].includes(currentStatus)) {
+        return false
+      }
+
+      // If none of the valid conditions are met, it's invalid
+      return false
+    }
+
+    // For other status transitions, use the original logic
     // Define the status hierarchy (order matters)
     const statusHierarchy = ['new', 'processing', 'shipped', 'delivered']
 
     // If current status is cancelled or refunded, can't change to other statuses
     if (currentStatus === 'cancelled' || currentStatus === 'refunded') {
       return false
-    }
-
-    // If current status is delivered, can only change to refunded
-    if (currentStatus === 'delivered') {
-      return newStatus === 'refunded'
-    }
-
-    // Special cases for warehouse managers - can cancel or refund from active statuses
-    if (newStatus === 'cancelled' || newStatus === 'refunded') {
-      // Can cancel or refund from any active status (new, processing, shipped, delivered)
-      return ['new', 'processing', 'shipped', 'delivered'].includes(currentStatus)
     }
 
     // For normal progression, check hierarchy
@@ -722,7 +764,7 @@ export default function OrdersTable({
   }
 
   // Function to get available status options based on current status and user role
-  const getAvailableStatusOptions = (currentStatus: string, userRole: string): string[] => {
+  const getAvailableStatusOptions = (currentStatus: string, userRole: string, paymentMethod?: string): string[] => {
     // Super admin can see all options
     if (userRole === 'admin') {
       return statusOptions
@@ -738,8 +780,8 @@ export default function OrdersTable({
 
     // For warehouse managers, apply restrictions
     if (userRole === 'order_warehouse_management') {
-      const availableOptions = statusOptions.filter(option => isValidStatusTransition(currentStatus, option))
-      console.log(`[Status Transitions] Current: ${currentStatus}, Role: ${userRole}, Available:`, availableOptions)
+      const availableOptions = statusOptions.filter(option => isValidStatusTransition(currentStatus, option, paymentMethod))
+      console.log(`[Status Transitions] Current: ${currentStatus}, Role: ${userRole}, Payment: ${paymentMethod}, Available:`, availableOptions)
       return availableOptions
     }
 
@@ -766,12 +808,26 @@ export default function OrdersTable({
     }
 
     // Validate status progression for warehouse managers only
-    if (isWarehouseManager && !isValidStatusTransition(viewing.status, status)) {
-      // Provide more specific error messages based on the attempted transition
-      if (viewing.status === 'refunded' || viewing.status === 'cancelled') {
-        toast.error('Cannot change status of refunded or cancelled orders.')
-      } else if (status === 'cancelled' || status === 'refunded') {
-        toast.error('Invalid status transition. You can only cancel or refund active orders.')
+    if (isWarehouseManager && !isValidStatusTransition(viewing.status, status, viewing.paymentInfo.method)) {
+      // Provide more specific error messages based on the attempted transition and payment method
+      if (status === 'cancelled') {
+        if (viewing.status === 'delivered') {
+          toast.error('Delivered orders cannot be cancelled.')
+        } else if (viewing.paymentInfo.method === 'online' && ['new', 'processing', 'shipped'].includes(viewing.status)) {
+          toast.error('Online payment orders cannot be cancelled.')
+        } else if (viewing.status === 'refunded') {
+          toast.error('Refunded orders cannot be cancelled.')
+        } else {
+          toast.error('Only Cash on Delivery orders with status new, processing, or shipped can be cancelled.')
+        }
+      } else if (status === 'refunded') {
+        if (viewing.status === 'cancelled') {
+          toast.error('Cancelled orders cannot be refunded.')
+        } else if (viewing.paymentInfo.method === 'cod' && ['new', 'processing', 'shipped'].includes(viewing.status)) {
+          toast.error('Cash on Delivery orders cannot be refunded unless they are delivered.')
+        } else {
+          toast.error('Invalid refund request for current order status and payment method.')
+        }
       } else {
         toast.error('Invalid status transition. You can only move orders forward in the process.')
       }
@@ -1608,7 +1664,7 @@ export default function OrdersTable({
                         : ''
                     }
                   >
-                    {getAvailableStatusOptions(viewing?.status || '', user?.role || '').map(opt => (
+                    {getAvailableStatusOptions(viewing?.status || '', user?.role || '', viewing?.paymentInfo?.method).map(opt => (
                       <option key={opt} value={opt}>
                         {opt.charAt(0).toUpperCase() + opt.slice(1)}
                       </option>
@@ -1617,9 +1673,15 @@ export default function OrdersTable({
 
                   {/* Help text for warehouse managers */}
                   {user?.role === 'order_warehouse_management' && (
-                    <p className="text-xs text-gray-500 mt-1">
-                      Note: You can only move orders forward in the process. Cancelled and refunded orders cannot be changed.
-                    </p>
+                    <div className="text-xs text-gray-500 mt-1 space-y-1">
+                      <p><strong>Cancellation Rules:</strong></p>
+                      <p>• Only Cash on Delivery orders (new/processing/shipped) can be cancelled</p>
+                      <p>• Online payment and delivered orders cannot be cancelled</p>
+                      <p><strong>Refund Rules:</strong></p>
+                      <p>• Online payment orders (new/processing/shipped) can be refunded</p>
+                      <p>• Delivered orders (any payment method) can be refunded</p>
+                      <p>• Cash on Delivery orders (new/processing/shipped) cannot be refunded</p>
+                    </div>
                   )}
 
                   {/* Help text for delivery agents */}

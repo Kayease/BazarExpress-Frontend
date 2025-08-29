@@ -11,17 +11,19 @@ interface WarehouseFormModalProps {
   onClose: () => void;
   warehouse: Warehouse | null;
   onSuccess: (warehouse: Warehouse) => void;
+  allWarehouses?: Warehouse[];
 }
 
 
 
-export default function WarehouseFormModal({ open, onClose, warehouse, onSuccess }: WarehouseFormModalProps) {
+export default function WarehouseFormModal({ open, onClose, warehouse, onSuccess, allWarehouses = [] }: WarehouseFormModalProps) {
   const user = useAppSelector((state) => state.auth.user);
   const [form, setForm] = useState<Warehouse>(warehouse || defaultWarehouse);
   const [loading, setLoading] = useState(false);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number } | null>(null);
   const [pincodeInput, setPincodeInput] = useState('');
+  const [pincodeConflicts, setPincodeConflicts] = useState<{[key: string]: string}>({});
   const [marker, setMarker] = useState<any>(null);
   const [map, setMap] = useState<any>(null);
   const [autocomplete, setAutocomplete] = useState<any>(null);
@@ -186,21 +188,70 @@ export default function WarehouseFormModal({ open, onClose, warehouse, onSuccess
     }));
   };
 
-  const handleAddPincode = () => {
-    if (
-      pincodeInput.length === 6 &&
-      /^\d{6}$/.test(pincodeInput) &&
-      !form.deliverySettings.deliveryPincodes.includes(pincodeInput)
-    ) {
-      setForm(f => ({
-        ...f,
-        deliverySettings: {
-          ...f.deliverySettings,
-          deliveryPincodes: [...f.deliverySettings.deliveryPincodes, pincodeInput]
-        }
-      }));
-      setPincodeInput('');
+  // Check if a pincode is already used by another warehouse
+  const checkPincodeConflict = (pincode: string): string | null => {
+    const currentWarehouseId = warehouse?._id;
+    
+    for (const otherWarehouse of allWarehouses) {
+      // Skip the current warehouse being edited
+      if (currentWarehouseId && otherWarehouse._id === currentWarehouseId) {
+        continue;
+      }
+      
+      if (otherWarehouse.deliverySettings?.deliveryPincodes?.includes(pincode)) {
+        return otherWarehouse.name;
+      }
     }
+    return null;
+  };
+
+  // Check all current pincodes for conflicts
+  const checkAllPincodeConflicts = () => {
+    const conflicts: {[key: string]: string} = {};
+    
+    form.deliverySettings.deliveryPincodes.forEach(pincode => {
+      const conflictWarehouse = checkPincodeConflict(pincode);
+      if (conflictWarehouse) {
+        conflicts[pincode] = conflictWarehouse;
+      }
+    });
+    
+    setPincodeConflicts(conflicts);
+    return conflicts;
+  };
+
+  // Update conflicts when form changes or warehouses change
+  useEffect(() => {
+    if (allWarehouses.length > 0) {
+      checkAllPincodeConflicts();
+    }
+  }, [form.deliverySettings.deliveryPincodes, allWarehouses]);
+
+  const handleAddPincode = () => {
+    if (pincodeInput.length !== 6 || !/^\d{6}$/.test(pincodeInput)) {
+      toast.error('Please enter a valid 6-digit pincode');
+      return;
+    }
+
+    if (form.deliverySettings.deliveryPincodes.includes(pincodeInput)) {
+      toast.error('This pincode is already added to this warehouse');
+      return;
+    }
+
+    const conflictWarehouse = checkPincodeConflict(pincodeInput);
+    if (conflictWarehouse) {
+      toast.error(`Pincode ${pincodeInput} is already assigned to warehouse: ${conflictWarehouse}`);
+      return;
+    }
+
+    setForm(f => ({
+      ...f,
+      deliverySettings: {
+        ...f.deliverySettings,
+        deliveryPincodes: [...f.deliverySettings.deliveryPincodes, pincodeInput]
+      }
+    }));
+    setPincodeInput('');
   };
 
   const handleRemovePincode = (pincode: string) => {
@@ -215,6 +266,17 @@ export default function WarehouseFormModal({ open, onClose, warehouse, onSuccess
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Check for pincode conflicts before saving
+    const conflicts = checkAllPincodeConflicts();
+    if (Object.keys(conflicts).length > 0) {
+      const conflictMessages = Object.entries(conflicts).map(([pincode, warehouseName]) => 
+        `${pincode} (assigned to ${warehouseName})`
+      ).join(', ');
+      toast.error(`Cannot save: The following pincodes are already assigned to other warehouses: ${conflictMessages}`);
+      return;
+    }
+    
     // Require at least one pincode if delivery is enabled AND not 24x7 (custom hours)
     if (form.deliverySettings.isDeliveryEnabled && !form.deliverySettings.is24x7Delivery && form.deliverySettings.deliveryPincodes.length === 0) {
       toast.error("Please add at least one delivery pincode for custom hours warehouse.");
@@ -246,7 +308,18 @@ export default function WarehouseFormModal({ open, onClose, warehouse, onSuccess
         method,
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error("Failed to save warehouse");
+      
+      if (!res.ok) {
+        const errorData = await res.json();
+        if (errorData.error === "Pincode conflict detected" && errorData.conflicts) {
+          const conflictMessages = errorData.conflicts.map((conflict: any) => 
+            `${conflict.pincodes.join(', ')} (assigned to ${conflict.warehouseName})`
+          ).join('; ');
+          throw new Error(`Pincode conflicts detected: ${conflictMessages}`);
+        }
+        throw new Error(errorData.message || "Failed to save warehouse");
+      }
+      
       const data = await res.json();
       toast.success(warehouse ? "Warehouse updated" : "Warehouse added");
       onSuccess(data);
@@ -450,47 +523,88 @@ export default function WarehouseFormModal({ open, onClose, warehouse, onSuccess
                           <label className="block text-sm font-medium mb-1">Delivery Pincodes (Required for Custom Hours)</label>
                           <div className="space-y-2">
                             <div className="flex gap-2">
-                              <input
-                                type="text"
-                                maxLength={6}
-                                pattern="\d{6}"
-                                className="flex-1 border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                                placeholder="Enter 6-digit pincode"
-                                value={pincodeInput}
-                                onChange={(e) => setPincodeInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    handleAddPincode();
-                                  }
-                                }}
-                              />
+                              <div className="flex-1">
+                                <input
+                                  type="text"
+                                  maxLength={6}
+                                  pattern="\d{6}"
+                                  className={`w-full border rounded-lg p-3 focus:outline-none focus:ring-2 ${
+                                    pincodeInput.length === 6 && checkPincodeConflict(pincodeInput)
+                                      ? 'border-red-300 focus:ring-red-500 bg-red-50'
+                                      : 'border-gray-300 focus:ring-brand-primary'
+                                  }`}
+                                  placeholder="Enter 6-digit pincode"
+                                  value={pincodeInput}
+                                  onChange={(e) => setPincodeInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      handleAddPincode();
+                                    }
+                                  }}
+                                />
+                                {pincodeInput.length === 6 && checkPincodeConflict(pincodeInput) && (
+                                  <p className="text-xs text-red-600 mt-1">
+                                    ⚠️ Already assigned to: {checkPincodeConflict(pincodeInput)}
+                                  </p>
+                                )}
+                              </div>
                               <button
                                 type="button"
                                 onClick={handleAddPincode}
-                                className="px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-primary-dark"
+                                className="px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-primary-dark disabled:bg-gray-400 disabled:cursor-not-allowed"
                                 disabled={
                                   pincodeInput.length !== 6 ||
-                                  form.deliverySettings.deliveryPincodes.includes(pincodeInput)
+                                  form.deliverySettings.deliveryPincodes.includes(pincodeInput) ||
+                                  checkPincodeConflict(pincodeInput) !== null
                                 }
                               >
                                 Add
                               </button>
                             </div>
                             <div className="flex flex-wrap gap-2">
-                              {form.deliverySettings.deliveryPincodes.map((pincode) => (
-                                <div key={pincode} className="flex items-center gap-1 bg-gray-100 px-3 py-1 rounded-full">
-                                  <span className="text-sm">{pincode}</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemovePincode(pincode)}
-                                    className="text-red-500 hover:text-red-700"
+                              {form.deliverySettings.deliveryPincodes.map((pincode) => {
+                                const hasConflict = pincodeConflicts[pincode];
+                                return (
+                                  <div 
+                                    key={pincode} 
+                                    className={`flex items-center gap-1 px-3 py-1 rounded-full ${
+                                      hasConflict 
+                                        ? 'bg-red-100 border border-red-300' 
+                                        : 'bg-gray-100'
+                                    }`}
+                                    title={hasConflict ? `Conflict: Already assigned to ${hasConflict}` : ''}
                                   >
-                                    ×
-                                  </button>
-                                </div>
-                              ))}
+                                    <span className={`text-sm ${hasConflict ? 'text-red-700' : ''}`}>
+                                      {pincode}
+                                      {hasConflict && ' ⚠️'}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemovePincode(pincode)}
+                                      className="text-red-500 hover:text-red-700"
+                                    >
+                                      ×
+                                    </button>
+                                  </div>
+                                );
+                              })}
                             </div>
+                            {Object.keys(pincodeConflicts).length > 0 && (
+                              <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                                <p className="text-sm text-red-700 font-medium">⚠️ Pincode Conflicts Detected:</p>
+                                <ul className="text-sm text-red-600 mt-1">
+                                  {Object.entries(pincodeConflicts).map(([pincode, warehouseName]) => (
+                                    <li key={pincode}>
+                                      • {pincode} is already assigned to "{warehouseName}"
+                                    </li>
+                                  ))}
+                                </ul>
+                                <p className="text-xs text-red-500 mt-2">
+                                  Please remove conflicting pincodes before saving.
+                                </p>
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}
