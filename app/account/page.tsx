@@ -36,6 +36,7 @@ import {
   Tag,
   Check,
   Truck,
+  RefreshCw,
 } from "lucide-react";
 import { useAppSelector, useAppDispatch } from "../../lib/store";
 import { updateProfile, fetchProfile } from "../../lib/slices/authSlice";
@@ -47,6 +48,7 @@ const WISHLIST_UPDATED_EVENT = "wishlistUpdated";
 import toast from "react-hot-toast";
 import Image from "next/image";
 import OrderDetailModal from "../../components/OrderDetailModal";
+import ReturnItemsModal from "../../components/ReturnItemsModal";
 
 export default function Profile() {
   const user = useAppSelector((state) => state.auth.user);
@@ -69,7 +71,7 @@ export default function Profile() {
   const router = useRouter();
   const dispatch = useAppDispatch();
   // Address management moved to a separate page
-  
+
   const [fieldErrors, setFieldErrors] = useState({
     email: "",
     phone: "",
@@ -88,7 +90,14 @@ export default function Profile() {
   });
   const [selectedOrderForDetail, setSelectedOrderForDetail] = useState<any>(null);
   const [showOrderDetailModal, setShowOrderDetailModal] = useState(false);
-  
+
+  // Return modal state
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [selectedOrderForReturn, setSelectedOrderForReturn] = useState<any>(null);
+  const [selectedReturnItems, setSelectedReturnItems] = useState<string[]>([]);
+  const [returnReason, setReturnReason] = useState("");
+  const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
+  const [selectedPickupAddressIndex, setSelectedPickupAddressIndex] = useState(0);
 
 
   useEffect(() => {
@@ -146,12 +155,12 @@ export default function Profile() {
       const data = await response.json();
       if (Array.isArray(data.addresses)) {
         // Filter out any addresses that are missing essential data
-        const validAddresses = data.addresses.filter((address: any) => 
-          address && 
-          address.building && 
-          address.area && 
-          address.city && 
-          address.state && 
+        const validAddresses = data.addresses.filter((address: any) =>
+          address &&
+          address.building &&
+          address.area &&
+          address.city &&
+          address.state &&
           address.pincode &&
           address.name
         );
@@ -171,7 +180,8 @@ export default function Profile() {
   const fetchUserOrders = async () => {
     try {
       setIsLoadingOrders(true);
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/user`, {
+      // Fetch all orders by setting a high limit
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/user?limit=1000`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -184,10 +194,35 @@ export default function Profile() {
 
       const data = await response.json();
       const fetchedOrders = data.orders || [];
+
+      console.log('📊 Fetched orders data:', {
+        totalFetched: fetchedOrders.length,
+        currentOrdersToShow: ordersToShow,
+        orders: fetchedOrders.map((order: any) => ({
+          orderId: order.orderId,
+          status: order.status,
+          itemsCount: order.items?.length,
+          deliveredAt: order.deliveredAt,
+          items: order.items?.map((item: any) => ({
+            name: item.name,
+            returnable: item.returnable,
+            returnWindow: item.returnWindow
+          }))
+        }))
+      });
+
       setOrders(fetchedOrders);
-      
-      // Set initially displayed orders (last 10)
-      setDisplayedOrders(fetchedOrders.slice(0, ordersToShow));
+
+      // Reset pagination when fetching fresh orders
+      const initialOrdersToShow = 10;
+      setOrdersToShow(initialOrdersToShow);
+      setDisplayedOrders(fetchedOrders.slice(0, initialOrdersToShow));
+
+      console.log('Orders state updated:', {
+        totalOrders: fetchedOrders.length,
+        initialOrdersToShow,
+        displayedCount: fetchedOrders.slice(0, initialOrdersToShow).length
+      });
 
       // Calculate order statistics
       const totalOrders = fetchedOrders.length;
@@ -211,12 +246,24 @@ export default function Profile() {
 
   // Load more orders function
   const handleLoadMoreOrders = () => {
+    console.log('Load More clicked - Current state:', {
+      ordersToShow,
+      totalOrders: orders.length,
+      displayedOrders: displayedOrders.length
+    });
+
     setIsLoadingMoreOrders(true);
     setTimeout(() => {
       const newOrdersToShow = ordersToShow + 10;
       setOrdersToShow(newOrdersToShow);
       setDisplayedOrders(orders.slice(0, newOrdersToShow));
       setIsLoadingMoreOrders(false);
+
+      console.log('Load More completed - New state:', {
+        newOrdersToShow,
+        totalOrders: orders.length,
+        newDisplayedCount: orders.slice(0, newOrdersToShow).length
+      });
     }, 500); // Small delay for better UX
   };
 
@@ -227,20 +274,334 @@ export default function Profile() {
     }
   }, [activeTab, token]);
 
-  // Fetch orders when orders tab is active or on component mount
+  // Fetch orders when component mounts or when orders tab becomes active
   useEffect(() => {
     if (token && user) {
-      fetchUserOrders();
+      // Fetch orders on initial load or when switching to orders tab
+      if (activeTab === "orders" || orders.length === 0) {
+        fetchUserOrders();
+      }
     }
-  }, [token, user]);
+  }, [token, user, activeTab]);
 
-  // Fetch orders again when orders tab is active (to ensure fresh data)
-  useEffect(() => {
-    if (activeTab === "orders" && token && user) {
-      fetchUserOrders();
+  // Check if order is eligible for return
+  const isOrderEligibleForReturn = (order: any) => {
+    console.log('🔍 Checking return eligibility for order:', {
+      orderId: order?.orderId,
+      status: order?.status,
+      statusLower: order?.status?.toLowerCase(),
+      itemsCount: order?.items?.length,
+      deliveredAt: order?.deliveredAt,
+      actualDeliveryDate: order?.actualDeliveryDate,
+      deliveryDateToUse: order?.deliveredAt || order?.actualDeliveryDate,
+      fullOrder: order
+    });
+
+    if (!order || !order.status) {
+      console.log('❌ Order or status missing');
+      return false;
     }
-  }, [activeTab, token, user]);
 
+    // Define non-returnable statuses
+    const nonReturnableStatuses = ['new', 'processing', 'shipped', 'refunded', 'cancelled'];
+
+    // Check if order status is in non-returnable list
+    if (nonReturnableStatuses.includes(order.status.toLowerCase())) {
+      console.log(`❌ Order ${order.orderId} not eligible: status "${order.status}" is not returnable`);
+      return false;
+    }
+
+    // ONLY delivered orders can be returned
+    if (order.status.toLowerCase() !== 'delivered') {
+      console.log(`❌ Order ${order.orderId} not eligible: status "${order.status}" is not delivered`);
+      return false;
+    }
+
+    // Check if order has items
+    if (!order.items || order.items.length === 0) {
+      console.log(`❌ Order ${order.orderId} not eligible: no items`);
+      return false;
+    }
+
+    // Check if delivery date exists (check both deliveredAt and actualDeliveryDate)
+    const deliveryDate = order.deliveredAt || order.actualDeliveryDate;
+    if (!deliveryDate) {
+      console.log(`❌ Order ${order.orderId} not eligible: no delivery date found`);
+      return false;
+    }
+
+    // Check if any individual product is eligible for return
+    const hasAnyReturnableProduct = order.items.some((item: any) => {
+      console.log('🔍 Checking product:', {
+        name: item.name,
+        returnable: item.returnable,
+        returnWindow: item.returnWindow,
+        productReturnable: item.productId?.returnable,
+        productReturnWindow: item.productId?.returnWindow,
+        fullItem: item
+      });
+
+      // Check if product is returnable (default to true if property doesn't exist)
+      // First check if the property exists on the item itself, then on the productId
+      const itemReturnable = item.returnable !== undefined ? item.returnable : item.productId?.returnable;
+      const isReturnable = itemReturnable !== false; // Only false if explicitly set to false
+      if (!isReturnable) {
+        console.log(`❌ Product ${item.name} not returnable - returnable property is:`, itemReturnable);
+        return false;
+      }
+
+      const actualDeliveryDate = new Date(order.deliveredAt || order.actualDeliveryDate);
+      const currentDate = new Date();
+      const daysSinceDelivery = Math.floor((currentDate.getTime() - actualDeliveryDate.getTime()) / (1000 * 3600 * 24));
+
+      // First check if the property exists on the item itself, then on the productId
+      const productReturnWindow = item.returnWindow !== undefined ? item.returnWindow : item.productId?.returnWindow;
+
+      // If no return window is specified, the item is not returnable
+      if (productReturnWindow === undefined || productReturnWindow === null) {
+        console.log(`❌ Product ${item.name} has no return window specified`);
+        return false;
+      }
+
+      const isWithinReturnPeriod = daysSinceDelivery <= productReturnWindow;
+      console.log(`✅ Product ${item.name} return check:`, {
+        daysSinceDelivery,
+        productReturnWindow,
+        isWithinReturnPeriod,
+        deliveryDate: actualDeliveryDate.toISOString(),
+        currentDate: currentDate.toISOString()
+      });
+
+      return isWithinReturnPeriod;
+    });
+
+    console.log(`🎯 Order ${order.orderId} final result: has returnable products = ${hasAnyReturnableProduct}`);
+    return hasAnyReturnableProduct;
+  };
+
+  // Check if any items in order are eligible for return
+  const hasReturnableItems = (order: any) => {
+    console.log('🚀 hasReturnableItems called for order:', order?.orderId);
+    const result = isOrderEligibleForReturn(order);
+    console.log('🚀 hasReturnableItems result:', result);
+    return result;
+  };
+
+  // Get returnable items from an order
+  const getReturnableItems = (order: any) => {
+    console.log('🔍 getReturnableItems called for order:', order?.orderId);
+    console.log('📦 Order items:', order?.items?.map((item: any) => ({
+      name: item.name,
+      returnable: item.returnable,
+      returnWindow: item.returnWindow,
+      fullItem: item
+    })));
+
+    const deliveryDate = order.deliveredAt || order.actualDeliveryDate;
+    if (!order || !order.items || order.status.toLowerCase() !== 'delivered' || !deliveryDate) {
+      console.log('❌ Order not eligible for returns:', {
+        hasOrder: !!order,
+        hasItems: !!order?.items,
+        status: order?.status,
+        deliveryDate
+      });
+      return [];
+    }
+
+    const actualDeliveryDate = new Date(deliveryDate);
+    const currentDate = new Date();
+    const daysSinceDelivery = Math.floor((currentDate.getTime() - actualDeliveryDate.getTime()) / (1000 * 3600 * 24));
+
+    console.log('📅 Delivery calculation:', {
+      deliveryDate,
+      actualDeliveryDate: actualDeliveryDate.toISOString(),
+      currentDate: currentDate.toISOString(),
+      daysSinceDelivery
+    });
+
+    const returnableItems = order.items.filter((item: any) => {
+      console.log(`🔍 Processing item: ${item.name}`, {
+        fullItem: item,
+        productId: item.productId,
+        itemReturnable: item.returnable,
+        itemReturnWindow: item.returnWindow,
+        productReturnable: item.productId?.returnable,
+        productReturnWindow: item.productId?.returnWindow,
+        hasReturnableProperty: item.hasOwnProperty('returnable'),
+        hasReturnWindowProperty: item.hasOwnProperty('returnWindow'),
+        productHasReturnableProperty: item.productId?.hasOwnProperty('returnable'),
+        productHasReturnWindowProperty: item.productId?.hasOwnProperty('returnWindow')
+      });
+
+      // Check if product is returnable
+      // First check if the property exists on the item itself, then on the productId
+      const itemReturnable = item.returnable !== undefined ? item.returnable : item.productId?.returnable;
+      const isReturnable = itemReturnable !== false; // Default to true if not explicitly false
+      
+      if (!isReturnable) {
+        console.log(`❌ Item ${item.name} not returnable - returnable property is:`, itemReturnable);
+        return false;
+      }
+
+      // Check if return window has expired
+      // First check if the property exists on the item itself, then on the productId
+      const itemReturnWindow = item.returnWindow !== undefined ? item.returnWindow : item.productId?.returnWindow;
+      const productReturnWindow = itemReturnWindow;
+      
+      // If no return window is specified, the item is not returnable
+      if (productReturnWindow === undefined || productReturnWindow === null) {
+        console.log(`❌ Item ${item.name} has no return window specified`);
+        return false;
+      }
+      
+      const isWithinReturnPeriod = daysSinceDelivery <= productReturnWindow;
+
+      console.log(`🔍 Item ${item.name} return window check:`, {
+        itemReturnable,
+        itemReturnWindow,
+        productReturnWindow,
+        daysSinceDelivery,
+        isWithinReturnPeriod,
+        willBeIncluded: isWithinReturnPeriod
+      });
+
+      return isWithinReturnPeriod;
+    });
+
+    console.log('✅ Final returnable items:', returnableItems.map((item: any) => ({
+      name: item.name,
+      itemReturnWindow: item.returnWindow,
+      productReturnWindow: item.productId?.returnWindow,
+      finalReturnWindow: item.returnWindow !== undefined ? item.returnWindow : item.productId?.returnWindow,
+      itemReturnable: item.returnable,
+      productReturnable: item.productId?.returnable,
+      finalReturnable: item.returnable !== undefined ? item.returnable : item.productId?.returnable
+    })));
+
+    // Flatten the properties so the modal can access them directly
+    const flattenedItems = returnableItems.map((item: any) => ({
+      ...item,
+      // Ensure returnWindow and returnable are available directly on the item
+      returnWindow: item.returnWindow !== undefined ? item.returnWindow : item.productId?.returnWindow,
+      returnable: item.returnable !== undefined ? item.returnable : item.productId?.returnable
+    }));
+
+    console.log('🔍 Returning flattened items:', flattenedItems.map((item: any) => ({
+      name: item.name,
+      returnWindow: item.returnWindow,
+      returnable: item.returnable
+    })));
+
+    return flattenedItems;
+  };
+
+  // Get return window status for display
+  const getReturnWindowStatus = (order: any) => {
+    const deliveryDate = order.deliveredAt || order.actualDeliveryDate;
+    if (!order || order.status.toLowerCase() !== 'delivered' || !deliveryDate) {
+      return null;
+    }
+
+    const actualDeliveryDate = new Date(deliveryDate);
+    const currentDate = new Date();
+    const daysSinceDelivery = Math.floor((currentDate.getTime() - actualDeliveryDate.getTime()) / (1000 * 3600 * 24));
+
+    // Find the maximum return window among all returnable items
+    const maxReturnWindow = order.items?.reduce((max: number, item: any) => {
+      const isReturnable = item.returnable !== false; // Only false if explicitly set to false
+      if (isReturnable) {
+        const itemReturnWindow = item.returnWindow;
+        return Math.max(max, itemReturnWindow);
+      }
+      return max;
+    }, 0);
+
+    const daysLeft = maxReturnWindow - daysSinceDelivery;
+
+    if (daysLeft > 0) {
+      return {
+        status: 'active',
+        daysLeft,
+        message: `${daysLeft} day${daysLeft !== 1 ? 's' : ''} left to return`
+      };
+    } else {
+      return {
+        status: 'expired',
+        daysLeft: 0,
+        message: 'Return window expired'
+      };
+    }
+  };
+
+  // Handle return initiation
+  const handleInitiateReturn = (order: any) => {
+    setSelectedOrderForReturn(order);
+    setSelectedReturnItems([]);
+    setReturnReason("");
+    setShowReturnModal(true);
+
+    // Fetch user addresses for pickup if not already loaded
+    if (savedAddresses.length === 0 && token) {
+      fetchUserAddresses();
+    }
+  };
+
+  // Handle return item selection
+  const handleReturnItemToggle = (itemId: string) => {
+    setSelectedReturnItems(prev =>
+      prev.includes(itemId)
+        ? prev.filter(id => id !== itemId)
+        : [...prev, itemId]
+    );
+  };
+
+  // Handle return submission
+  const handleSubmitReturn = async () => {
+    if (selectedReturnItems.length === 0) {
+      toast.error("Please select at least one item to return");
+      return;
+    }
+
+    if (!returnReason.trim()) {
+      toast.error("Please provide a reason for return");
+      return;
+    }
+
+    setIsSubmittingReturn(true);
+
+    try {
+      const pickupAddress = savedAddresses[selectedPickupAddressIndex];
+
+      // TODO: Implement actual return API call
+      console.log('Submitting return for order:', selectedOrderForReturn._id);
+      console.log('Returning items:', selectedReturnItems);
+      console.log('Return reason:', returnReason);
+      console.log('Pickup address:', pickupAddress);
+
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      toast.success("Return request submitted successfully!");
+      handleCloseReturnModal();
+
+      // Refresh orders to show updated status
+      fetchUserOrders();
+    } catch (error) {
+      console.error('Error submitting return:', error);
+      toast.error("Failed to submit return request. Please try again.");
+    } finally {
+      setIsSubmittingReturn(false);
+    }
+  };
+
+  // Close return modal
+  const handleCloseReturnModal = () => {
+    setShowReturnModal(false);
+    setSelectedOrderForReturn(null);
+    setSelectedReturnItems([]);
+    setReturnReason("");
+    setSelectedPickupAddressIndex(0);
+  };
 
 
   const handleChange = (
@@ -259,8 +620,8 @@ export default function Profile() {
     const emailError = !formData.email.trim()
       ? "Email is required"
       : !/^\S+@\S+\.\S+$/.test(formData.email.trim())
-      ? "Invalid email format"
-      : "";
+        ? "Invalid email format"
+        : "";
     const phoneError = formData.phone.trim()
       ? !/^\d{10}$/.test(formData.phone.trim())
         ? "Phone must be 10 digits"
@@ -320,7 +681,7 @@ export default function Profile() {
   const handleMoveToCart = async (item: any) => {
     console.log('handleMoveToCart called with item:', item);
     console.log('Current cart items:', cartItems);
-    
+
     // Check warehouse validation before moving to cart
     if (!canAddToCart(item, cartItems)) {
       console.log('Blocked: Cannot add product due to warehouse conflict');
@@ -332,13 +693,13 @@ export default function Profile() {
       }
       return;
     }
-    
+
     try {
       // Use the new moveToCartFromWishlist function
       await moveToCartFromWishlist(item, (id: string, variantId?: string) => {
         removeFromWishlistContext(id, variantId);
       });
-      
+
       // Check if product already exists in cart to show appropriate message
       const existingCartItem = cartItems.find(cartItem => {
         const idMatch = (cartItem.id || cartItem._id) === (item.id || item._id);
@@ -351,11 +712,11 @@ export default function Profile() {
       if (existingCartItem) {
         //toast.success(`${item.name}${item.variantName ? ` (${item.variantName})` : ''} quantity increased in cart`);
       } else {
-       // toast.success(`${item.name}${item.variantName ? ` (${item.variantName})` : ''} added to cart`);
+        // toast.success(`${item.name}${item.variantName ? ` (${item.variantName})` : ''} added to cart`);
       }
     } catch (error: any) {
       console.error('Error moving item to cart:', error);
-      
+
       // Handle specific warehouse conflict errors
       if (error && typeof error === 'object' && error.isWarehouseConflict) {
         toast.error(error.message || 'Cannot add product due to warehouse conflict');
@@ -415,16 +776,16 @@ export default function Profile() {
                       {user.role === "admin"
                         ? "Administrator"
                         : user.role === "product_inventory_management"
-                        ? "Product & Inventory Manager"
-                        : user.role === "order_warehouse_management"
-                        ? "Order & Warehouse Manager"
-                        : user.role === "marketing_content_manager"
-                        ? "Marketing & Content Manager"
-                        : user.role === "customer_support_executive"
-                        ? "Customer Support Executive"
-                        : user.role === "report_finance_analyst"
-                        ? "Report & Finance Analyst"
-                        : "Premium Customer"}
+                          ? "Product & Inventory Manager"
+                          : user.role === "order_warehouse_management"
+                            ? "Order & Warehouse Manager"
+                            : user.role === "marketing_content_manager"
+                              ? "Marketing & Content Manager"
+                              : user.role === "customer_support_executive"
+                                ? "Customer Support Executive"
+                                : user.role === "report_finance_analyst"
+                                  ? "Report & Finance Analyst"
+                                  : "Premium Customer"}
                     </span>
                   </div>
                 </div>
@@ -473,11 +834,10 @@ export default function Profile() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as any)}
-                  className={`flex items-center justify-center space-x-1 sm:space-x-2 px-2 sm:px-3 lg:px-6 py-3 sm:py-4 text-sm sm:text-base font-medium transition-all duration-200 flex-1 sm:flex-none min-w-0 ${
-                    activeTab === tab.id
+                  className={`flex items-center justify-center space-x-1 sm:space-x-2 px-2 sm:px-3 lg:px-6 py-3 sm:py-4 text-sm sm:text-base font-medium transition-all duration-200 flex-1 sm:flex-none min-w-0 ${activeTab === tab.id
                       ? "text-brand-primary border-b-2 border-brand-primary bg-brand-primary/5"
                       : "text-gray-600 hover:text-brand-primary hover:bg-gray-50"
-                  }`}
+                    }`}
                 >
                   <tab.icon className="w-5 h-5 sm:w-5 sm:h-5 flex-shrink-0" />
                   <span className="hidden sm:inline truncate">{tab.label}</span>
@@ -635,7 +995,7 @@ export default function Profile() {
                       <ShoppingCart className="w-5 h-5 mr-2" />
                       Shopping Cart ({cartCount} items)
                     </h2>
- 
+
                   </div>
 
                   {cartItems.length === 0 ? (
@@ -727,11 +1087,10 @@ export default function Profile() {
                                   <button
                                     onClick={() => handleRemoveFromCart(item.id || item._id, item.variantId)}
                                     disabled={isItemBeingRemoved(item.id || item._id, item.variantId)}
-                                    className={`p-1.5 rounded-lg transition-colors ${
-                                      isItemBeingRemoved(item.id || item._id, item.variantId)
+                                    className={`p-1.5 rounded-lg transition-colors ${isItemBeingRemoved(item.id || item._id, item.variantId)
                                         ? "text-gray-400 cursor-not-allowed"
                                         : "text-red-500 hover:bg-red-50"
-                                    }`}
+                                      }`}
                                   >
                                     <Trash2 className="w-4 h-4" />
                                   </button>
@@ -802,11 +1161,10 @@ export default function Profile() {
                                 <button
                                   onClick={() => handleRemoveFromCart(item.id || item._id, item.variantId)}
                                   disabled={isItemBeingRemoved(item.id || item._id, item.variantId)}
-                                  className={`p-1.5 rounded-lg transition-colors ${
-                                    isItemBeingRemoved(item.id || item._id, item.variantId)
+                                  className={`p-1.5 rounded-lg transition-colors ${isItemBeingRemoved(item.id || item._id, item.variantId)
                                       ? "text-gray-400 cursor-not-allowed"
                                       : "text-red-500 hover:bg-red-50"
-                                  }`}
+                                    }`}
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </button>
@@ -905,11 +1263,10 @@ export default function Profile() {
                                     {[...Array(5)].map((_, i) => (
                                       <Star
                                         key={i}
-                                        className={`w-2.5 h-2.5 sm:w-3 sm:h-3 ${
-                                          i < (item.rating || 0)
+                                        className={`w-2.5 h-2.5 sm:w-3 sm:h-3 ${i < (item.rating || 0)
                                             ? "text-yellow-400 fill-current"
                                             : "text-gray-300"
-                                        }`}
+                                          }`}
                                       />
                                     ))}
                                   </div>
@@ -977,11 +1334,10 @@ export default function Profile() {
                                   {[...Array(5)].map((_, i) => (
                                     <Star
                                       key={i}
-                                      className={`w-3 h-3 ${
-                                        i < (item.rating || 0)
+                                      className={`w-3 h-3 ${i < (item.rating || 0)
                                           ? "text-yellow-400 fill-current"
                                           : "text-gray-300"
-                                      }`}
+                                        }`}
                                     />
                                   ))}
                                 </div>
@@ -1091,7 +1447,7 @@ export default function Profile() {
                                 <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded">{address.addressLabel}</span>
                               )}
                             </div>
-                            
+
                             {/* Address Details */}
                             <div className="text-gray-600 text-xs sm:text-sm space-y-1">
                               {address.building && <p>{address.building}{address.floor ? `, Floor ${address.floor}` : ''}</p>}
@@ -1192,18 +1548,19 @@ export default function Profile() {
                                   <div className="text-base font-bold text-gray-900">
                                     ₹{order.pricing?.total?.toFixed(2) || '0.00'}
                                   </div>
-                                  <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full mt-1 ${
-                                    order.status === 'delivered' ? 'bg-green-100 text-green-800' :
-                                    order.status === 'shipped' ? 'bg-blue-100 text-blue-800' :
-                                    order.status === 'processing' ? 'bg-yellow-100 text-yellow-800' :
-                                    order.status === 'cancelled' ? 'bg-red-100 text-red-800' :
-                                    'bg-gray-100 text-gray-800'
-                                  }`}>
+                                  <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full mt-1 ${order.status === 'delivered' ? 'bg-green-100 text-green-800' :
+                                      order.status === 'shipped' ? 'bg-blue-100 text-blue-800' :
+                                        order.status === 'processing' ? 'bg-yellow-100 text-yellow-800' :
+                                          order.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                                            'bg-gray-100 text-gray-800'
+                                    }`}>
                                     {order.status?.charAt(0).toUpperCase() + order.status?.slice(1)}
                                   </span>
+                                  {/* Return Window Status - Mobile */}
+
                                 </div>
                               </div>
-                              
+
                               <div className="flex items-center space-x-3 mb-2">
                                 <div className="flex -space-x-2">
                                   {order.items?.slice(0, 3).map((item: any, index: number) => (
@@ -1236,113 +1593,155 @@ export default function Profile() {
                                   </p>
                                 </div>
                               </div>
-                              
-                              <button
-                                onClick={() => handleViewOrderDetails(order)}
-                                className="w-full text-brand-primary hover:text-brand-primary-dark font-medium text-sm flex items-center justify-center py-1.5 border border-brand-primary rounded-lg hover:bg-brand-primary/5 transition-colors"
-                              >
-                                View Details
-                                <ArrowRight className="w-3 h-3 ml-1" />
-                              </button>
+
+                              {/* Return Items Button - Mobile Layout */}
+                              <div className="flex space-x-2">
+                                {(() => {
+                                  const isReturnable = hasReturnableItems(order);
+                                  console.log(`📱 Mobile: Order ${order.orderId} return button check:`, isReturnable);
+                                  return isReturnable;
+                                })() && (
+                                    <button
+                                      onClick={() => handleInitiateReturn(order)}
+                                      className="flex-1 text-orange-600 hover:text-orange-700 font-medium text-sm flex items-center justify-center py-1.5 border border-orange-600 rounded-lg hover:bg-orange-50 transition-colors"
+                                    >
+                                      <RefreshCw className="w-3 h-3 mr-1" />
+                                      Return Items
+                                    </button>
+                                  )}
+
+                                <button
+                                  onClick={() => handleViewOrderDetails(order)}
+                                  className="flex-1 text-brand-primary hover:text-brand-primary-dark font-medium text-sm flex items-center justify-center py-1.5 border border-brand-primary rounded-lg hover:bg-brand-primary/5 transition-colors"
+                                >
+                                  View Details
+                                  <ArrowRight className="w-3 h-3 ml-1" />
+                                </button>
+                              </div>
                             </div>
                           </div>
 
                           {/* Desktop Layout */}
                           <div className="hidden sm:block p-3 sm:p-4">
                             <div className="flex items-center justify-between mb-2 sm:mb-3">
-                            <div>
+                              <div>
                                 <h3 className="font-semibold text-gray-900 text-sm">
-                                Order #{order.orderId}
-                              </h3>
-                              <p className="text-xs text-gray-500">
-                                {new Date(order.createdAt).toLocaleDateString('en-IN', {
-                                  year: 'numeric',
-                                  month: 'long',
-                                  day: 'numeric'
-                                })}
-                              </p>
-                            </div>
-                            <div className="text-right">
-                              <div className="text-base font-bold text-gray-900">
-                                ₹{order.pricing?.total?.toFixed(2) || '0.00'}
+                                  Order #{order.orderId}
+                                </h3>
+                                <p className="text-xs text-gray-500">
+                                  {new Date(order.createdAt).toLocaleDateString('en-IN', {
+                                    year: 'numeric',
+                                    month: 'long',
+                                    day: 'numeric'
+                                  })}
+                                </p>
                               </div>
-                              <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${
-                                order.status === 'delivered' ? 'bg-green-100 text-green-800' :
-                                order.status === 'shipped' ? 'bg-blue-100 text-blue-800' :
-                                order.status === 'processing' ? 'bg-yellow-100 text-yellow-800' :
-                                order.status === 'cancelled' ? 'bg-red-100 text-red-800' :
-                                'bg-gray-100 text-gray-800'
-                              }`}>
-                                {order.status?.charAt(0).toUpperCase() + order.status?.slice(1)}
-                              </span>
+                              <div className="text-right">
+                                <div className="text-base font-bold text-gray-900">
+                                  ₹{order.pricing?.total?.toFixed(2) || '0.00'}
+                                </div>
+                                <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${order.status === 'delivered' ? 'bg-green-100 text-green-800' :
+                                    order.status === 'shipped' ? 'bg-blue-100 text-blue-800' :
+                                      order.status === 'processing' ? 'bg-yellow-100 text-yellow-800' :
+                                        order.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                                          'bg-gray-100 text-gray-800'
+                                  }`}>
+                                  {order.status?.charAt(0).toUpperCase() + order.status?.slice(1)}
+                                </span>
+                              </div>
                             </div>
-                          </div>
-                          
-                          <div className="flex items-center space-x-4">
-                            <div className="flex -space-x-2">
-                              {order.items?.slice(0, 3).map((item: any, index: number) => (
-                                <div
-                                  key={index}
-                                  className="w-8 h-8 rounded-lg bg-gray-100 border-2 border-white flex items-center justify-center overflow-hidden"
-                                >
-                                  {item.image ? (
-                                    <Image
-                                      src={item.image}
-                                      alt={item.name}
-                                      width={32}
-                                      height={32}
-                                      className="object-cover w-full h-full"
-                                    />
-                                  ) : (
-                                    <Package className="w-4 h-4 text-gray-400" />
+
+                            <div className="flex items-center space-x-4">
+                              <div className="flex -space-x-2">
+                                {order.items?.slice(0, 3).map((item: any, index: number) => (
+                                  <div
+                                    key={index}
+                                    className="w-8 h-8 rounded-lg bg-gray-100 border-2 border-white flex items-center justify-center overflow-hidden"
+                                  >
+                                    {item.image ? (
+                                      <Image
+                                        src={item.image}
+                                        alt={item.name}
+                                        width={32}
+                                        height={32}
+                                        className="object-cover w-full h-full"
+                                      />
+                                    ) : (
+                                      <Package className="w-4 h-4 text-gray-400" />
+                                    )}
+                                  </div>
+                                ))}
+                                {order.items?.length > 3 && (
+                                  <div className="w-8 h-8 rounded-lg bg-gray-200 border-2 border-white flex items-center justify-center text-xs font-medium text-gray-600">
+                                    +{order.items.length - 3}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex-1">
+                                <p className="text-sm text-gray-600">
+                                  {order.items?.length} item{order.items?.length !== 1 ? 's' : ''}
+                                </p>
+                              </div>
+                              <div className="flex items-center space-x-5">
+                                {/* Return Items Button - Desktop Layout */}
+                                {(() => {
+                                  const isReturnable = hasReturnableItems(order);
+                                  console.log(`💻 Desktop: Order ${order.orderId} return button check:`, isReturnable);
+                                  return isReturnable;
+                                })() && (
+                                    <button
+                                      onClick={() => handleInitiateReturn(order)}
+                                      className="text-orange-600 hover:text-orange-700 font-medium text-sm flex items-center"
+                                    >
+                                      <RefreshCw className="w-3 h-3 mr-1" />
+                                      Return
+                                    </button>
                                   )}
-                                </div>
-                              ))}
-                              {order.items?.length > 3 && (
-                                <div className="w-8 h-8 rounded-lg bg-gray-200 border-2 border-white flex items-center justify-center text-xs font-medium text-gray-600">
-                                  +{order.items.length - 3}
-                                </div>
-                              )}
-                            </div>
-                            <div className="flex-1">
-                              <p className="text-sm text-gray-600">
-                                {order.items?.length} item{order.items?.length !== 1 ? 's' : ''}
-                              </p>
-                            </div>
-                            <button
-                              onClick={() => handleViewOrderDetails(order)}
-                              className="text-brand-primary hover:text-brand-primary-dark font-medium text-sm flex items-center"
-                            >
-                              View Details
-                              <ArrowRight className="w-3 h-3 ml-1" />
-                            </button>
+                                <button
+                                  onClick={() => handleViewOrderDetails(order)}
+                                  className="text-brand-primary hover:text-brand-primary-dark font-medium text-sm flex items-center"
+                                >
+                                  View Details
+                                  <ArrowRight className="w-3 h-3 ml-1" />
+                                </button>
+                              </div>
                             </div>
                           </div>
                         </div>
                       ))}
-                      
-                      {displayedOrders.length < orders.length && (
-                        <div className="text-center pt-2 sm:pt-3">
-                          <button
+
+                      {(displayedOrders.length < orders.length || ordersToShow < orders.length) && (
+                        <div className="text-center pt-4 sm:pt-6">
+                          <div
                             onClick={handleLoadMoreOrders}
-                            disabled={isLoadingMoreOrders}
-                            className="inline-flex items-center justify-center bg-gradient-to-r from-brand-primary to-brand-primary-dark text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base w-full sm:w-auto"
+                            className="cursor-pointer group flex flex-col items-center space-y-2 text-brand-primary hover:text-brand-primary-dark transition-colors duration-200"
                           >
                             {isLoadingMoreOrders ? (
                               <>
-                                <div className="animate-spin rounded-full h-3 sm:h-4 sm:w-4 border-b-2 border-white mr-2"></div>
-                                Loading...
+                                <div className="animate-spin rounded-full h-5 w-5 border-2 border-brand-primary border-t-transparent"></div>
+                                <span className="text-sm font-medium">Loading more orders...</span>
                               </>
                             ) : (
                               <>
-                                Load More Orders ({orders.length - displayedOrders.length} remaining)
-                                <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4 ml-2" />
+                                <span className="text-sm font-medium group-hover:underline">
+                                  Load More Orders
+                                </span>
+                                <div className="animate-bounce">
+                                  <svg
+                                    className="w-5 h-5 text-brand-primary group-hover:text-brand-primary-dark transition-colors duration-200"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                                  </svg>
+                                </div>
                               </>
                             )}
-                          </button>
+                          </div>
                         </div>
                       )}
-                      
+
                       {/* Order count at bottom */}
                       <div className="text-center pt-2 sm:pt-3">
                         <p className="text-sm text-gray-500">
@@ -1360,26 +1759,26 @@ export default function Profile() {
               {/* Top row - Two stats */}
               <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:gap-6">
                 <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-lg p-3 sm:p-4 lg:p-6 text-white">
-                <div className="flex items-center justify-between">
-                  <div>
+                  <div className="flex items-center justify-between">
+                    <div>
                       <p className="text-blue-100 text-xs sm:text-sm">Total Orders</p>
                       <p className="text-xl sm:text-2xl lg:text-3xl font-bold">{orderStats.totalOrders}</p>
-                  </div>
+                    </div>
                     <div className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 bg-white/20 rounded-xl flex items-center justify-center">
                       <Package className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6" />
+                    </div>
                   </div>
                 </div>
-              </div>
 
                 <div className="bg-gradient-to-br from-red-500 to-pink-500 rounded-2xl shadow-lg p-3 sm:p-4 lg:p-6 text-white">
-                <div className="flex items-center justify-between">
-                  <div>
+                  <div className="flex items-center justify-between">
+                    <div>
                       <p className="text-red-100 text-xs sm:text-sm">Wishlist Items</p>
                       <p className="text-xl sm:text-2xl lg:text-3xl font-bold">{wishlistItems.length}</p>
-                  </div>
+                    </div>
                     <div className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 bg-white/20 rounded-xl flex items-center justify-center">
                       <Heart className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6" />
-                  </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1400,6 +1799,22 @@ export default function Profile() {
           </div>
         </div>
       </div>
+
+      {/* Return Items Modal */}
+      <ReturnItemsModal
+        isOpen={showReturnModal}
+        onClose={handleCloseReturnModal}
+        order={selectedOrderForReturn}
+        savedAddresses={savedAddresses}
+        selectedPickupAddressIndex={selectedPickupAddressIndex}
+        selectedReturnItems={selectedReturnItems}
+        returnReason={returnReason}
+        isSubmittingReturn={isSubmittingReturn}
+        onReturnItemToggle={handleReturnItemToggle}
+        onReturnReasonChange={setReturnReason}
+        onSubmitReturn={handleSubmitReturn}
+        getReturnableItems={getReturnableItems}
+      />
 
       {/* Order Detail Modal */}
       <OrderDetailModal
