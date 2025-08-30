@@ -89,6 +89,7 @@ export default function ReturnItemsModal({
     
     return Math.max(0, daysLeft);
   };
+  
   // Prevent background scrolling when modal is open
   useEffect(() => {
     if (isOpen) {
@@ -125,35 +126,35 @@ export default function ReturnItemsModal({
   const pickupAddress = savedAddresses[selectedPickupAddressIndex];
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[999] p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[999] p-2 sm:p-4">
+      <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl w-full max-w-sm sm:max-w-2xl lg:max-w-6xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 bg-gradient-to-r from-brand-primary to-brand-primary-dark text-white rounded-t-2xl">
+        <div className="px-3 sm:px-4 lg:px-6 py-2 sm:py-3 lg:py-4 border-b border-gray-200 bg-gradient-to-r from-brand-primary to-brand-primary-dark text-white rounded-t-xl sm:rounded-t-2xl">
           <div className="flex justify-between items-center">
             <div>
-              <h3 className="text-lg sm:text-xl font-bold">Return Items</h3>
-              <p className="text-white/80 text-sm sm:text-base">#{order.orderId}</p>
+              <h3 className="text-base sm:text-lg lg:text-xl font-bold">Return Items</h3>
+              <p className="text-white/80 text-xs sm:text-sm lg:text-base">#{order.orderId}</p>
             </div>
             <button
               onClick={onClose}
-              className="text-white/80 hover:text-white p-1.5 sm:p-2 hover:bg-white/10 rounded-lg transition-colors"
+              className="text-white/80 hover:text-white p-1 sm:p-1.5 lg:p-2 hover:bg-white/10 rounded-lg transition-colors"
             >
               <X className="h-4 w-4 sm:h-5 sm:w-5" />
             </button>
           </div>
         </div>
 
-        <div className="p-4 sm:p-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="p-3 sm:p-4 lg:p-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
             {/* Left Column - Order Items */}
-            <div className="space-y-4">
-              <h4 className="font-semibold text-gray-900 text-base flex items-center">
-                <Package className="w-5 h-5 mr-2 text-brand-primary" />
+            <div className="space-y-3 sm:space-y-4">
+              <h4 className="font-semibold text-gray-900 text-sm sm:text-base flex items-center">
+                <Package className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-brand-primary" />
                 Select Items to Return ({returnableItems.length})
               </h4>
               
               {returnableItems.length > 0 ? (
-                <div className="space-y-3 max-h-[60vh] overflow-y-auto">
+                <div className="space-y-2 sm:space-y-3 max-h-[40vh] sm:max-h-[50vh] lg:max-h-[60vh] overflow-y-auto">
                   {returnableItems.map((item: ReturnItem, index: number) => {
                     const itemId = item.productId || item._id || index.toString();
                     const isSelected = selectedReturnItems.includes(itemId);
@@ -161,7 +162,7 @@ export default function ReturnItemsModal({
                     return (
                       <div 
                         key={`${itemId}-${item.name}`} 
-                        className={`flex items-center space-x-3 p-3 border rounded-lg transition-all cursor-pointer hover:shadow-sm ${
+                        className={`flex items-center space-x-2 sm:space-x-3 p-2 sm:p-3 border rounded-lg transition-all cursor-pointer hover:shadow-sm ${
                           isSelected 
                             ? 'border-brand-primary bg-brand-primary/5' 
                             : 'border-gray-200 hover:border-gray-300'
@@ -173,12 +174,12 @@ export default function ReturnItemsModal({
                           id={`return-item-${itemId}`}
                           checked={isSelected}
                           onChange={() => onReturnItemToggle(itemId)}
-                          className="w-4 h-4 text-brand-primary border-gray-300 rounded focus:ring-brand-primary"
+                          className="w-3 h-3 sm:w-4 sm:h-4 text-brand-primary border-gray-300 rounded focus:ring-brand-primary flex-shrink-0"
                         />
-                        <label htmlFor={`return-item-${itemId}`} className="flex-1 cursor-pointer">
-                          <div className="flex items-center space-x-3">
+                        <label htmlFor={`return-item-${itemId}`} className="flex-1 cursor-pointer min-w-0">
+                          <div className="flex items-center space-x-2 sm:space-x-3">
                             {/* Product Image */}
-                            <div className="w-12 h-12 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
+                            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
                               {item.image ? (
                                 <Image
                                   src={item.image}
@@ -189,14 +190,14 @@ export default function ReturnItemsModal({
                                 />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center">
-                                  <Package className="w-4 h-4 text-gray-400" />
+                                  <Package className="w-3 h-3 sm:w-4 sm:h-4 text-gray-400" />
                                 </div>
                               )}
                             </div>
                             
                             {/* Product Info */}
                             <div className="flex-1 min-w-0">
-                              <p className="font-medium text-gray-900 text-sm mb-1 truncate">
+                              <p className="font-medium text-gray-900 text-xs sm:text-sm mb-1 truncate">
                                 {item.name}
                               </p>
                               <p className="text-xs text-gray-600 mb-1">
@@ -218,24 +219,24 @@ export default function ReturnItemsModal({
                   })}
                 </div>
               ) : (
-                <div className="text-center py-8">
-                  <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                  <p className="text-gray-500 text-sm">No items are currently eligible for return.</p>
+                <div className="text-center py-6 sm:py-8">
+                  <AlertCircle className="w-8 h-8 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-2 sm:mb-3" />
+                  <p className="text-gray-500 text-xs sm:text-sm">No items are currently eligible for return.</p>
                 </div>
               )}
             </div>
 
             {/* Right Column - Address, Reason, and Actions */}
-            <div className="space-y-6">
+            <div className="space-y-4 sm:space-y-6">
               {/* Pick-up Address */}
-              <div className="bg-gray-50 rounded-xl p-4">
-                <div className="flex items-center space-x-2 mb-3">
-                  <MapPin className="w-5 h-5 text-brand-primary" />
-                  <h4 className="font-semibold text-gray-900 text-base">Pick-up Address</h4>
+              <div className="bg-gray-50 rounded-lg sm:rounded-xl p-3 sm:p-4">
+                <div className="flex items-center space-x-2 mb-2 sm:mb-3">
+                  <MapPin className="w-4 h-4 sm:w-5 sm:h-5 text-brand-primary" />
+                  <h4 className="font-semibold text-gray-900 text-sm sm:text-base">Pick-up Address</h4>
                 </div>
                 
                 {savedAddresses.length > 0 && pickupAddress ? (
-                  <div className="text-sm text-gray-700 space-y-1">
+                  <div className="text-xs sm:text-sm text-gray-700 space-y-1">
                     <p className="font-medium">{pickupAddress.name}</p>
                     <p>{pickupAddress.building}</p>
                     <p>{pickupAddress.area}</p>
@@ -245,8 +246,8 @@ export default function ReturnItemsModal({
                   </div>
                 ) : (
                   <div className="flex items-start space-x-2">
-                    <MapPinOff className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
-                    <div className="text-sm">
+                    <MapPinOff className="w-3 h-3 sm:w-4 sm:h-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                    <div className="text-xs sm:text-sm">
                       <p className="text-gray-500 mb-2">No saved address found</p>
                       <Link
                         href="/account/addresses"
@@ -260,10 +261,10 @@ export default function ReturnItemsModal({
               </div>
 
               {/* Return Reason */}
-              <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-                <div className="flex items-center space-x-2 mb-3">
+              <div className="bg-white border border-gray-200 rounded-lg sm:rounded-xl p-3 sm:p-4 shadow-sm">
+                <div className="flex items-center space-x-2 mb-2 sm:mb-3">
                   <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                  <label htmlFor="returnReason" className="text-sm font-semibold text-gray-900">
+                  <label htmlFor="returnReason" className="text-xs sm:text-sm font-semibold text-gray-900">
                     Reason for Return *
                   </label>
                 </div>
@@ -272,7 +273,7 @@ export default function ReturnItemsModal({
                     id="returnReason"
                     value={returnReason}
                     onChange={(e) => onReturnReasonChange(e.target.value)}
-                    className={`w-full px-4 py-3 border-2 rounded-lg text-sm font-medium transition-all duration-200 appearance-none cursor-pointer ${
+                    className={`w-full px-3 sm:px-4 py-2 sm:py-3 border-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 appearance-none cursor-pointer ${
                       returnReason 
                         ? 'border-green-200 bg-green-50 text-green-900' 
                         : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300 focus:border-brand-primary focus:bg-white'
@@ -288,7 +289,7 @@ export default function ReturnItemsModal({
                     <option value="other" className="text-gray-900 py-2">💬 Other reason</option>
                   </select>
                   <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                    <svg className={`w-5 h-5 transition-colors duration-200 ${
+                    <svg className={`w-4 h-4 sm:w-5 sm:h-5 transition-colors duration-200 ${
                       returnReason ? 'text-green-600' : 'text-gray-400'
                     }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -297,7 +298,7 @@ export default function ReturnItemsModal({
                 </div>
                 {returnReason && (
                   <div className="mt-2 flex items-center space-x-2 text-xs text-green-600">
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                     </svg>
                     <span className="font-medium">Reason selected: {returnReason.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</span>
@@ -306,21 +307,21 @@ export default function ReturnItemsModal({
               </div>
 
               {/* Action Buttons */}
-              <div className="flex space-x-3 pt-4">
+              <div className="flex space-x-2 sm:space-x-3 pt-2 sm:pt-4">
                 <button
                   onClick={onClose}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+                  className="flex-1 px-3 sm:px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-xs sm:text-sm font-medium"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={onSubmitReturn}
                   disabled={selectedReturnItems.length === 0 || !returnReason || isSubmittingReturn}
-                  className="flex-1 px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                  className="flex-1 px-3 sm:px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-xs sm:text-sm font-medium"
                 >
                   {isSubmittingReturn ? (
                     <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      <div className="animate-spin rounded-full h-3 w-3 sm:h-4 sm:w-4 border-b-2 border-white mr-2"></div>
                       Submitting...
                     </>
                   ) : (
