@@ -280,12 +280,12 @@ const ProductCard: React.FC<ProductCardProps> = ({
             <div className="flex items-center gap-2 sm:gap-3">
               {isOutOfStock ? (
                 <button
-                  className="bg-gray-100 text-gray-500 font-medium px-3 py-2 rounded-md border border-gray-200 cursor-not-allowed"
-                  style={{ width: '70px', height: '28px', fontFamily: 'Sinkin Sans, sans-serif' }}
+                  className="bg-gray-100 text-gray-500 font-medium px-3 py-2 rounded-md border border-gray-200 cursor-not-allowed whitespace-nowrap"
+                  style={{ width: '100px', height: '28px', fontFamily: 'Sinkin Sans, sans-serif' }}
                   disabled
                   title="Out of Stock"
                 >
-                  <span className="text-xs">UNAVAILABLE</span>
+                  <span className="text-[10px] flex items-center justify-center">UNAVAILABLE</span>
                 </button>
               ) : (!alwaysShowAddButton && currentQuantity > 0) ? (
                 <div className="flex items-center bg-brand-primary rounded-md justify-between" style={{ width: '70px', height: '28px' }}>
