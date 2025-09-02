@@ -31,44 +31,42 @@ interface Order {
   _id: string;
   orderId: string;
   items: ReturnItem[];
-  deliveredAt?: string;
   actualDeliveryDate?: string;
   status: string;
+  deliveryInfo?: {
+    address: Address;
+  };
 }
 
 interface ReturnItemsModalProps {
   isOpen: boolean;
   onClose: () => void;
   order: Order;
-  savedAddresses: Address[];
-  selectedPickupAddressIndex: number;
-  selectedReturnItems: string[];
+  selectedItems: string[];
+  onItemToggle: (itemId: string) => void;
   returnReason: string;
-  isSubmittingReturn: boolean;
-  onReturnItemToggle: (itemId: string) => void;
-  onReturnReasonChange: (reason: string) => void;
-  onSubmitReturn: () => void;
-  getReturnableItems: (order: Order) => ReturnItem[];
+  onReasonChange: (reason: string) => void;
+  onSubmit: () => void;
+  isSubmitting: boolean;
+  returnableItems: ReturnItem[];
 }
 
 export default function ReturnItemsModal({
   isOpen,
   onClose,
   order,
-  savedAddresses,
-  selectedPickupAddressIndex,
-  selectedReturnItems,
+  selectedItems,
+  onItemToggle,
   returnReason,
-  isSubmittingReturn,
-  onReturnItemToggle,
-  onReturnReasonChange,
-  onSubmitReturn,
-  getReturnableItems
+  onReasonChange,
+  onSubmit,
+  isSubmitting,
+  returnableItems
 }: ReturnItemsModalProps) {
   
   // Calculate remaining days for return for each item
   const getRemainingReturnDays = (item: ReturnItem) => {
-    const deliveryDate = order.deliveredAt || order.actualDeliveryDate;
+    const deliveryDate = order.actualDeliveryDate;
     if (!deliveryDate) return 0;
     
     const actualDeliveryDate = new Date(deliveryDate);
@@ -116,14 +114,20 @@ export default function ReturnItemsModal({
 
   if (!isOpen || !order) return null;
 
-  const returnableItems = getReturnableItems(order);
+  console.log('🔍 ReturnItemsModal - Full order structure:', order);
+  console.log('🔍 ReturnItemsModal - order.deliveryInfo:', order.deliveryInfo);
+  console.log('🔍 ReturnItemsModal - order.deliveryInfo?.address:', order.deliveryInfo?.address);
+
   console.log('🎯 ReturnItemsModal - returnableItems received:', returnableItems.map(item => ({
     name: item.name,
     returnable: item.returnable,
     returnWindow: item.returnWindow
   })));
   
-  const pickupAddress = savedAddresses[selectedPickupAddressIndex];
+  // Use delivery address from order for pickup
+  const pickupAddress = order.deliveryInfo?.address;
+  
+  console.log('📍 ReturnItemsModal - pickupAddress:', pickupAddress);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[999] p-2 sm:p-4">
@@ -156,8 +160,8 @@ export default function ReturnItemsModal({
               {returnableItems.length > 0 ? (
                 <div className="space-y-2 sm:space-y-3 max-h-[40vh] sm:max-h-[50vh] lg:max-h-[60vh] overflow-y-auto">
                   {returnableItems.map((item: ReturnItem, index: number) => {
-                    const itemId = item.productId || item._id || index.toString();
-                    const isSelected = selectedReturnItems.includes(itemId);
+                    const itemId = item._id || index.toString();
+                    const isSelected = selectedItems.includes(itemId);
                     
                     return (
                       <div 
@@ -167,13 +171,13 @@ export default function ReturnItemsModal({
                             ? 'border-brand-primary bg-brand-primary/5' 
                             : 'border-gray-200 hover:border-gray-300'
                         }`}
-                        onClick={() => onReturnItemToggle(itemId)}
+                        onClick={() => onItemToggle(itemId)}
                       >
                         <input
                           type="checkbox"
                           id={`return-item-${itemId}`}
                           checked={isSelected}
-                          onChange={() => onReturnItemToggle(itemId)}
+                          onChange={() => onItemToggle(itemId)}
                           className="w-3 h-3 sm:w-4 sm:h-4 text-brand-primary border-gray-300 rounded focus:ring-brand-primary flex-shrink-0"
                         />
                         <label htmlFor={`return-item-${itemId}`} className="flex-1 cursor-pointer min-w-0">
@@ -235,7 +239,7 @@ export default function ReturnItemsModal({
                   <h4 className="font-semibold text-gray-900 text-sm sm:text-base">Pick-up Address</h4>
                 </div>
                 
-                {savedAddresses.length > 0 && pickupAddress ? (
+                {pickupAddress ? (
                   <div className="text-xs sm:text-sm text-gray-700 space-y-1">
                     <p className="font-medium">{pickupAddress.name}</p>
                     <p>{pickupAddress.building}</p>
@@ -248,13 +252,7 @@ export default function ReturnItemsModal({
                   <div className="flex items-start space-x-2">
                     <MapPinOff className="w-3 h-3 sm:w-4 sm:h-4 text-gray-400 mt-0.5 flex-shrink-0" />
                     <div className="text-xs sm:text-sm">
-                      <p className="text-gray-500 mb-2">No saved address found</p>
-                      <Link
-                        href="/account/addresses"
-                        className="text-brand-primary hover:text-brand-primary-dark underline"
-                      >
-                        Add pickup address
-                      </Link>
+                      <p className="text-gray-500 mb-2">Delivery address not found for this order</p>
                     </div>
                   </div>
                 )}
@@ -272,7 +270,7 @@ export default function ReturnItemsModal({
                   <select
                     id="returnReason"
                     value={returnReason}
-                    onChange={(e) => onReturnReasonChange(e.target.value)}
+                    onChange={(e) => onReasonChange(e.target.value)}
                     className={`w-full px-3 sm:px-4 py-2 sm:py-3 border-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 appearance-none cursor-pointer ${
                       returnReason 
                         ? 'border-green-200 bg-green-50 text-green-900' 
@@ -315,11 +313,11 @@ export default function ReturnItemsModal({
                   Cancel
                 </button>
                 <button
-                  onClick={onSubmitReturn}
-                  disabled={selectedReturnItems.length === 0 || !returnReason || isSubmittingReturn}
+                  onClick={onSubmit}
+                  disabled={selectedItems.length === 0 || !returnReason || isSubmitting}
                   className="flex-1 px-3 sm:px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-xs sm:text-sm font-medium"
                 >
-                  {isSubmittingReturn ? (
+                  {isSubmitting ? (
                     <>
                       <div className="animate-spin rounded-full h-3 w-3 sm:h-4 sm:w-4 border-b-2 border-white mr-2"></div>
                       Submitting...

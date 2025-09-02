@@ -96,6 +96,7 @@ export function useProductsByLocation(
     minPrice?: number;
     maxPrice?: number;
     forceRefresh?: number;
+    includeOutOfStock?: boolean;
   }
 ) {
   const queryKey = queryKeys.productsByLocation(pincode, params);
@@ -128,7 +129,8 @@ export function useProductsByLocation(
         sort: params?.sort,
         minPrice: params?.minPrice,
         maxPrice: params?.maxPrice,
-        mode: (params?.mode === 'global' ? 'global' : 'auto') as 'auto' | 'global'
+        mode: (params?.mode === 'global' ? 'global' : 'auto') as 'auto' | 'global',
+        includeOutOfStock: params?.includeOutOfStock ?? true
       };
       
       console.log('🔧 Fetching products with options:', options);

@@ -113,6 +113,7 @@ export async function getProductsByPincode(
     sort?: string;
     minPrice?: number;
     maxPrice?: number;
+    includeOutOfStock?: boolean;
   } = {}
 ): Promise<ProductsByPincode> {
   try {
@@ -156,6 +157,10 @@ export async function getProductsByPincode(
     
     if (options.maxPrice) {
       queryParams.append('maxPrice', options.maxPrice.toString());
+    }
+    
+    if (options.includeOutOfStock) {
+      queryParams.append('includeOutOfStock', 'true');
     }
 
     const apiUrl = USE_NEXTJS_API ? `/api/warehouses/products-by-pincode?${queryParams}` : `${API_BASE_URL}/warehouses/products-by-pincode?${queryParams}`;

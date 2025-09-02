@@ -10,12 +10,14 @@ import { getCartFromDB, addToCartDB, updateCartItemDB, removeFromCartDB, syncCar
 import { getWishlistFromDB, addToWishlistDB, removeFromWishlistDB, syncWishlistDB } from "../lib/api/wishlist";
 import { calculateProductTax, ProductTaxInfo } from "@/lib/tax-calculation";
 import toast from "react-hot-toast";
+import { showStockLimitToast } from "@/lib/toasts";
 import cartTracker from "../lib/cartTracker";
 import { LocationProvider } from "@/components/location-provider";
 import { ReactQueryProvider } from "@/lib/react-query";
 import { migrateLocalStorageData, shouldRunMigration } from "@/lib/migration";
 import { validateAuthState } from "@/lib/auth-utils";
 import { fetchProfile } from "@/lib/slices/authSlice";
+import { stockStream } from "@/lib/stock-stream";
 
 interface AppContextType {
   isCartOpen: boolean;
@@ -116,6 +118,10 @@ function CartProvider({ children }: { children: ReactNode }) {
   const [isLoadingCart, setIsLoadingCart] = useState(false);
   const [removingItems, setRemovingItems] = useState<Set<string>>(new Set());
   const [addingItems, setAddingItems] = useState<Set<string>>(new Set());
+  const [updatingItems, setUpdatingItems] = useState<Set<string>>(new Set());
+  // Debounce maps for coalescing rapid quantity updates
+  const pendingUpdateTimers = useRef<Map<string, any>>(new Map());
+  const pendingUpdateQuantities = useRef<Map<string, number>>(new Map());
   const reduxUser = useSelector((state: RootState) => state.auth.user);
   const isLoggedIn = !!reduxUser;
   
@@ -132,6 +138,60 @@ function CartProvider({ children }: { children: ReactNode }) {
     persistCartItems(items);
     setCartItems(items);
   };
+
+  // Initialize stock SSE and subscribe to updates
+  useEffect(() => {
+    stockStream.init();
+    const unsub = stockStream.subscribe(({ productId, stock, variantStocks }) => {
+      // Update stock fields and clamp quantities if needed
+      setCartItems(prev => {
+        const next = prev.map(item => {
+          const id = item.id || item._id;
+          if (id !== productId) return item;
+          const updated: any = { ...item, stock };
+          if (item.variantId && variantStocks && Object.prototype.hasOwnProperty.call(variantStocks, item.variantId)) {
+            const vs = Number(variantStocks[item.variantId]) || 0;
+            if (updated.variants && updated.variants[item.variantId]) {
+              updated.variants = {
+                ...updated.variants,
+                [item.variantId]: {
+                  ...updated.variants[item.variantId],
+                  stock: String(vs),
+                },
+              };
+            }
+          }
+          return updated;
+        });
+        return next;
+      });
+
+      // Clamp quantities that now exceed availability
+      setCartItems(prev => {
+        const next = prev.map(item => {
+          const id = item.id || item._id;
+          if (id !== productId) return item;
+          const available = item.variantId && variantStocks && Object.prototype.hasOwnProperty.call(variantStocks, item.variantId)
+            ? Number(variantStocks[item.variantId]) || 0
+            : Number(stock) || 0;
+          if (item.quantity > available) {
+            showStockLimitToast(available);
+            // Persist clamp for logged-in users via existing API flow
+            if (isLoggedIn) {
+              try {
+                // fire debounced update without extra toast
+                updateCartItem(id, available, item.variantId, false);
+              } catch {}
+            }
+            return { ...item, quantity: available };
+          }
+          return item;
+        });
+        return next;
+      });
+    });
+    return () => { try { (unsub as any)(); } catch { /* ensure cleanup returns void */ } };
+  }, [isLoggedIn]);
 
   // Load cart from database or local storage
   const loadCart = useCallback(async () => {
@@ -490,49 +550,129 @@ function CartProvider({ children }: { children: ReactNode }) {
   }, [isLoggedIn, cartItems, addingItems]);
 
   const updateCartItem = useCallback(async (id: any, quantity: number, variantId?: string, showToast: boolean = false) => {
+    const updateKey = variantId ? `${id}_${variantId}` : id;
+
+    // Guard: block exceeding available stock using latest SSE cache when possible
+    try {
+      let available: number | null = stockStream.getAvailable(String(id), variantId);
+      if (available == null) {
+        // Fallback to current cart item snapshot
+        const current = cartItemsRef.current.find(it => {
+          const isSameProduct = (it.id || it._id) === id;
+          return variantId ? (isSameProduct && it.variantId === variantId) : (isSameProduct && !it.variantId);
+        });
+        if (current) {
+          if (variantId && current.variants && current.variants[variantId]) {
+            available = Number(current.variants[variantId].stock) || 0;
+          } else if (current.stock != null) {
+            available = Number(current.stock) || 0;
+          }
+        }
+      }
+      if (available != null && quantity > available) {
+        if (showToast) {
+          showStockLimitToast(available);
+        }
+        return; // do not optimistically update, do not call server
+      }
+    } catch {}
+
+    // Optimistically update UI immediately
+    setCartItems(prev => {
+      const next = prev.map(item => {
+        const isSameProduct = (item.id || item._id) === id;
+        const matchesVariant = variantId ? item.variantId === variantId : !item.variantId;
+        if (isSameProduct && matchesVariant) {
+          return { ...item, quantity };
+        }
+        return item;
+      });
+      return next;
+    });
+    // Mark as updating for UI state
+    setUpdatingItems(prev => new Set(prev).add(updateKey));
+
     if (isLoggedIn) {
-      try {
-        setIsLoadingCart(true);
-        const response = await updateCartItemDB(id, quantity, variantId);
-        const updatedCartItems = response.cart.map((item: any) => {
-          const mappedItem = {
-            id: item.productId._id,
-            _id: item.productId._id,
-            // Create composite cart item ID for variant handling
-            cartItemId: item.variantId ? `${item.productId._id}_${item.variantId}` : item.productId._id,
-            ...item.productId,
-            quantity: item.quantity,
-            // Include variant information from cart item
-            variantId: item.variantId,
-            variantName: item.variantName,
-            selectedVariant: item.selectedVariant
-          };
-          
-          // Fallback: If warehouse info is missing from API response, try to preserve it from current cart
-          if (!mappedItem.warehouse || !mappedItem.warehouse._id) {
-            const existingItem = cartItemsRef.current.find(cartItem => cartItem.id === mappedItem.id);
-            if (existingItem && existingItem.warehouse) {
-              console.log('Preserving warehouse info from existing cart item (update):', {
-                productId: mappedItem.id,
-                warehouse: existingItem.warehouse
-              });
-              mappedItem.warehouse = existingItem.warehouse;
+      // Debounce the server update per item key
+      pendingUpdateQuantities.current.set(updateKey, quantity);
+      // Clear any existing timer
+      const existing = pendingUpdateTimers.current.get(updateKey);
+      if (existing) {
+        clearTimeout(existing);
+      }
+      const timer = setTimeout(async () => {
+        const finalQty = pendingUpdateQuantities.current.get(updateKey) ?? quantity;
+        try {
+          const response = await updateCartItemDB(id, finalQty, variantId);
+          const updatedCartItems = response.cart.map((item: any) => {
+            const mappedItem = {
+              id: item.productId._id,
+              _id: item.productId._id,
+              // Create composite cart item ID for variant handling
+              cartItemId: item.variantId ? `${item.productId._id}_${item.variantId}` : item.productId._id,
+              ...item.productId,
+              quantity: item.quantity,
+              // Include variant information from cart item
+              variantId: item.variantId,
+              variantName: item.variantName,
+              selectedVariant: item.selectedVariant
+            };
+            
+            // Fallback: If warehouse info is missing from API response, try to preserve it from current cart
+            if (!mappedItem.warehouse || !mappedItem.warehouse._id) {
+              const existingItem = cartItemsRef.current.find(cartItem => cartItem.id === mappedItem.id);
+              if (existingItem && existingItem.warehouse) {
+                console.log('Preserving warehouse info from existing cart item (update):', {
+                  productId: mappedItem.id,
+                  warehouse: existingItem.warehouse
+                });
+                mappedItem.warehouse = existingItem.warehouse;
+              }
+            }
+            
+            return mappedItem;
+          });
+          setCartItems(updatedCartItems);
+        } catch (error: any) {
+          console.error('Failed to update cart:', error);
+          // Handle race where update hits before item exists -> try add instead
+          if (error?.response?.status === 404 && finalQty > 0) {
+            try {
+              const addResp = await addToCartDB(id, finalQty, variantId);
+              const updatedCartItems = addResp.cart.map((item: any) => ({
+                id: item.productId._id,
+                _id: item.productId._id,
+                cartItemId: item.variantId ? `${item.productId._id}_${item.variantId}` : item.productId._id,
+                ...item.productId,
+                quantity: item.quantity,
+                variantId: item.variantId,
+                variantName: item.variantName,
+                selectedVariant: item.selectedVariant
+              }));
+              setCartItems(updatedCartItems);
+            } catch (fallbackErr) {
+              console.error('Fallback add after 404 failed:', fallbackErr);
+              if (showToast) {
+                toast.error('Failed to update cart');
+              }
+            }
+          } else {
+            if (showToast) {
+              toast.error('Failed to update cart');
             }
           }
-          
-          return mappedItem;
-        });
-        setCartItems(updatedCartItems);
-        // Don't persist to localStorage for logged-in users
-        // No toast for regular cart updates
-      } catch (error) {
-        console.error('Failed to update cart:', error);
-        if (showToast) {
-          toast.error('Failed to update cart');
+        } finally {
+          // Clear maps and flags for this key
+          pendingUpdateQuantities.current.delete(updateKey);
+          pendingUpdateTimers.current.delete(updateKey);
+          setUpdatingItems(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(updateKey);
+            return newSet;
+          });
         }
-      } finally {
-        setIsLoadingCart(false);
-      }
+      }, 300);
+      pendingUpdateTimers.current.set(updateKey, timer);
     } else {
       // Local storage logic for non-logged-in users
       const items = getCartItems();
@@ -611,7 +751,7 @@ function CartProvider({ children }: { children: ReactNode }) {
         // No toast for regular cart updates
       }
     }
-  }, [isLoggedIn]);
+  }, [isLoggedIn, updatingItems]);
 
   const removeCartItem = useCallback(async (id: any, variantId?: string) => {
     // Create unique identifier for this removal operation

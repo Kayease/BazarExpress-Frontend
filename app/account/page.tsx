@@ -97,7 +97,7 @@ export default function Profile() {
   const [selectedReturnItems, setSelectedReturnItems] = useState<string[]>([]);
   const [returnReason, setReturnReason] = useState("");
   const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
-  const [selectedPickupAddressIndex, setSelectedPickupAddressIndex] = useState(0);
+
 
 
   useEffect(() => {
@@ -570,16 +570,56 @@ export default function Profile() {
     setIsSubmittingReturn(true);
 
     try {
-      const pickupAddress = savedAddresses[selectedPickupAddressIndex];
+      // Use the delivery address from the order for pickup
+      const pickupAddress = selectedOrderForReturn.deliveryInfo?.address;
 
-      // TODO: Implement actual return API call
-      console.log('Submitting return for order:', selectedOrderForReturn._id);
-      console.log('Returning items:', selectedReturnItems);
-      console.log('Return reason:', returnReason);
-      console.log('Pickup address:', pickupAddress);
+      if (!pickupAddress) {
+        toast.error("Delivery address not found for this order");
+        return;
+      }
 
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Prepare return items data
+      const returnItems = selectedReturnItems.map(itemId => {
+        const orderItem = selectedOrderForReturn.items.find((item: any) => item._id === itemId);
+        console.log('🔍 Processing return item:', {
+          selectedItemId: itemId,
+          foundOrderItem: !!orderItem,
+          orderItemId: orderItem?._id,
+          orderItemName: orderItem?.name
+        });
+        return {
+          itemId: itemId,
+          quantity: orderItem?.quantity || 1,
+          reason: returnReason
+        };
+      });
+
+      console.log('📦 Final return items being sent to API:', returnItems);
+      console.log('📋 All order item IDs:', selectedOrderForReturn.items.map((item: any) => item._id));
+
+      // Submit return request to API
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/returns/create`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          orderId: selectedOrderForReturn.orderId,
+          items: returnItems,
+          returnReason,
+          pickupAddress,
+          pickupInstructions: `Please contact ${pickupAddress.phone} before pickup`
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to submit return request');
+      }
+
+      const data = await response.json();
+      console.log('Return request submitted:', data);
 
       toast.success("Return request submitted successfully!");
       handleCloseReturnModal();
@@ -588,7 +628,7 @@ export default function Profile() {
       fetchUserOrders();
     } catch (error) {
       console.error('Error submitting return:', error);
-      toast.error("Failed to submit return request. Please try again.");
+      toast.error(error instanceof Error ? error.message : "Failed to submit return request. Please try again.");
     } finally {
       setIsSubmittingReturn(false);
     }
@@ -600,7 +640,6 @@ export default function Profile() {
     setSelectedOrderForReturn(null);
     setSelectedReturnItems([]);
     setReturnReason("");
-    setSelectedPickupAddressIndex(0);
   };
 
 
@@ -1805,15 +1844,13 @@ export default function Profile() {
         isOpen={showReturnModal}
         onClose={handleCloseReturnModal}
         order={selectedOrderForReturn}
-        savedAddresses={savedAddresses}
-        selectedPickupAddressIndex={selectedPickupAddressIndex}
-        selectedReturnItems={selectedReturnItems}
+        selectedItems={selectedReturnItems}
+        onItemToggle={handleReturnItemToggle}
         returnReason={returnReason}
-        isSubmittingReturn={isSubmittingReturn}
-        onReturnItemToggle={handleReturnItemToggle}
-        onReturnReasonChange={setReturnReason}
-        onSubmitReturn={handleSubmitReturn}
-        getReturnableItems={getReturnableItems}
+        onReasonChange={setReturnReason}
+        onSubmit={() => { void handleSubmitReturn(); }}
+        isSubmitting={isSubmittingReturn}
+        returnableItems={selectedOrderForReturn ? getReturnableItems(selectedOrderForReturn) : []}
       />
 
       {/* Order Detail Modal */}

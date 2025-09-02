@@ -66,6 +66,7 @@ interface ProductsParams {
   isGlobalMode?: boolean;
   searchQuery?: string;
   limit?: number;
+  includeOutOfStock?: boolean;
 }
 
 // Fetch products by location
@@ -74,7 +75,7 @@ async function fetchProductsByLocation(params: ProductsParams): Promise<{
   products: ProductWithWarehouse[];
   message?: string;
 }> {
-  const { pincode, isGlobalMode, searchQuery, limit = 100 } = params;
+  const { pincode, isGlobalMode, searchQuery, limit = 100, includeOutOfStock = true } = params;
   
   if (!pincode) {
     return { success: false, products: [], message: 'Pincode is required' };
@@ -98,7 +99,8 @@ async function fetchProductsByLocation(params: ProductsParams): Promise<{
     const data = await getProductsByPincode(pincode, {
       limit,
       search: searchQuery,
-      mode
+      mode,
+      includeOutOfStock
     });
 
     const result = {
@@ -136,7 +138,8 @@ export function useHomeProducts(pincode?: string, isGlobalMode?: boolean) {
       const locationProducts = await fetchProductsByLocation({
         pincode,
         isGlobalMode,
-        limit: 100
+        limit: 100,
+        includeOutOfStock: true
       });
 
       if (!locationProducts.success || locationProducts.products.length === 0) {
@@ -219,7 +222,8 @@ export function useSearchProducts(searchQuery: string, pincode?: string, isGloba
         pincode,
         isGlobalMode,
         searchQuery,
-        limit: 50
+        limit: 50,
+        includeOutOfStock: true
       });
 
       if (!locationProducts.success) {

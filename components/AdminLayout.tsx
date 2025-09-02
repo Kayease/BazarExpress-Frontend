@@ -106,6 +106,25 @@ const getRoleBasedMenuItems = (userRole: string) => {
         { name: "Delivered Orders", href: "/admin/orders/delivered", icon: CheckCircle, roles: ['admin', 'customer_support_executive', 'order_warehouse_management', 'delivery_boy'] },
         { name: "Cancelled Orders", href: "/admin/orders/cancelled", icon: X, roles: ['admin', 'customer_support_executive', 'order_warehouse_management'] },
         { name: "Refunded Orders", href: "/admin/orders/refunded", icon: RefreshCw, roles: ['admin', 'customer_support_executive', 'order_warehouse_management'] },
+        { name: "Return Orders", href: "/admin/returns", icon: function ReturnIcon(props: any) {
+            return (
+              <svg
+                width={20}
+                height={20}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                {...props}
+              >
+                <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
+                <path d="M8 21l4-7 4 7" />
+                <path d="M9 5l3-3 3 3" />
+              </svg>
+            );
+          }, roles: ['admin', 'order_warehouse_management', 'delivery_boy'] },
         { name: "Stock Transfer", href: "/admin/stock-transfer", icon: Building2, roles: ['admin', 'order_warehouse_management'] },
       ],
     },

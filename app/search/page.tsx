@@ -12,6 +12,7 @@ import { useRecentlyViewed } from "@/hooks/use-recently-viewed";
 
 // Components
 import ProductCard from "@/components/product-card";
+
 import ProductGridSkeleton from "@/components/product-grid-skeleton";
 import WarehouseConflictModal from "@/components/warehouse-conflict-modal";
 import { Slider } from "@/components/ui/slider";
@@ -30,6 +31,10 @@ import {
   Star,
   SlidersHorizontal
 } from 'lucide-react';
+
+// Toast
+import toast from 'react-hot-toast';
+import { showStockLimitToast } from '@/lib/toasts';
 
 // Types
 interface SearchHistoryItem {
@@ -120,7 +125,8 @@ function SearchPage() {
       category: params.get("category") || undefined,
       mode: activeMode === 'global' ? 'global' : undefined,
       limit: 100,
-      page: 1
+      page: 1,
+      includeOutOfStock: true
     }
   );
 
@@ -344,11 +350,25 @@ function SearchPage() {
 
   // Handle add to cart
   const handleAddToCart = useCallback((product: any) => {
+    // Check if product is out of stock
+    const isOutOfStock = product.stock === 0 || product.stock < 0;
+    if (isOutOfStock) {
+      toast.error('This product is currently out of stock');
+      return;
+    }
+    
     if (!canAddToCart(product, cartItems)) {
       showConflictModal(product);
       return;
     }
     
+    // If variants exist but none selected, redirect to product detail to select variant
+    if (product.variants && Object.keys(product.variants).length > 0 && !product.variantId) {
+      router.push(`/products/${product._id}`);
+      return;
+    }
+
+    // If variant already selected or no variants, proceed to add
     if (product.variantId) {
       const variant = product.variants?.[product.variantId];
       addToCart({ 
@@ -360,23 +380,10 @@ function SearchPage() {
         selectedVariant: variant,
         price: (variant?.price !== undefined ? variant.price : product.price)
       });
-    } else if (product.variants && Object.keys(product.variants).length > 0) {
-      const firstVariantKey = Object.keys(product.variants)[0];
-      const firstVariant = product.variants[firstVariantKey];
-      
-      addToCart({ 
-        ...product, 
-        id: product._id, 
-        quantity: 1,
-        variantId: firstVariantKey,
-        variantName: firstVariant.name || firstVariantKey.replace(/::/g, ' '),
-        selectedVariant: firstVariant,
-        price: (firstVariant.price !== undefined ? firstVariant.price : product.price)
-      });
     } else {
       addToCart({ ...product, id: product._id, quantity: 1 });
     }
-  }, [cartItems, showConflictModal, addToCart]);
+  }, [cartItems, showConflictModal, addToCart, router]);
 
   return (
     <div className="min-h-screen bg-gray-50">

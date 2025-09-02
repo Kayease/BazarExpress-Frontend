@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from "next/link";
+import ProductCard from "@/components/product-card";
 import { useRouter } from "next/navigation";
 import {
   Tooltip,
@@ -19,7 +20,9 @@ import { useAppContext, useCartContext, useWishlistContext } from "@/components/
 import { useLocation } from "@/components/location-provider";
 import { useHomeProducts, useSearchProducts } from "@/hooks/use-products";
 import toast from "react-hot-toast";
+import { showStockLimitToast } from "@/lib/toasts";
 import { ProductWithWarehouse } from "@/lib/warehouse-validation";
+import { stockStream } from "@/lib/stock-stream";
 // import { useWarehouseValidation } from "@/hooks/use-warehouse-validation";
 
 // Define interfaces for our data types
@@ -124,7 +127,7 @@ export default function ProductSection({
     const stars = [];
     const fullStars = Math.floor(rating);
     const hasHalfStar = rating % 1 !== 0;
-    
+
     for (let i = 0; i < 5; i++) {
       if (i < fullStars) {
         stars.push(
@@ -151,30 +154,30 @@ export default function ProductSection({
   // Get wishlist functions from context
   const { addToCart, updateCartItem, cartItems } = useCartContext();
   const { addToWishlist, isInWishlist } = useWishlistContext();
-  
+
   // Get location context
   const { locationState, deliveryMessage, isGlobalMode, isLoading } = useLocation();
-  
+
   // Router for navigation
   const router = useRouter();
 
   // Use cached hooks for data fetching
-  const { 
-    data: homeProductSections, 
-    isLoading: homeLoading, 
-    error: homeError 
+  const {
+    data: homeProductSections,
+    isLoading: homeLoading,
+    error: homeError
   } = useHomeProducts(
-    locationState.pincode || undefined, 
+    locationState.pincode || undefined,
     locationState.isGlobalMode
   );
 
-  const { 
-    data: searchProductSections, 
-    isLoading: searchLoading, 
-    error: searchError 
+  const {
+    data: searchProductSections,
+    isLoading: searchLoading,
+    error: searchError
   } = useSearchProducts(
-    searchQuery, 
-    locationState.pincode || undefined, 
+    searchQuery,
+    locationState.pincode || undefined,
     locationState.isGlobalMode
   );
 
@@ -202,14 +205,14 @@ export default function ProductSection({
 
   // Local quantity state for product tiles - track by product ID and variant ID
   const [quantities, setQuantities] = useState<{ [key: string]: number }>({});
-  
+
   // Updated warehouse validation logic - only same warehouse products allowed
   const canAddToCart = (product: Product | ProductWithWarehouse) => {
     if (cartItems.length === 0) return true; // Empty cart, can add anything
-    
+
     // Check if product has warehouse info
     if (!product.warehouse) return true;
-    
+
     // Find ANY existing warehouse in cart (custom or global)
     let existingWarehouse = null;
     for (const cartItem of cartItems) {
@@ -218,13 +221,13 @@ export default function ProductSection({
         break;
       }
     }
-    
+
     // If no warehouse in cart, allow adding
     if (!existingWarehouse) return true;
-    
+
     // Only allow if product is from the SAME warehouse (custom or global)
     if (existingWarehouse._id === product.warehouse._id) return true;
-    
+
     // Different warehouse (custom or global), block
     console.log('Warehouse conflict detected:', {
       productWarehouse: product.warehouse.name,
@@ -235,13 +238,13 @@ export default function ProductSection({
     });
     return false;
   };
-  
+
 
   // Sync local quantity state with cartItems - handle variants
   useEffect(() => {
     const newQuantities: { [key: string]: number } = {};
     console.log('Syncing quantities with cart items:', cartItems);
-    
+
     cartItems.forEach(item => {
       const itemId = item.id || item._id;
       // Create a unique key that includes both product ID and variant ID (if present)
@@ -249,7 +252,7 @@ export default function ProductSection({
       newQuantities[cartKey] = item.quantity;
       console.log(`Setting quantity for ${cartKey} to ${item.quantity}`, item);
     });
-    
+
     console.log('New quantities:', newQuantities);
     setQuantities(newQuantities);
   }, [cartItems]);
@@ -257,7 +260,14 @@ export default function ProductSection({
 
   const handleAdd = async (product: Product | ProductWithWarehouse) => {
     const productId = product._id;
-    
+
+    // Check if product is out of stock
+    const isOutOfStock = typeof product.stock === 'number' && product.stock <= 0;
+    if (isOutOfStock) {
+      toast.error('This product is currently out of stock');
+      return;
+    }
+
     // Check warehouse validation before adding
     if (!canAddToCart(product)) {
       // Don't add to cart if there's a warehouse conflict
@@ -265,22 +275,22 @@ export default function ProductSection({
       console.log('Blocked: Cannot add product due to warehouse conflict');
       return;
     }
-    
+
     try {
       // If the product already has a variant ID (from the cart), use that
       if (product.variantId) {
         console.log('Product already has variant ID:', product.variantId);
-        
+
         // Find the variant in the product's variants
         const variant = product.variants?.[product.variantId];
-        
+
         // Create a unique key for quantity tracking that includes variant
         const cartKey = `${productId}:${product.variantId}`;
         setQuantities(q => ({ ...q, [cartKey]: 1 }));
-        
-        await addToCart({ 
-          ...product, 
-          id: productId, 
+
+        await addToCart({
+          ...product,
+          id: productId,
           quantity: 1,
           // Include variant information
           variantId: product.variantId,
@@ -289,38 +299,18 @@ export default function ProductSection({
           // Use variant price if available, with fallback to product price
           price: (variant?.price !== undefined ? variant.price : product.price)
         });
-        
+
         // Show toast with variant name
-    //    toast.success(`${product.name} (${variant?.name || product.variantId.replace(/::/g, ' ')}) added to cart`);
-      }
-      // Check if product has variants and include the first variant by default
-      else if (product.variants && Object.keys(product.variants).length > 0) {
-        const firstVariantKey = Object.keys(product.variants)[0];
-        const firstVariant = product.variants[firstVariantKey];
-        
-        // Create a unique key for quantity tracking that includes variant
-        const cartKey = `${productId}:${firstVariantKey}`;
-        setQuantities(q => ({ ...q, [cartKey]: 1 }));
-        
-        await addToCart({ 
-          ...product, 
-          id: productId, 
-          quantity: 1,
-          // Include variant information
-          variantId: firstVariantKey,
-          variantName: firstVariant.name || firstVariantKey.replace(/::/g, ' '),
-          selectedVariant: firstVariant,
-          // Use variant price if available, with fallback to product price
-          price: (firstVariant.price !== undefined ? firstVariant.price : product.price)
-        });
-        
-        // Show toast with variant name
-    //    toast.success(`${product.name} (${firstVariant.name || firstVariantKey.replace(/::/g, ' ')}) added to cart`);
+        //    toast.success(`${product.name} (${variant?.name || product.variantId.replace(/::/g, ' ')}) added to cart`);
+      } else if (product.variants && Object.keys(product.variants).length > 0) {
+        // Variants exist but none selected: navigate to product detail to select variant
+        router.push(`/products/${productId}`);
+        return;
       } else {
         // No variants, use product ID as key
         setQuantities(q => ({ ...q, [productId]: 1 }));
         await addToCart({ ...product, id: productId, quantity: 1 });
-     //   toast.success(`${product.name} added to cart`);
+        //   toast.success(`${product.name} added to cart`);
       }
     } catch (error: any) {
       if (error.isVariantRequired) {
@@ -336,40 +326,53 @@ export default function ProductSection({
   };
   const handleInc = (product: Product | ProductWithWarehouse) => {
     const id = product._id;
-    
+
     // Find this product in the cart to get its variant information
     const cartItem = cartItems.find(item => (item.id || item._id) === id);
-    
-    // If the product is in the cart with a variant, use that variant ID
-    // Otherwise, use the product's variant ID if it has one
+    // If the product is in the cart with a variant, use that variant ID; otherwise fallback to product's variant
     const variantId = cartItem?.variantId || product.variantId;
-    
-    // Create a unique key that includes variant ID if present
+
+    // Determine available stock using SSE cache when possible
+    let available: number | null = stockStream.getAvailable(String(id), variantId);
+    if (available == null) {
+      // Fallback to product data
+      if (variantId && product.variants && product.variants[variantId]) {
+        available = Number(product.variants[variantId].stock || 0);
+      } else if (typeof product.stock === 'number') {
+        available = Number(product.stock || 0);
+      }
+    }
+
     const cartKey = variantId ? `${id}:${variantId}` : id;
-    
-    console.log('handleInc:', { id, variantId, cartKey, cartItem });
-    
-    const newQty = (quantities[cartKey] || 0) + 1;
-    setQuantities(q => ({ ...q, [cartKey]: newQty }));
-    
-    // Pass both product ID and variant ID to updateCartItem
-    updateCartItem(id, newQty, variantId);
+    const currentQty = quantities[cartKey] || 0;
+    const nextQty = currentQty + 1;
+
+    // Block exceeding available
+    if (available != null && nextQty > available) {
+      showStockLimitToast(available);
+      return;
+    }
+
+    // Optimistically bump local counter
+    setQuantities(q => ({ ...q, [cartKey]: nextQty }));
+    // Update in store/server
+    updateCartItem(id, nextQty, variantId);
   };
   const handleDec = (product: Product | ProductWithWarehouse) => {
     const id = product._id;
-    
+
     // Find this product in the cart to get its variant information
     const cartItem = cartItems.find(item => (item.id || item._id) === id);
-    
+
     // If the product is in the cart with a variant, use that variant ID
     // Otherwise, use the product's variant ID if it has one
     const variantId = cartItem?.variantId || product.variantId;
-    
+
     // Create a unique key that includes variant ID if present
     const cartKey = variantId ? `${id}:${variantId}` : id;
-    
+
     console.log('handleDec:', { id, variantId, cartKey, cartItem });
-    
+
     const newQty = (quantities[cartKey] || 0) - 1;
     if (newQty <= 0) {
       setQuantities(q => ({ ...q, [cartKey]: 0 }));
@@ -407,12 +410,12 @@ export default function ProductSection({
     if (e) {
       e.stopPropagation();
     }
-    
+
     // Check if product has variants and include the first variant by default
     if (product.variants && Object.keys(product.variants).length > 0) {
       const firstVariantKey = Object.keys(product.variants)[0];
       const firstVariant = product.variants[firstVariantKey];
-      
+
       const productWithVariant = {
         ...product,
         variantId: firstVariantKey,
@@ -420,7 +423,7 @@ export default function ProductSection({
         selectedVariant: firstVariant,
         price: (firstVariant.price !== undefined ? firstVariant.price : product.price)
       };
-      
+
       // Call the actual wishlist function from context with variant info
       if (addToWishlist) {
         addToWishlist(productWithVariant);
@@ -523,8 +526,8 @@ export default function ProductSection({
                   {scrollPositions[section.category._id] > 0 && (
                     <button
                       className="hidden lg:block absolute left-[-28px] top-1/2 -translate-y-1/2 z-20 bg-white border border-gray-200 rounded-full shadow p-1 hover:bg-gray-100"
-                      style={{ 
-                        width: 32, 
+                      style={{
+                        width: 32,
                         height: 32,
                         display: 'none' // Initially hidden, overridden by lg:block
                       }}
@@ -534,12 +537,12 @@ export default function ProductSection({
                       <ChevronLeft className="w-5 h-5" />
                     </button>
                   )}
-                  
+
                   {/* Right Button - Hidden on mobile, visible on larger screens */}
                   <button
                     className="hidden lg:block absolute right-[-28px] top-1/2 -translate-y-1/2 z-20 bg-white border border-gray-200 rounded-full shadow p-1 hover:bg-gray-100"
-                    style={{ 
-                      width: 32, 
+                    style={{
+                      width: 32,
                       height: 32,
                       display: 'none' // Initially hidden, overridden by lg:block at larger screens
                     }}
@@ -548,9 +551,9 @@ export default function ProductSection({
                   >
                     <ChevronRight className="w-5 h-5" />
                   </button>
-                  
 
-                  
+
+
                   <div
                     className="overflow-x-auto scrollbar-hide"
                     ref={el => { scrollRefs.current[section.category._id] = el; }}
@@ -565,7 +568,7 @@ export default function ProductSection({
                         const hasDiscount = product.mrp != null && product.mrp > productPrice;
                         const discountPercent = hasDiscount ? Math.round((((product.mrp ?? 0) - productPrice) / (product.mrp ?? 1)) * 100) : 0;
                         const showDiscountBadge = hasDiscount && discountPercent > 30;
-                        
+
                         // Warehouse validation for this product
                         const canAddProduct = canAddToCart(product);
                         // Find this product in the cart to get its variant information
@@ -575,15 +578,16 @@ export default function ProductSection({
                           // with any variant
                           return idMatch;
                         });
-                        
+
                         // If the product is in the cart with a variant, use that variant ID
                         // Otherwise, use the product's variant ID if it has one
                         const variantId = cartItem?.variantId || product.variantId;
-                        
+                        const hasVariantsNoSelection = !!(product.variants && Object.keys(product.variants).length > 0 && !variantId);
+
                         // Create a unique key that includes variant ID if present
                         const cartKey = variantId ? `${product._id}:${variantId}` : product._id;
                         const isInCart = quantities[cartKey] > 0;
-                        
+
                         // Debug logging
                         console.log(`Product ${product.name} (${product._id}):`, {
                           hasVariantInProduct: !!product.variantId,
@@ -595,11 +599,11 @@ export default function ProductSection({
                           quantity: quantities[cartKey],
                           isInCart
                         });
-                        
+
                         // Get conflict info for display
                         const getConflictMessage = () => {
                           if (canAddProduct || isInCart) return '';
-                          
+
                           // Find ANY existing warehouse
                           let existingWarehouse = null;
                           for (const cartItem of cartItems) {
@@ -608,8 +612,8 @@ export default function ProductSection({
                               break;
                             }
                           }
-                          
-                          return existingWarehouse ? 
+
+                          return existingWarehouse ?
                             `Your cart has items from "${existingWarehouse.name}". Clear cart or choose products from the same store.` :
                             'Cannot add to cart due to warehouse conflict';
                         };
@@ -619,138 +623,24 @@ export default function ProductSection({
                           ...product,
                           variantId: product.variants && Object.keys(product.variants).length > 0 ? Object.keys(product.variants)[0] : undefined
                         };
-                        
+
+                        // Determine out-of-stock for display
+                        const isOutOfStock = typeof product.stock === 'number' && product.stock <= 0;
+
                         return (
-                          <div 
-                            key={product._id} 
-                            className={`min-w-[160px] sm:min-w-[180px] max-w-[160px] sm:max-w-[180px] bg-white border rounded-xl flex-shrink-0 flex flex-col relative group cursor-pointer hover:shadow-lg transition-shadow ${
-                              !canAddProduct && !isInCart ? 'border-orange-200 bg-orange-50/30' : 'border-gray-200'
-                            }`}
-                            style={{ fontFamily: 'Sinkin Sans, sans-serif', boxShadow: 'none', minHeight: '260px' }}
-                            onClick={() => handleProductClick(product)}
-                          >
-                            {/* Discount Badge */}
-                            {showDiscountBadge && (
-                              <div className="absolute left-3 top-0 z-10 flex items-center justify-center" style={{ width: '29px', height: '28px', pointerEvents: 'none' }}>
-                                <svg width="29" height="28" viewBox="0 0 29 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                  <path d="M28.9499 0C28.3999 0 27.9361 1.44696 27.9361 2.60412V27.9718L24.5708 25.9718L21.2055 27.9718L17.8402 25.9718L14.4749 27.9718L11.1096 25.9718L7.74436 27.9718L4.37907 25.9718L1.01378 27.9718V2.6037C1.01378 1.44655 0.549931 0 0 0H28.9499Z" fill="#256fef"></path>
-                                </svg>
-                                <div className="absolute top-0 left-0 w-full h-full flex flex-col items-center justify-center text-center text-[9px] font-extrabold text-white z-20" style={{ pointerEvents: 'none' }}>
-                                  {discountPercent}%<br/>OFF
-                                </div>
-                              </div>
-                            )}
-                            
-                            {/* Warehouse Conflict Warning */}
-                            {!canAddProduct && !isInCart && (
-                              <div className="absolute top-2 left-2 z-10 bg-orange-100 border border-orange-200 rounded-md px-2 py-1">
-                                <div className="flex items-center gap-1">
-                                  <svg className="w-3 h-3 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                                  </svg>
-                                  <span className="text-xs text-orange-700 font-medium">Different Store</span>
-                                </div>
-                              </div>
-                            )}
-                            
-                            {/* Wishlist Button */}
-                            <button
-                              className="absolute top-2 right-2 z-10 p-1 rounded-full bg-white shadow hover:bg-gray-100"
-                              onClick={e => {
-                                e.stopPropagation();
-                                handleWishlistClick && handleWishlistClick(product, e);
-                              }}
-                              aria-label={isInWishlist && isInWishlist(product._id, productWithVariant.variantId) ? 'Remove from wishlist' : 'Add to wishlist'}
-                            >
-                              <Heart className={`w-5 h-5 transition-colors duration-200 ${isInWishlist && isInWishlist(product._id, productWithVariant.variantId) ? 'text-red-500 fill-red-500' : 'text-gray-400 fill-none'}`} />
-                            </button>
-                            {/* Product Image */}
-                            <div className="flex justify-center items-center h-32 pt-2">
-                              <img src={product.image || "/placeholder.svg"} alt={product.name} className="w-[120px] h-[120px] object-contain" />
-                          </div>
-                            <div className="px-3 py-2 flex-1 flex flex-col justify-between">
-                              {/* Top Content */}
-                              <div>
-                                {/* Delivery Mode Indicator */}
-                                {locationState.isLocationDetected && (
-                                  <div className="text-[9px] text-gray-400 flex items-center gap-1 mb-1" style={{ fontFamily: 'Sinkin Sans, sans-serif' }}>
-                                    {isGlobalMode ? (
-                                      <>
-                                        <Globe className="w-2.5 h-2.5" />
-                                        <span>Global Store</span>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Store className="w-2.5 h-2.5" />
-                                        <span>Local Store</span>
-                                      </>
-                                    )}
-                                  </div>
-                                )}
-                                {/* Product Name */}
-                                <div className="text-[12px] font-bold text-gray-900 line-clamp-2 mb-1 leading-snug" style={{ fontFamily: 'Sinkin Sans, sans-serif' }}>
-                                  {product.name}
-                                </div>
-                                {/* Rating Stars */}
-                                <div className="flex items-center gap-[0.5px] mb-1">
-                                  {renderStars(product.rating || 0)}
-                                  <span className="text-[9px] text-gray-500 ml-1">({product.rating || 0})</span>
-                                </div>
-                                {/* Variant/Weight/Unit */}
-                                <div className="text-xs text-gray-500 mb-1 font-normal" style={{ fontFamily: 'Sinkin Sans, sans-serif' }}>
-                                  {product.unit}
-                                </div>
-                              </div>
-                              {/* Bottom Section: Price, MRP, ADD button */}
-                              <div className="flex items-end justify-between mt-auto pt-2">
-                                <div className="flex flex-col justify-end">
-                                  <div className="text-[15px] font-bold text-gray-900 leading-none mb-1" style={{ fontFamily: 'Sinkin Sans, sans-serif' }}>₹{productPrice}</div>
-                                  {hasDiscount && (
-                                    <div className="text-xs text-gray-400 line-through leading-none font-normal" style={{ fontFamily: 'Sinkin Sans, sans-serif' }}>₹{product.mrp}</div>
-                                  )}
-                                </div>
-                                <div className="flex-shrink-0">
-                                  {isInCart ? (
-                                    <div className="flex items-center bg-brand-primary rounded-md justify-between" style={{ width: '70px', height: '28px' }}>
-                                      <button
-                                        className="text-white text-sm font-semibold focus:outline-none flex-1 text-center h-full flex items-center justify-center hover:bg-brand-primary-dark transition-colors rounded-l-md"
-                                        onClick={(e) => handleButtonClick(e, () => handleDec({...product, variantId: variantId}))}
-                                        aria-label="Decrease quantity"
-                                      >-</button>
-                                      <span className="text-white font-bold text-sm select-none text-center flex-1 h-full flex items-center justify-center bg-brand-primary">{quantities[cartKey] || 0}</span>
-                                      <button
-                                        className="text-white text-sm font-semibold focus:outline-none flex-1 text-center h-full flex items-center justify-center hover:bg-brand-primary-dark transition-colors rounded-r-md"
-                                        onClick={(e) => handleButtonClick(e, () => handleInc({...product, variantId: variantId}))}
-                                        aria-label="Increase quantity"
-                                      >+</button>
-                                    </div>
-                                  ) : canAddProduct ? (
-                                    <button
-                                      className="border border-brand-primary text-brand-primary font-semibold text-[11px] bg-white hover:bg-brand-primary/10 transition-colors flex items-center justify-center rounded-md"
-                                      style={{ width: '70px', height: '28px', fontFamily: 'Sinkin Sans, sans-serif' }}
-                                      onClick={(e) => handleButtonClick(e, () => handleAdd({...product, variantId: variantId}))}
-                                    >ADD</button>
-                                  ) : (
-                                    <button
-                                      className="border border-orange-300 text-orange-600 font-medium text-[9px] bg-orange-50 cursor-not-allowed rounded-md"
-                                      style={{ width: '70px', height: '28px', fontFamily: 'Sinkin Sans, sans-serif' }}
-                                      onClick={(e) => handleButtonClick(e, () => {
-                                        // Don't call handleAdd for blocked products
-                                        console.log('Blocked: Cannot add product due to warehouse conflict');
-                                      })}
-                                      title={getConflictMessage()}
-                                    >
-                                      <div className="flex items-center justify-center gap-0.5">
-                                        <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
-                                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                                        </svg>
-                                        <span>BLOCK</span>
-                                      </div>
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
+                          <div key={product._id} className="min-w-[160px] sm:min-w-[180px] max-w-[160px] sm:max-w-[180px]">
+                            <ProductCard
+                              product={product}
+                              isInWishlist={(id, vId) => isInWishlist ? isInWishlist(id, vId) : false}
+                              handleWishlistClick={(p, e) => handleWishlistClick(p, e)}
+                              handleAddToCart={(p) => handleAdd(p)}
+                              handleInc={(p) => handleInc(p)}
+                              handleDec={(p) => handleDec(p)}
+                              viewMode="grid"
+                              onClick={() => handleProductClick(product)}
+                              locationState={locationState}
+                              isGlobalMode={isGlobalMode}
+                            />
                           </div>
                         );
                       })}

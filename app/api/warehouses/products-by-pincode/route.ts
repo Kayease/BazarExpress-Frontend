@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
     const sort = searchParams.get('sort');
     const minPrice = searchParams.get('minPrice');
     const maxPrice = searchParams.get('maxPrice');
+    const includeOutOfStock = searchParams.get('includeOutOfStock');
 
     // Validate required parameters
     if (!pincode) {
@@ -68,10 +69,16 @@ export async function GET(request: NextRequest) {
     if (maxPrice) {
       backendParams.append('maxPrice', maxPrice);
     }
+    
+    if (includeOutOfStock) {
+      backendParams.append('includeOutOfStock', includeOutOfStock);
+    }
 
     // Make request to backend API
     const backendUrl = `${API_BASE_URL}/warehouses/products-by-pincode?${backendParams.toString()}`;
     console.log('Proxying request to:', backendUrl);
+    console.log('includeOutOfStock parameter:', includeOutOfStock);
+    console.log('All backend params:', Object.fromEntries(backendParams.entries()));
 
     const response = await fetch(backendUrl, {
       method: 'GET',
@@ -86,6 +93,19 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await response.json();
+    
+    // Log product stock information for debugging
+    if (data.products && Array.isArray(data.products)) {
+      const outOfStockCount = data.products.filter((p: any) => p.stock === 0 || p.stock < 0).length;
+      const inStockCount = data.products.filter((p: any) => p.stock > 0).length;
+      console.log('Products returned from backend:', {
+        total: data.products.length,
+        inStock: inStockCount,
+        outOfStock: outOfStockCount,
+        includeOutOfStockParam: includeOutOfStock
+      });
+    }
+    
     return NextResponse.json(data);
   } catch (error) {
     console.error('Error fetching products by pincode:', error);

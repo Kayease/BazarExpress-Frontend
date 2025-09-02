@@ -40,17 +40,20 @@ import {
   TrendingUp,
   ArrowLeft,
   Share,
+  Search,
 } from "lucide-react";
 import { canAddToCart, getWarehouseConflictInfo } from "@/lib/warehouse-validation";
 import { ReviewModal } from "@/components/ReviewModal";
 import { ProductBreadcrumb } from "@/components/product-breadcrumb";
 import ProductCard from "@/components/product-card";
 import toast from "react-hot-toast";
+import { showStockLimitToast } from "@/lib/toasts";
 import { useRecentlyViewed } from "@/hooks/use-recently-viewed";
 import { useIsMobile } from "@/hooks/use-mobile";
 import ProductPageSkeleton from "@/components/ProductPageSkeleton";
 import { useProductOptimized } from "@/hooks/use-product-optimized";
 import PerformanceMonitor from "@/components/PerformanceMonitor";
+import { stockStream } from "@/lib/stock-stream";
 
 // Lazy load heavy components
 const LazyRelatedProducts = lazy(() => import('@/components/RelatedProducts'));
@@ -112,6 +115,8 @@ interface ExtendedProduct {
   warehouse?: any;
   manufacturer?: string;
   warranty?: string;
+  status?: string;
+  isActive?: boolean;
   variants?: {
     [key: string]: {
       name: string;
@@ -176,7 +181,9 @@ function MobileProductPage({
   isVideo,
   isMobile,
   locationState,
-  isGlobalMode
+  isGlobalMode,
+  handleShare,
+  isProductInactive
 }: any) {
   const [activeTab, setActiveTab] = useState<'details' | 'description' | 'reviews'>('details');
   const [showGallery, setShowGallery] = useState(false);
@@ -222,8 +229,47 @@ function MobileProductPage({
     setTouchEnd(null);
   };
 
+
+
   if (loading) {
     return <ProductPageSkeleton isMobile={isMobile} />;
+  }
+
+  // Check if product is inactive
+  if (isProductInactive) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4">
+        <Card className="w-full max-w-sm sm:max-w-md mx-auto shadow-xl border-0 bg-white/80 backdrop-blur-sm">
+          <CardContent className="p-6 sm:p-8 text-center space-y-6">
+            {/* Icon with background */}
+            <div className="relative">
+              <div className="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <XCircle className="h-10 w-10 text-orange-500" />
+              </div>
+            </div>
+            
+            {/* Content */}
+            <div className="space-y-3">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 leading-tight">Product Unavailable</h1>
+              <p className="text-sm sm:text-base text-gray-600 leading-relaxed">
+                This product is currently inactive and not available for purchase.
+              </p>
+            </div>
+            
+            {/* Enhanced Browse Products Button */}
+            <div className="space-y-3">
+              <Button 
+                onClick={() => router.push("/products")} 
+                className="w-full h-12 bg-gradient-to-r from-brand-primary to-brand-primary-dark hover:from-brand-primary-dark hover:to-brand-primary text-white font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 border-0 text-base"
+              >
+                <ShoppingCart className="h-5 w-5 mr-2" />
+                Browse All Products
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   return (
@@ -262,7 +308,7 @@ function MobileProductPage({
                   <>
                     <button
                       onClick={() => router.push(`/products?category=${parentCategory._id}`)}
-                      className="hover:text-green-600 transition-colors truncate max-w-20 sm:max-w-24"
+                      className="hover:text-green-600 transition-colors truncate max-w-20 sm:max-w-0"
                       title={parentCategory.name}
                     >
                       {parentCategory.name}
@@ -488,7 +534,14 @@ function MobileProductPage({
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setQuantity((q: number) => Math.min(q + 1, currentStock))}
+                onClick={() => setQuantity((q: number) => {
+                  const next = q + 1;
+                  if (next > currentStock) {
+                    showStockLimitToast(currentStock);
+                    return q;
+                  }
+                  return Math.min(next, currentStock);
+                })}
                 disabled={currentStock <= quantity}
                 className="h-10 w-10 p-0 hover:bg-gray-50 rounded-r-lg"
               >
@@ -510,6 +563,12 @@ function MobileProductPage({
                 disabled={Boolean(currentStock <= 0 || isItemBeingAdded(product._id, selectedVariant || undefined) || (variants && selectedVariant === null))}
                 onClick={async () => {
                   try {
+                    // Guard: prevent adding more than available stock
+                    if (quantity > currentStock) {
+                      const { showStockLimitToast } = await import('@/lib/toasts');
+                      showStockLimitToast(currentStock);
+                      return;
+                    }
                     await addToCart({
                       id: product._id,
                       name: product.name,
@@ -532,6 +591,19 @@ function MobileProductPage({
                       toast.error(`Please select a variant for ${product.name} before adding to cart`);
                     } else if (error.isWarehouseConflict) {
                       toast.error(error.message);
+                    } else if (error?.response?.status === 400) {
+                      try {
+                        const { availableStock, available } = error.response.data || {};
+                        const avail = typeof availableStock === 'number' ? availableStock : (typeof available === 'number' ? available : undefined);
+                        if (typeof avail === 'number') {
+                          const { showStockLimitToast } = await import('@/lib/toasts');
+                          showStockLimitToast(avail);
+                        } else {
+                          toast.error('Only limited stock is available');
+                        }
+                      } catch {
+                        toast.error('Only limited stock is available');
+                      }
                     } else {
                       toast.error('Failed to add item to cart');
                     }
@@ -592,6 +664,16 @@ function MobileProductPage({
               }}
             >
               <Heart className={`h-5 w-5 ${isInWishlist(product._id, selectedVariant || undefined) ? "text-red-500 fill-red-500" : "text-gray-400"}`} />
+            </Button>
+
+            {/* Share Button - Mobile View */}
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-12 w-12 border-2 border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-all duration-300"
+              onClick={handleShare}
+            >
+              <Share2 className="h-5 w-5 text-gray-400 hover:text-blue-500" />
             </Button>
           </div>
         </div>
@@ -1073,6 +1155,9 @@ export default function ProductDetailsPage() {
   const relatedProducts = Array.isArray(optimizedRelatedProducts) ? optimizedRelatedProducts : [];
   const relatedProductsLoading = optimizedRelatedProductsLoading;
   
+  // Check if product is inactive
+  const isProductInactive = product && (product.status === 'inactive' || product.status === 'disabled' || product.isActive === false);
+  
   // Local state for UI interactions
   const [mainImageIdx, setMainImageIdx] = useState(0);
   const [quantity, setQuantity] = useState(1);
@@ -1121,6 +1206,16 @@ export default function ProductDetailsPage() {
     });
   }, [product?.variants, product?.attributes, selectedAttributes]);
 
+  // Seed stock stream with initial product stock for instant client-side validation
+  useEffect(() => {
+    if (product?._id) {
+      const variantStocks = Object.fromEntries(
+        Object.entries(product?.variants || {}).map(([k, v]: any) => [k, Number((v?.stock) || 0)])
+      );
+      stockStream.seed(product._id, Number(product.stock) || 0, variantStocks);
+    }
+  }, [product?._id, product?.stock, product?.variants]);
+
   // Function to handle attribute selection
   const handleAttributeSelection = (attributeName: string, value: string) => {
     // Don't do anything if clicking the same value
@@ -1152,7 +1247,30 @@ export default function ProductDetailsPage() {
     }
   };
 
-
+  // Share functionality
+  const handleShare = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: product?.name || 'Product',
+          text: `Check out ${product?.name || 'this product'} on BazarXpress!`,
+          url: window.location.href,
+        });
+      } catch (error) {
+        console.log('Error sharing:', error);
+      }
+    } else {
+      // Fallback for browsers that don't support Web Share API
+      try {
+        await navigator.clipboard.writeText(window.location.href);
+        toast.success('Link copied to clipboard!');
+      } catch (error) {
+        console.log('Error copying to clipboard:', error);
+        // Final fallback - open in new window
+        window.open(window.location.href, '_blank');
+      }
+    }
+  };
 
   // Update available variants when attributes change
   useEffect(() => {
@@ -1283,16 +1401,41 @@ export default function ProductDetailsPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Card className="p-8 text-center max-w-md mx-4">
-          <CardContent className="space-y-4">
-            <AlertCircle className="h-16 w-16 text-red-500 mx-auto" />
-            <h1 className="text-2xl font-bold text-gray-900">Error Loading Product</h1>
-            <p className="text-gray-600">{error}</p>
-            <p className="text-sm text-gray-500">Product ID: {id}</p>
-            <Button onClick={() => window.location.reload()} className="bg-brand-primary hover:bg-brand-primary-dark">
-              Retry
-            </Button>
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4">
+        <Card className="w-full max-w-sm sm:max-w-md mx-auto shadow-xl border-0 bg-white/80 backdrop-blur-sm">
+          <CardContent className="p-6 sm:p-8 text-center space-y-6">
+            {/* Icon with background */}
+            <div className="relative">
+              <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertCircle className="h-10 w-10 text-red-500" />
+              </div>
+            </div>
+            
+            {/* Content */}
+            <div className="space-y-3">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 leading-tight">Error Loading Product</h1>
+              <p className="text-sm sm:text-base text-gray-600 leading-relaxed">{error}</p>
+            </div>
+            
+            {/* Enhanced Retry Button */}
+            <div className="space-y-3">
+              <Button 
+                onClick={() => window.location.reload()} 
+                className="w-full h-12 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 border-0 text-base"
+              >
+                <Zap className="h-5 w-5 mr-2" />
+                Try Again
+              </Button>
+              
+              <Button 
+                variant="outline"
+                onClick={() => router.push("/products")} 
+                className="w-full h-10 border-2 border-gray-200 hover:border-brand-primary/50 hover:bg-brand-primary/5 text-gray-700 hover:text-brand-primary font-medium transition-all duration-300"
+              >
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Browse Products
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -1301,16 +1444,89 @@ export default function ProductDetailsPage() {
 
   if (!product) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Card className="p-8 text-center max-w-md mx-4">
-          <CardContent className="space-y-4">
-            <AlertCircle className="h-16 w-16 text-red-500 mx-auto" />
-            <h1 className="text-2xl font-bold text-gray-900">Product Not Found</h1>
-            <p className="text-gray-600">The product you're looking for doesn't exist or has been removed.</p>
-            <p className="text-sm text-gray-500">Product ID: {id}</p>
-            <Button onClick={() => router.push("/products")} className="bg-brand-primary hover:bg-brand-primary-dark">
-              Browse Products
-            </Button>
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4">
+        <Card className="w-full max-w-sm sm:max-w-md mx-auto shadow-xl border-0 bg-white/80 backdrop-blur-sm">
+          <CardContent className="p-6 sm:p-8 text-center space-y-6">
+            {/* Icon with background */}
+            <div className="relative">
+              <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertCircle className="h-10 w-10 text-red-500" />
+              </div>
+              <div className="absolute -top-1 -right-1 w-6 h-6 bg-red-200 rounded-full flex items-center justify-center">
+                <Search className="h-4 w-4 text-red-600" />
+              </div>
+            </div>
+            
+            {/* Content */}
+            <div className="space-y-3">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 leading-tight">Product Not Found</h1>
+              <p className="text-sm sm:text-base text-gray-600 leading-relaxed">
+                The product you're looking for doesn't exist or has been removed.
+              </p>
+              <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                <p className="text-xs sm:text-sm text-gray-500 font-medium">
+                  <span className="text-gray-400">Product ID:</span> {id}
+                </p>
+              </div>
+            </div>
+            
+            {/* Enhanced Browse Products Button */}
+            <div className="space-y-3">
+              <Button 
+                onClick={() => router.push("/products")} 
+                className="w-full h-12 bg-gradient-to-r from-brand-primary to-brand-primary-dark hover:from-brand-primary-dark hover:to-brand-primary text-white font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 border-0 text-base"
+              >
+                <ShoppingCart className="h-5 w-5 mr-2" />
+                Browse All Products
+              </Button>
+              
+              <Button 
+                variant="outline"
+                onClick={() => router.push("/")} 
+                className="w-full h-10 border-2 border-gray-200 hover:border-brand-primary/50 hover:bg-brand-primary/5 text-gray-700 hover:text-brand-primary font-medium transition-all duration-300"
+              >
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Home
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Check if product is inactive
+  if (isProductInactive) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md lg:max-w-lg mx-auto shadow-xl border-0 bg-white/80 backdrop-blur-sm">
+          <CardContent className="p-8 lg:p-10 text-center space-y-6">
+            {/* Icon with background */}
+            <div className="relative">
+              <div className="w-24 h-24 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <XCircle className="h-12 w-12 text-orange-500" />
+              </div>
+            </div>
+            
+            {/* Content */}
+            <div className="space-y-4">
+              <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 leading-tight">Product Unavailable</h1>
+              <p className="text-base lg:text-lg text-gray-600 leading-relaxed max-w-md mx-auto">
+                This product is currently inactive and not available for purchase.
+              </p>
+            </div>
+            
+            {/* Enhanced Browse Products Button */}
+            <div className="space-y-4">
+              <Button 
+                onClick={() => router.push("/products")} 
+                className="w-full max-w-xs h-14 bg-gradient-to-r from-brand-primary to-brand-primary-dark hover:from-brand-primary-dark hover:to-brand-primary text-white font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 border-0 text-lg"
+              >
+                <ShoppingCart className="h-6 w-6 mr-3" />
+                Browse All Products
+              </Button>
+
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -1350,6 +1566,7 @@ export default function ProductDetailsPage() {
       <MobileProductPage
         product={product}
         loading={loading}
+        isProductInactive={isProductInactive}
         mainImageIdx={mainImageIdx}
         setMainImageIdx={setMainImageIdx}
         quantity={quantity}
@@ -1388,6 +1605,7 @@ export default function ProductDetailsPage() {
         isMobile={isMobile}
         locationState={locationState}
         isGlobalMode={isGlobalMode}
+        handleShare={handleShare}
       />
     );
   }
@@ -1549,13 +1767,25 @@ export default function ProductDetailsPage() {
                 <h1 className="text-2xl font-bold text-gray-900 mb-2">{product.name}</h1>
                 <div className="w-16 h-1 bg-brand-primary rounded-full"></div>
               </div>
-              <Button 
-                onClick={() => setIsReviewModalOpen(true)} 
-                className="bg-gradient-to-r from-brand-primary to-brand-primary-dark hover:from-brand-primary-dark hover:to-brand-primary text-white font-semibold shadow-lg hover:shadow-xl transform  transition-all duration-300 border-0 px-6 py-2"
-              >
-                <MessageSquare className="h-4 w-4 mr-2" />
-                Write Review
-              </Button>
+              <div className="flex gap-2">
+                <Button 
+                  onClick={() => setIsReviewModalOpen(true)} 
+                  className="bg-gradient-to-r from-brand-primary to-brand-primary-dark hover:from-brand-primary-dark hover:to-brand-primary text-white font-semibold shadow-lg hover:shadow-xl transform  transition-all duration-300 border-0 px-6 py-2"
+                >
+                  <MessageSquare className="h-4 w-4 mr-2" />
+                  Write Review
+                </Button>
+                
+                {/* Share Button - Desktop View */}
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-10 w-10 border-2 border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-all duration-300"
+                  onClick={handleShare}
+                >
+                  <Share2 className="h-5 w-5 text-gray-400 hover:text-blue-500" />
+                </Button>
+              </div>
             </div>
 
             {/* Brand Information */}

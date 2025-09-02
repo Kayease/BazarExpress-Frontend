@@ -85,6 +85,9 @@ const ProductCard: React.FC<ProductCardProps> = ({
   const discountPercent = hasDiscount ? Math.round((((product.mrp ?? 0) - product.price) / (product.mrp ?? 1)) * 100) : 0;
   const showDiscountBadge = hasDiscount && discountPercent > 30;
   
+  // Check if product is out of stock
+  const isOutOfStock = product.stock === 0 || product.stock < 0;
+  
   // Find this product in the cart to get its variant information
   const cartItem = cartItems.find(item => {
     const idMatch = (item.id || item._id) === product._id;
@@ -124,6 +127,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
   });
   const conflictInfo = getWarehouseConflictInfo(product, cartItems);
   const isInCart = currentQuantity > 0;
+  const hasVariantsNoSelection = !!(product.variants && Object.keys(product.variants).length > 0 && !product.variantId);
 
   // Handle increment quantity
   const handleIncrement = (e: React.MouseEvent) => {
@@ -132,7 +136,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
       handleInc(productWithVariant);
     } else if (updateCartItem) {
       const newQty = currentQuantity + 1;
-      updateCartItem(product._id, newQty, variantId);
+      updateCartItem(product._id, newQty, variantId, true);
     }
   };
 
@@ -157,7 +161,11 @@ const ProductCard: React.FC<ProductCardProps> = ({
     return (
       <div
         className={`w-full bg-white border rounded-xl flex items-start sm:items-center gap-3 p-3 sm:gap-4 sm:p-4 relative group cursor-pointer hover:shadow-lg transition-all duration-300 ${
-          !canAddProduct && !isInCart ? 'border-orange-200 bg-orange-50/30' : 'border-gray-200'
+          isOutOfStock 
+            ? 'border-gray-300 bg-gray-50/50 opacity-100' 
+            : !canAddProduct && !isInCart 
+              ? 'border-orange-200 bg-orange-50/30' 
+              : 'border-gray-200'
         }`}
         style={{ fontFamily: 'Sinkin Sans, sans-serif' }}
         onClick={onClick}
@@ -179,8 +187,17 @@ const ProductCard: React.FC<ProductCardProps> = ({
           </div>
         )}
         
+        {/* Out of Stock Overlay */}
+        {isOutOfStock && (
+          <div className="absolute inset-0 bg-white/30 rounded-xl flex items-center justify-center z-20" style={{ pointerEvents: 'none' }}>
+            <div className="bg-red-100 border border-red-200 rounded-lg px-4 py-2">
+              <span className="text-red-700 font-semibold text-sm">Out of Stock</span>
+            </div>
+          </div>
+        )}
+        
         {/* Warehouse Conflict Warning */}
-        {!canAddProduct && !isInCart && (
+        {!canAddProduct && !isInCart && !isOutOfStock && (
           <div className="absolute top-10 left-2 sm:top-3 sm:left-3 z-10 bg-orange-100 border border-orange-200 rounded-md px-2 py-1" style={{ pointerEvents: 'none' }}>
             <div className="flex items-center gap-1">
               <AlertTriangle className="w-3 h-3 text-orange-600" />
@@ -261,7 +278,16 @@ const ProductCard: React.FC<ProductCardProps> = ({
 
             {/* Right side - Action Buttons */}
             <div className="flex items-center gap-2 sm:gap-3">
-              {(!alwaysShowAddButton && currentQuantity > 0) ? (
+              {isOutOfStock ? (
+                <button
+                  className="bg-gray-100 text-gray-500 font-medium px-3 py-2 rounded-md border border-gray-200 cursor-not-allowed"
+                  style={{ width: '70px', height: '28px', fontFamily: 'Sinkin Sans, sans-serif' }}
+                  disabled
+                  title="Out of Stock"
+                >
+                  <span className="text-xs">UNAVAILABLE</span>
+                </button>
+              ) : (!alwaysShowAddButton && currentQuantity > 0) ? (
                 <div className="flex items-center bg-brand-primary rounded-md justify-between" style={{ width: '70px', height: '28px' }}>
                   <button
                     className="text-white text-sm font-semibold focus:outline-none flex-1 text-center h-full flex items-center justify-center hover:bg-brand-primary-dark transition-colors rounded-l-md"
@@ -281,6 +307,10 @@ const ProductCard: React.FC<ProductCardProps> = ({
                   style={{ width: '70px', height: '28px', fontFamily: 'Sinkin Sans, sans-serif' }}
                   onClick={(e) => {
                     e.stopPropagation();
+                    if (hasVariantsNoSelection) {
+                      onClick && onClick();
+                      return;
+                    }
                     if (handleAddToCart) {
                       handleAddToCart(productWithVariant);
                     } else if (handleAdd) {
@@ -290,7 +320,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
                   aria-label="ADD"
                   title="ADD"
                 >
-                  ADD
+                  {hasVariantsNoSelection ? 'ADD' : 'ADD'}
                 </button>
               ) : (
                 <button
@@ -331,7 +361,11 @@ const ProductCard: React.FC<ProductCardProps> = ({
     <div
       key={product._id}
       className={`w-full h-full bg-white border rounded-lg flex flex-col relative group cursor-pointer hover:shadow-lg transition ${
-        !canAddProduct && !isInCart ? 'border-orange-200 bg-orange-50/30' : 'border-gray-200'
+        isOutOfStock 
+          ? 'border-gray-300 bg-gray-50/50 opacity-100' 
+          : !canAddProduct && !isInCart 
+            ? 'border-orange-200 bg-orange-50/30' 
+            : 'border-gray-200'
       }`}
       style={{ fontFamily: 'Sinkin Sans, sans-serif', boxShadow: 'none' }}
       onClick={onClick}
@@ -351,8 +385,17 @@ const ProductCard: React.FC<ProductCardProps> = ({
         </div>
       )}
       
+      {/* Out of Stock Overlay */}
+      {isOutOfStock && (
+        <div className="absolute inset-0 bg-white/30 rounded-lg flex items-center justify-center z-20" style={{ pointerEvents: 'none' }}>
+          <div className="bg-red-100 border border-red-200 rounded-lg px-3 py-2">
+            <span className="text-red-700 font-semibold text-sm">Out of Stock</span>
+          </div>
+        </div>
+      )}
+      
       {/* Warehouse Conflict Warning */}
-      {!canAddProduct && !isInCart && (
+      {!canAddProduct && !isInCart && !isOutOfStock && (
         <div className="absolute top-2 left-2 z-10 bg-orange-100 border border-orange-200 rounded-md px-2 py-1" style={{ pointerEvents: 'none' }}>
           <div className="flex items-center gap-1">
             <AlertTriangle className="w-3 h-3 text-orange-600" />
@@ -430,7 +473,16 @@ const ProductCard: React.FC<ProductCardProps> = ({
             )}
           </div>
           <div className="flex-shrink-0">
-            {(!alwaysShowAddButton && currentQuantity > 0) ? (
+            {isOutOfStock ? (
+              <button
+                className="bg-gray-100 text-gray-500 font-medium text-[9px] border border-gray-200 cursor-not-allowed rounded-md"
+                style={{ width: '70px', height: '28px', fontFamily: 'Sinkin Sans, sans-serif' }}
+                disabled
+                title="Out of Stock"
+              >
+                <span>UNAVAILABLE</span>
+              </button>
+            ) : (!alwaysShowAddButton && currentQuantity > 0) ? (
               <div className="flex items-center bg-brand-primary rounded-md justify-between" style={{ width: '70px', height: '28px' }}>
                 <button
                   className="text-white text-sm font-semibold focus:outline-none flex-1 text-center h-full flex items-center justify-center hover:bg-brand-primary-dark transition-colors rounded-l-md"
@@ -455,6 +507,10 @@ const ProductCard: React.FC<ProductCardProps> = ({
                   console.log('handleAdd available:', !!handleAdd);
                   console.log('productWithVariant:', productWithVariant);
                   
+                  if (hasVariantsNoSelection) {
+                    onClick && onClick();
+                    return;
+                  }
                   if (handleAddToCart) {
                     console.log('Calling handleAddToCart with:', productWithVariant);
                     handleAddToCart(productWithVariant);
@@ -466,7 +522,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
                   }
                 }}
               >
-                ADD
+                {hasVariantsNoSelection ? 'ADD' : 'ADD'}
               </button>
             ) : (
               <button

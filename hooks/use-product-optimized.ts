@@ -31,6 +31,8 @@ interface Product {
   warehouse?: any;
   manufacturer?: string;
   warranty?: string;
+  status?: string;
+  isActive?: boolean;
   variants?: any;
 }
 

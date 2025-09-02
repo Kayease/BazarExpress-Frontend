@@ -14,6 +14,7 @@ import DataPreloader from "@/components/data-preloader";
 import PerformanceMonitorComponent from "@/components/performance-monitor";
 import OrderSuccessModal from "@/components/OrderSuccessModal";
 import HomePageSkeleton from "@/components/HomePageSkeleton";
+
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -63,33 +64,19 @@ export default function Home() {
   }, []);
 
   const handleAddToCart = (product: any) => {
-    // Check if product has variants and include the first variant by default
-    if (product.variants && Object.keys(product.variants).length > 0) {
-      const firstVariantKey = Object.keys(product.variants)[0];
-      const firstVariant = product.variants[firstVariantKey];
-      
-      const productWithVariant = {
-        ...product,
-        variantId: firstVariantKey,
-        variantName: firstVariant.name || firstVariantKey.replace(/::/g, ' '),
-        selectedVariant: firstVariant,
-        price: (firstVariant.price !== undefined ? firstVariant.price : product.price)
-      };
-      
-      addToCart(productWithVariant);
-      setIsCartOpen(true);
-      toast({
-        title: "Added to Cart",
-        description: `${product.name} (${firstVariant.name || firstVariantKey.replace(/::/g, ' ')}) has been added to your cart.`,
-      });
-    } else {
-      addToCart(product);
-      setIsCartOpen(true);
-      toast({
-        title: "Added to Cart",
-        description: `${product.name} has been added to your cart.`,
-      });
+    // If product has variants and none is selected, redirect to product page to select variant
+    if (product.variants && Object.keys(product.variants).length > 0 && !product.variantId) {
+      router.push(`/products/${product._id}`);
+      return;
     }
+
+    // No variants or variant already selected
+    addToCart(product.variantId ? { ...product, id: product._id ?? product.id, quantity: product.quantity ?? 1 } : product);
+    setIsCartOpen(true);
+    toast({
+      title: "Added to Cart",
+      description: product.variantName ? `${product.name} (${product.variantName}) has been added to your cart.` : `${product.name} has been added to your cart.`,
+    });
   };
 
   // Show skeleton loading while location is being fetched
