@@ -49,6 +49,7 @@ interface ReturnItemsModalProps {
   onSubmit: () => void;
   isSubmitting: boolean;
   returnableItems: ReturnItem[];
+  onPaymentChange?: (pref: { method: 'upi' | 'bank' | ''; upiId?: string; bankDetails?: { accountHolderName: string; accountNumber: string; ifsc: string; bankName: string } }) => void;
 }
 
 export default function ReturnItemsModal({
@@ -61,9 +62,46 @@ export default function ReturnItemsModal({
   onReasonChange,
   onSubmit,
   isSubmitting,
-  returnableItems
+  returnableItems,
+  onPaymentChange
 }: ReturnItemsModalProps) {
   
+  const [paymentMethod, setPaymentMethod] = useState<'upi' | 'bank' | ''>('');
+  const [upiId, setUpiId] = useState<string>('');
+  const [bankDetails, setBankDetails] = useState({
+    accountHolderName: '',
+    accountNumber: '',
+    ifsc: '',
+    bankName: ''
+  });
+  const [confirmAccountNumber, setConfirmAccountNumber] = useState<string>('');
+
+  // Lift payment preference up to parent when changes occur
+  useEffect(() => {
+    onPaymentChange?.({
+      method: paymentMethod,
+      upiId,
+      bankDetails
+    });
+  }, [paymentMethod, upiId, bankDetails, onPaymentChange]);
+
+  const isPaymentValid = (() => {
+    if (paymentMethod === 'upi') {
+      return upiId.trim().length > 0;
+    }
+    if (paymentMethod === 'bank') {
+      return (
+        bankDetails.accountHolderName.trim().length > 0 &&
+        bankDetails.accountNumber.trim().length > 0 &&
+        confirmAccountNumber.trim().length > 0 &&
+        bankDetails.accountNumber.trim() === confirmAccountNumber.trim() &&
+        bankDetails.ifsc.trim().length > 0 &&
+        bankDetails.bankName.trim().length > 0
+      );
+    }
+    return false;
+  })();
+
   // Calculate remaining days for return for each item
   const getRemainingReturnDays = (item: ReturnItem) => {
     const deliveryDate = order.actualDeliveryDate;
@@ -171,7 +209,6 @@ export default function ReturnItemsModal({
                             ? 'border-brand-primary bg-brand-primary/5' 
                             : 'border-gray-200 hover:border-gray-300'
                         }`}
-                        onClick={() => onItemToggle(itemId)}
                       >
                         <input
                           type="checkbox"
@@ -179,8 +216,9 @@ export default function ReturnItemsModal({
                           checked={isSelected}
                           onChange={() => onItemToggle(itemId)}
                           className="w-3 h-3 sm:w-4 sm:h-4 text-brand-primary border-gray-300 rounded focus:ring-brand-primary flex-shrink-0"
+                          onClick={(e) => e.stopPropagation()}
                         />
-                        <label htmlFor={`return-item-${itemId}`} className="flex-1 cursor-pointer min-w-0">
+                        <label htmlFor={`return-item-${itemId}`} className="flex-1 cursor-pointer min-w-0" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center space-x-2 sm:space-x-3">
                             {/* Product Image */}
                             <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
@@ -241,11 +279,7 @@ export default function ReturnItemsModal({
                 
                 {pickupAddress ? (
                   <div className="text-xs sm:text-sm text-gray-700 space-y-1">
-                    <p className="font-medium">{pickupAddress.name}</p>
-                    <p>{pickupAddress.building}</p>
-                    <p>{pickupAddress.area}</p>
-                    <p>{pickupAddress.city}, {pickupAddress.state}</p>
-                    <p>{pickupAddress.pincode}</p>
+                    <p className="font-medium">{pickupAddress.name}, {pickupAddress.building}, {pickupAddress.area}, {pickupAddress.city}, {pickupAddress.state}, {pickupAddress.pincode}</p>
                     {pickupAddress.phone && <p>Phone: {pickupAddress.phone}</p>}
                   </div>
                 ) : (
@@ -256,6 +290,122 @@ export default function ReturnItemsModal({
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* Refund Method - user selects preferred refund method that admin must honor */}
+              <div className="bg-white border border-gray-200 rounded-lg sm:rounded-xl p-3 sm:p-4 shadow-sm">
+                <div className="flex items-center space-x-2 mb-2 sm:mb-3">
+                  <div className="w-2 h-2 bg-brand-primary rounded-full"></div>
+                  <h4 className="text-xs sm:text-sm font-semibold text-gray-900">Refund Method *</h4>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className={`flex items-center justify-center px-3 py-2 border-2 rounded-lg text-xs sm:text-sm font-medium cursor-pointer transition-all ${paymentMethod === 'upi' ? 'border-brand-primary/30 bg-brand-primary/5 text-brand-primary-dark' : 'border-gray-200 bg-gray-50 text-gray-700 hover:border-gray-300'}`}>
+                      <input
+                        type="radio"
+                        name="refund-method"
+                        value="upi"
+                        checked={paymentMethod === 'upi'}
+                        onChange={() => setPaymentMethod('upi')}
+                        className="hidden"
+                      />
+                      UPI
+                    </label>
+                    <label className={`flex items-center justify-center px-3 py-2 border-2 rounded-lg text-xs sm:text-sm font-medium cursor-pointer transition-all ${paymentMethod === 'bank' ? 'border-brand-primary/30 bg-brand-primary/5 text-brand-primary-dark' : 'border-gray-200 bg-gray-50 text-gray-700 hover:border-gray-300'}`}>
+                      <input
+                        type="radio"
+                        name="refund-method"
+                        value="bank"
+                        checked={paymentMethod === 'bank'}
+                        onChange={() => setPaymentMethod('bank')}
+                        className="hidden"
+                      />
+                      Bank Details
+                    </label>
+                  </div>
+
+                  {paymentMethod === 'upi' && (
+                    <div className="space-y-2">
+                      <label htmlFor="upiId" className="text-xs sm:text-sm text-gray-700 font-medium">UPI ID</label>
+                      <input
+                        id="upiId"
+                        type="text"
+                        value={upiId}
+                        onChange={(e) => setUpiId(e.target.value)}
+                        placeholder="e.g., username@bank"
+                        className={`w-full px-3 sm:px-4 py-2 sm:py-3 border-2 rounded-lg text-xs sm:text-sm transition-all ${upiId ? 'border-brand-primary/30 bg-brand-primary/5 text-brand-primary-dark' : 'border-gray-200 bg-gray-50 text-gray-700 hover:border-gray-300 focus:border-brand-primary focus:bg-white'}`}
+                      />
+                    </div>
+                  )}
+
+                  {paymentMethod === 'bank' && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+                      <div className="space-y-1">
+                        <label htmlFor="accountHolderName" className="text-xs sm:text-sm text-gray-700 font-medium">Account Holder Name</label>
+                        <input
+                          id="accountHolderName"
+                          type="text"
+                          value={bankDetails.accountHolderName}
+                          onChange={(e) => setBankDetails({ ...bankDetails, accountHolderName: e.target.value })}
+                          className={`w-full px-3 sm:px-4 py-2 sm:py-3 border-2 rounded-lg text-xs sm:text-sm transition-all ${bankDetails.accountHolderName ? 'border-brand-primary/30 bg-brand-primary/5 text-brand-primary-dark' : 'border-gray-200 bg-gray-50 text-gray-700 hover:border-gray-300 focus:border-brand-primary focus:bg-white'}`}
+                          placeholder="Full name"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label htmlFor="accountNumber" className="text-xs sm:text-sm text-gray-700 font-medium">Account Number</label>
+                        <input
+                          id="accountNumber"
+                          type="text"
+                          value={bankDetails.accountNumber}
+                          onChange={(e) => setBankDetails({ ...bankDetails, accountNumber: e.target.value })}
+                          className={`w-full px-3 sm:px-4 py-2 sm:py-3 border-2 rounded-lg text-xs sm:text-sm transition-all ${bankDetails.accountNumber ? 'border-brand-primary/30 bg-brand-primary/5 text-brand-primary-dark' : 'border-gray-200 bg-gray-50 text-gray-700 hover:border-gray-300 focus:border-brand-primary focus:bg-white'}`}
+                          placeholder="XXXXXXXXXXXX"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label htmlFor="confirmAccountNumber" className="text-xs sm:text-sm text-gray-700 font-medium">Confirm Account Number</label>
+                        <input
+                          id="confirmAccountNumber"
+                          type="text"
+                          value={confirmAccountNumber}
+                          onChange={(e) => setConfirmAccountNumber(e.target.value)}
+                          className={`w-full px-3 sm:px-4 py-2 sm:py-3 border-2 rounded-lg text-xs sm:text-sm transition-all ${confirmAccountNumber && confirmAccountNumber === bankDetails.accountNumber ? 'border-brand-primary/30 bg-brand-primary/5 text-brand-primary-dark' : confirmAccountNumber ? 'border-red-200 bg-red-50 text-red-700' : 'border-gray-200 bg-gray-50 text-gray-700 hover:border-gray-300 focus:border-brand-primary focus:bg-white'}`}
+                          placeholder="Re-enter account number"
+                        />
+                        {confirmAccountNumber && confirmAccountNumber !== bankDetails.accountNumber && (
+                          <p className="text-[11px] sm:text-xs text-red-600">Account numbers do not match.</p>
+                        )}
+                      </div>
+                      <div className="space-y-1">
+                        <label htmlFor="ifsc" className="text-xs sm:text-sm text-gray-700 font-medium">IFSC Code</label>
+                        <input
+                          id="ifsc"
+                          type="text"
+                          value={bankDetails.ifsc}
+                          onChange={(e) => setBankDetails({ ...bankDetails, ifsc: e.target.value.toUpperCase() })}
+                          className={`w-full px-3 sm:px-4 py-2 sm:py-3 border-2 rounded-lg text-xs sm:text-sm transition-all ${bankDetails.ifsc ? 'border-brand-primary/30 bg-brand-primary/5 text-brand-primary-dark' : 'border-gray-200 bg-gray-50 text-gray-700 hover:border-gray-300 focus:border-brand-primary focus:bg-white'}`}
+                          placeholder="ABCD0123456"
+                        />
+                      </div>
+                      <div className="space-y-1 sm:col-span-2">
+                        <label htmlFor="bankName" className="text-xs sm:text-sm text-gray-700 font-medium">Bank Name</label>
+                        <input
+                          id="bankName"
+                          type="text"
+                          value={bankDetails.bankName}
+                          onChange={(e) => setBankDetails({ ...bankDetails, bankName: e.target.value })}
+                          className={`w-full px-3 sm:px-4 py-2 sm:py-3 border-2 rounded-lg text-xs sm:text-sm transition-all ${bankDetails.bankName ? 'border-brand-primary/30 bg-brand-primary/5 text-brand-primary-dark' : 'border-gray-200 bg-gray-50 text-gray-700 hover:border-gray-300 focus:border-brand-primary focus:bg-white'}`}
+                          placeholder="e.g., HDFC Bank"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {paymentMethod && (
+                    <p className="text-[11px] sm:text-xs text-gray-500">We will process the refund to your selected method.</p>
+                  )}
+                </div>
               </div>
 
               {/* Return Reason */}
@@ -314,7 +464,7 @@ export default function ReturnItemsModal({
                 </button>
                 <button
                   onClick={onSubmit}
-                  disabled={selectedItems.length === 0 || !returnReason || isSubmitting}
+                  disabled={selectedItems.length === 0 || !returnReason || isSubmitting || !isPaymentValid}
                   className="flex-1 px-3 sm:px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-xs sm:text-sm font-medium"
                 >
                   {isSubmitting ? (

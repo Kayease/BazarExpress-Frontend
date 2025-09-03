@@ -97,6 +97,7 @@ export default function Profile() {
   const [selectedReturnItems, setSelectedReturnItems] = useState<string[]>([]);
   const [returnReason, setReturnReason] = useState("");
   const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
+  const [refundPreference, setRefundPreference] = useState<{ method: 'upi' | 'bank' | '' ; upiId?: string; bankDetails?: { accountHolderName: string; accountNumber: string; ifsc: string; bankName: string } }>({ method: '' });
 
 
 
@@ -609,7 +610,12 @@ export default function Profile() {
           items: returnItems,
           returnReason,
           pickupAddress,
-          pickupInstructions: `Please contact ${pickupAddress.phone} before pickup`
+          pickupInstructions: `Please contact ${pickupAddress.phone} before pickup`,
+          refundPreference: refundPreference.method ? {
+            method: refundPreference.method,
+            upiId: refundPreference.upiId,
+            bankDetails: refundPreference.bankDetails
+          } : undefined
         })
       });
 
@@ -1851,6 +1857,7 @@ export default function Profile() {
         onSubmit={() => { void handleSubmitReturn(); }}
         isSubmitting={isSubmittingReturn}
         returnableItems={selectedOrderForReturn ? getReturnableItems(selectedOrderForReturn) : []}
+        onPaymentChange={setRefundPreference}
       />
 
       {/* Order Detail Modal */}

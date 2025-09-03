@@ -12,6 +12,7 @@ import TaxFormModal from "../app/admin/taxes/TaxFormModal";
 import WarehouseFormModal from "./WarehouseFormModal";
 import WarehouseSelector from "./WarehouseSelector";
 import { useRoleAccess } from "./RoleBasedAccess";
+import { validateFile, validateFiles, FILE_VALIDATION_CONFIG, formatFileSize } from '@/lib/fileValidation';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -497,8 +498,27 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setImageFile(file);
-      setProduct((prev: any) => ({ ...prev, image: URL.createObjectURL(file) }));
+      // Validate the main product image with stricter requirements
+      validateFile(file, {
+        allowedTypes: ['image'],
+        maxSize: FILE_VALIDATION_CONFIG.images.maxSize,
+        checkDimensions: true
+      }).then(result => {
+        if (result.isValid) {
+          if (result.warning) {
+            toast.error(result.warning);
+          }
+          setImageFile(file);
+          setProduct((prev: any) => ({ ...prev, image: URL.createObjectURL(file) }));
+        } else {
+          toast.error(result.error || 'Invalid file');
+          // Reset the input
+          e.target.value = '';
+        }
+      }).catch(error => {
+        toast.error(`Validation error: ${error.message}`);
+        e.target.value = '';
+      });
     }
   };
 
@@ -506,40 +526,52 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
   const handleGalleryMediaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     
-    // Validate file types and size
-    const validFiles = files.filter(file => {
-      const isValidImage = file.type.startsWith('image/');
-      const isValidVideo = file.type.startsWith('video/');
-      
-      // Check file size (max 100MB for videos, 10MB for images)
-      const maxSize = isValidVideo ? 100 * 1024 * 1024 : 10 * 1024 * 1024;
-      if (file.size > maxSize) {
-        toast.error(`${file.name} is too large. Max size: ${isValidVideo ? '100MB' : '10MB'}`);
-        return false;
+    // Validate all files using the new validation system
+    validateFiles(files, {
+      allowedTypes: ['image', 'video'],
+      maxFiles: FILE_VALIDATION_CONFIG.general.maxFilesPerUpload,
+      checkDimensions: true
+    }).then(({ validFiles, invalidFiles }) => {
+      // Show errors for invalid files
+      invalidFiles.forEach(({ file, error }) => {
+        toast.error(`${file.name}: ${error}`);
+      });
+
+      // Show warnings for valid files
+      validFiles.forEach(async (file) => {
+        const result = await validateFile(file, { allowedTypes: ['image', 'video'], checkDimensions: true });
+        if (result.warning) {
+          toast.error(`${file.name}: ${result.warning}`);
+        }
+      });
+
+      if (validFiles.length > 0) {
+        // Add new files to newGalleryMedia
+        setNewGalleryMedia(prev => [...prev, ...validFiles]);
+        
+        // Update the product state to show preview with file type information
+        setProduct((prev: any) => ({
+          ...prev,
+          galleryImages: [
+            ...(prev.galleryImages || []), 
+            ...validFiles.map(f => ({
+              file: f,
+              preview: URL.createObjectURL(f),
+              type: f.type.startsWith('video/') ? 'video' : 'image',
+              size: formatFileSize(f.size)
+            }))
+          ],
+        }));
       }
-      
-      return isValidImage || isValidVideo;
+
+      // Reset input if no valid files
+      if (validFiles.length === 0) {
+        e.target.value = '';
+      }
+    }).catch(error => {
+      toast.error(`Validation error: ${error.message}`);
+      e.target.value = '';
     });
-    
-    if (validFiles.length !== files.length) {
-      toast.error('Some files were skipped. Only images and videos are supported.');
-    }
-    
-    // Add new files to newGalleryMedia
-    setNewGalleryMedia(prev => [...prev, ...validFiles]);
-    
-    // Update the product state to show preview with file type information
-    setProduct((prev: any) => ({
-      ...prev,
-      galleryImages: [
-        ...(prev.galleryImages || []), 
-        ...validFiles.map(f => ({
-          file: f,
-          preview: URL.createObjectURL(f),
-          type: f.type.startsWith('video/') ? 'video' : 'image'
-        }))
-      ],
-    }));
   };
 
   // Function to check if SKU already exists in the selected warehouse
@@ -647,7 +679,12 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
       toast.error("Selling price cannot be higher than the MRP.");
       return;
     }
-    // 6. Auto-generate SKUs if enabled and validate variant SKUs if variants exist
+    // 6. Return window validation - if product is returnable, return window must be greater than 0
+    if (product.returnable && (product.returnWindow || 0) <= 0) {
+      toast.error("Return window must be greater than 0 days when product is returnable.");
+      return;
+    }
+    // 7. Auto-generate SKUs if enabled and validate variant SKUs if variants exist
     const updatedVariantsForValidation = { ...variants };
     if (Object.keys(updatedVariantsForValidation).length > 0) {
       // Auto-generate SKUs if enabled
@@ -696,7 +733,11 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
       let imageUrl = product.image;
       if (imageFile) {
         try {
-          imageUrl = await uploadToCloudinary(imageFile, `products/${product.category}/${slugify(product.name)}`);
+          imageUrl = await uploadToCloudinary(imageFile, `products/${product.category}/${slugify(product.name)}`, {
+            validateBeforeUpload: true,
+            allowedTypes: ['image'],
+            maxSize: FILE_VALIDATION_CONFIG.images.maxSize
+          });
         } catch {
           toast.error("Image upload failed.");
           setLoading(false);
@@ -713,7 +754,11 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
           const uploadedImages: string[] = [];
           for (const img of variantImageFiles[key]) {
             if (img instanceof File) {
-              const result = await uploadToCloudinary(img, `products/${product.category}/${slugify(product.name)}/variants/${key}`);
+              const result = await uploadToCloudinary(img, `products/${product.category}/${slugify(product.name)}/variants/${key}`, {
+                validateBeforeUpload: true,
+                allowedTypes: ['image'],
+                maxSize: FILE_VALIDATION_CONFIG.images.maxSize
+              });
               uploadedImages.push(result);
             } else if (typeof img === 'string') {
               uploadedImages.push(img); // already a URL
@@ -741,7 +786,11 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                     // Upload and add new gallery media (images and videos)
        for (const media of newGalleryMedia) {
          try {
-           const result = await uploadToCloudinary(media, `products/${product.category}/${slugify(product.name)}/gallery`);
+           const result = await uploadToCloudinary(media, `products/${product.category}/${slugify(product.name)}/gallery`, {
+             validateBeforeUpload: true,
+             allowedTypes: ['image', 'video'],
+             maxSize: media.type.startsWith('video/') ? FILE_VALIDATION_CONFIG.videos.maxSize : FILE_VALIDATION_CONFIG.images.maxSize
+           });
            galleryImageUrls.push(result);
          } catch (error) {
            console.error('Failed to upload media:', media.name, error);
@@ -1489,7 +1538,7 @@ export default function AdvancedProductForm({ mode, initialProduct = null, produ
                           <input
                             type="number"
                             value={product.returnWindow}
-                            onChange={e => setProduct({ ...product, returnWindow: e.target.value })}
+                            onChange={e => setProduct({ ...product, returnWindow: e.target.value === "" ? 0 : Number(e.target.value) })}
                             className={`w-full border border-gray-300 rounded-lg p-3 ${!product.returnable ? 'bg-gray-100' : ''}`}
                             placeholder="0"
                             disabled={!product.returnable}

@@ -6,6 +6,7 @@ import * as LucideIcons from "lucide-react";
 import { uploadToCloudinary } from '../lib/uploadToCloudinary';
 import { apiPost, apiPut } from '../lib/api-client';
 import ImageCropper from './ImageCropper';
+import { validateFile, FILE_VALIDATION_CONFIG } from '@/lib/fileValidation';
 
 interface Category {
   _id?: string;
@@ -99,21 +100,27 @@ export default function CategoryFormModal({ open, onClose, onSuccess, categories
   const handleThumbnailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Check file size (limit to 10MB)
-      if (file.size > 10 * 1024 * 1024) {
-        toast.error("Image size should be less than 10MB");
-        return;
-      }
-      
-      // Check file type
-      if (!file.type.startsWith('image/')) {
-        toast.error("Please select a valid image file");
-        return;
-      }
-      
-      const imageUrl = URL.createObjectURL(file);
-      setOriginalImageSrc(imageUrl);
-      setShowCropper(true);
+      // Use the new validation system
+      validateFile(file, {
+        allowedTypes: ['image'],
+        maxSize: FILE_VALIDATION_CONFIG.images.maxSize,
+        checkDimensions: true
+      }).then(result => {
+        if (result.isValid) {
+          if (result.warning) {
+            toast.error(result.warning);
+          }
+          const imageUrl = URL.createObjectURL(file);
+          setOriginalImageSrc(imageUrl);
+          setShowCropper(true);
+        } else {
+          toast.error(result.error || 'Invalid file');
+          e.target.value = '';
+        }
+      }).catch(error => {
+        toast.error(`Validation error: ${error.message}`);
+        e.target.value = '';
+      });
     }
   };
 
@@ -173,7 +180,11 @@ export default function CategoryFormModal({ open, onClose, onSuccess, categories
     let thumbnailUrl = form.thumbnail;
     try {
       if (thumbnailFile) {
-        thumbnailUrl = await uploadToCloudinary(thumbnailFile, `categories/${form.slug || form.name || 'category'}`);
+        thumbnailUrl = await uploadToCloudinary(thumbnailFile, `categories/${form.slug || form.name || 'category'}`, {
+          validateBeforeUpload: true,
+          allowedTypes: ['image'],
+          maxSize: FILE_VALIDATION_CONFIG.images.maxSize
+        });
       }
       const payload = {
         ...form,
@@ -354,12 +365,6 @@ export default function CategoryFormModal({ open, onClose, onSuccess, categories
                   />
                 </label>
                 <div className="flex flex-col gap-1">
-                  <span className="text-xs text-gray-500">
-                    Required: 746x768px dimensions. Image will be automatically cropped to fit.
-                  </span>
-                  <span className="text-xs text-gray-400">
-                    Supported formats: PNG, JPG, JPEG, GIF (max 10MB)
-                  </span>
                   {thumbnailPreview && (
                     <button
                       type="button"

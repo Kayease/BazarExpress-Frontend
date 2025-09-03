@@ -28,6 +28,7 @@ import {
 } from "lucide-react"
 import toast from "react-hot-toast"
 import Image from "next/image"
+import ReturnDetailsModal from "../../../components/ReturnDetailsModal"
 
 interface ReturnItem {
   _id: string
@@ -81,6 +82,16 @@ interface ReturnRequest {
     updatedBy: any
     note: string
   }>
+  refundPreference?: {
+    method?: 'upi' | 'bank'
+    upiId?: string
+    bankDetails?: {
+      accountHolderName?: string
+      accountNumber?: string
+      ifsc?: string
+      bankName?: string
+    }
+  }
 }
 
 interface ReturnStats {
@@ -145,6 +156,12 @@ export default function AdminReturns() {
 
   // Warehouses for filtering
   const [warehouses, setWarehouses] = useState<any[]>([])
+
+  // Row-level UI state for actions
+  const [rowStatus, setRowStatus] = useState<Record<string, string>>({})
+  const [rowAgent, setRowAgent] = useState<Record<string, string>>({})
+  const [rowLoading, setRowLoading] = useState<Record<string, boolean>>({})
+  const [rowResending, setRowResending] = useState<Record<string, boolean>>({})
 
   // Check access
   useEffect(() => {
@@ -229,7 +246,8 @@ export default function AdminReturns() {
 
       if (response.ok) {
         const data = await response.json()
-        setWarehouses(data.warehouses || [])
+        // API returns an array of warehouses directly
+        setWarehouses(Array.isArray(data) ? data : (data.warehouses || []))
       }
     } catch (error) {
       console.error('Error fetching warehouses:', error)
@@ -269,6 +287,44 @@ export default function AdminReturns() {
     } catch (error) {
       console.error('Error updating status:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to update status')
+    }
+  }
+
+  const getAvailableReturnStatusOptions = (status: string, role: string) => {
+    const map: Record<string, string[]> = {
+      requested: ['approved', 'rejected'],
+      approved: ['pickup_assigned', 'rejected'],
+      pickup_assigned: [],
+      pickup_rejected: ['approved', 'pickup_assigned', 'rejected'],
+      picked_up: ['received'],
+      received: ['partially_refunded', 'refunded'],
+      partially_refunded: ['refunded'],
+      refunded: [],
+      rejected: []
+    }
+    if (role === 'delivery_boy') return []
+    return map[status] || []
+  }
+
+  const resendPickupOtp = async (ret: ReturnRequest) => {
+    if (!ret?.returnId || !ret?.assignedPickupAgent?.id) return
+    try {
+      setRowResending(prev => ({ ...prev, [ret.returnId]: true }))
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/returns/${ret.returnId}/status`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'pickup_assigned', assignedPickupAgent: ret.assignedPickupAgent.id, note: 'Resend pickup OTP' })
+      })
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}))
+        throw new Error(err.error || 'Failed to resend OTP')
+      }
+      toast.success('Pickup OTP resent')
+      fetchReturns()
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to resend OTP')
+    } finally {
+      setRowResending(prev => ({ ...prev, [ret.returnId]: false }))
     }
   }
 
@@ -370,7 +426,7 @@ export default function AdminReturns() {
         },
         body: JSON.stringify({
           items: selectedItems,
-          refundMethod
+          refundMethod: selectedReturn.refundPreference?.method ? 'original_payment' : refundMethod
         })
       })
 
@@ -503,7 +559,7 @@ export default function AdminReturns() {
                 >
                   <option value="all">All Warehouses</option>
                   {warehouses.map(warehouse => (
-                    <option key={warehouse._id} value={warehouse.id}>
+                    <option key={warehouse._id} value={warehouse._id}>
                       {warehouse.name}
                     </option>
                   ))}
@@ -655,7 +711,7 @@ export default function AdminReturns() {
                         </td>
                         
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <div className="flex justify-end space-x-2">
+                          <div className="flex justify-end space-x-2 items-center">
                             <button
                               onClick={() => {
                                 setSelectedReturn(returnRequest)
@@ -666,110 +722,21 @@ export default function AdminReturns() {
                             >
                               <Eye className="h-4 w-4" />
                             </button>
-                            
-                            {/* Admin/Warehouse Manager Actions */}
-                            {user?.role !== 'delivery_boy' && (
-                              <>
-                                {returnRequest.status === 'requested' && (
-                                  <>
-                                    <button
-                                      onClick={() => handleStatusUpdate(returnRequest.returnId, 'approved', 'Return approved by admin')}
-                                      className="text-green-600 hover:text-green-900"
-                                      title="Approve Return"
-                                    >
-                                      <CheckCircle className="h-4 w-4" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleStatusUpdate(returnRequest.returnId, 'rejected', 'Return rejected by admin')}
-                                      className="text-red-600 hover:text-red-900"
-                                      title="Reject Return"
-                                    >
-                                      <XCircle className="h-4 w-4" />
-                                    </button>
-                                  </>
-                                )}
-                                
-                                {returnRequest.status === 'approved' && (
-                                  <button
-                                    onClick={() => {
-                                      setSelectedReturn(returnRequest)
-                                      setShowAssignModal(true)
-                                    }}
-                                    className="text-purple-600 hover:text-purple-900"
-                                    title="Assign Pickup Agent"
-                                  >
-                                    <UserCheck className="h-4 w-4" />
-                                  </button>
-                                )}
-                                
-                                {returnRequest.status === 'pickup_rejected' && (
-                                  <button
-                                    onClick={() => {
-                                      setSelectedReturn(returnRequest)
-                                      setShowAssignModal(true)
-                                    }}
-                                    className="text-purple-600 hover:text-purple-900"
-                                    title="Reassign Pickup Agent"
-                                  >
-                                    <UserCheck className="h-4 w-4" />
-                                  </button>
-                                )}
-                                
-                                {returnRequest.status === 'picked_up' && (
-                                  <button
-                                    onClick={() => handleStatusUpdate(returnRequest.returnId, 'received', 'Items received at warehouse')}
-                                    className="text-indigo-600 hover:text-indigo-900"
-                                    title="Mark as Received"
-                                  >
-                                    <Package className="h-4 w-4" />
-                                  </button>
-                                )}
-                                
-                                {(returnRequest.status === 'received' || returnRequest.status === 'partially_refunded') && (
-                                  <button
-                                    onClick={() => {
-                                      setSelectedReturn(returnRequest)
-                                      // Initialize refund items - only show non-refunded items
-                                      const items: {[key: string]: {refundAmount: number, selected: boolean}} = {}
-                                      returnRequest.items.forEach(item => {
-                                        if (item.returnStatus !== 'refunded') {
-                                          items[item._id] = {
-                                            refundAmount: item.price * item.quantity,
-                                            selected: true
-                                          }
-                                        }
-                                      })
-                                      setRefundItems(items)
-                                      setShowRefundModal(true)
-                                    }}
-                                    className="text-green-600 hover:text-green-900"
-                                    title={returnRequest.status === 'partially_refunded' ? 'Process Remaining Refunds' : 'Process Refund'}
-                                  >
-                                    <RefreshCw className="h-4 w-4" />
-                                  </button>
-                                )}
-                              </>
+                            {/* Map button to pickup location */}
+                            {returnRequest?.pickupInfo?.address?.lat && returnRequest?.pickupInfo?.address?.lng && (
+                              <a
+                                href={`https://www.google.com/maps?q=${returnRequest.pickupInfo.address.lat},${returnRequest.pickupInfo.address.lng}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-green-600 hover:text-green-800"
+                                title="Open in Maps"
+                              >
+                                <MapPin className="h-4 w-4" />
+                              </a>
                             )}
+                            {/* Refund actions removed: status updates are handled inside ReturnDetailsModal */}
                             
-                            {/* Delivery Agent Actions */}
-                            {user?.role === 'delivery_boy' && returnRequest.status === 'pickup_assigned' && (
-                              <>
-                                <button
-                                  onClick={() => handlePickupAction(returnRequest.returnId, 'picked_up', 'Items picked up successfully')}
-                                  className="text-green-600 hover:text-green-900"
-                                  title="Mark as Picked Up"
-                                >
-                                  <CheckCircle className="h-4 w-4" />
-                                </button>
-                                <button
-                                  onClick={() => handlePickupAction(returnRequest.returnId, 'reject', 'Pickup rejected by delivery agent')}
-                                  className="text-red-600 hover:text-red-900"
-                                  title="Reject Pickup"
-                                >
-                                  <XCircle className="h-4 w-4" />
-                                </button>
-                              </>
-                            )}
+                            {/* Only View and Map should appear across all roles */}
                           </div>
                         </td>
                       </tr>
@@ -848,172 +815,60 @@ export default function AdminReturns() {
           )}
         </div>
 
-        {/* Details Modal */}
-        {showDetailsModal && selectedReturn && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="p-6">
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-xl font-bold text-gray-900">Return Details</h2>
-                  <button
-                    onClick={() => setShowDetailsModal(false)}
-                    className="text-gray-400 hover:text-gray-600"
-                  >
-                    <XCircle className="h-6 w-6" />
-                  </button>
-                </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Return Information */}
-                  <div className="space-y-4">
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-3">Return Information</h3>
-                      <div className="space-y-2">
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Return ID:</span>
-                          <span className="font-medium">{selectedReturn.returnId}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Order ID:</span>
-                          <span className="font-medium">{selectedReturn.orderId}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Status:</span>
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusInfo(selectedReturn.status).bgColor} ${getStatusInfo(selectedReturn.status).color}`}>
-                            {formatStatus(selectedReturn.status)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Created:</span>
-                          <span className="font-medium">{new Date(selectedReturn.createdAt).toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Reason:</span>
-                          <span className="font-medium">{selectedReturn.returnReason}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Customer Information */}
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-3">Customer Information</h3>
-                      <div className="space-y-2">
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Name:</span>
-                          <span className="font-medium">{selectedReturn.customerInfo.name}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Phone:</span>
-                          <span className="font-medium">{selectedReturn.customerInfo.phone}</span>
-                        </div>
-                        {selectedReturn.customerInfo.email && (
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Email:</span>
-                            <span className="font-medium">{selectedReturn.customerInfo.email}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Pickup Address */}
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-3">Pickup Address</h3>
-                      <div className="text-sm text-gray-600">
-                        <p>{selectedReturn.pickupInfo.address.building}</p>
-                        <p>{selectedReturn.pickupInfo.address.area}</p>
-                        <p>{selectedReturn.pickupInfo.address.city}, {selectedReturn.pickupInfo.address.state}</p>
-                        <p>{selectedReturn.pickupInfo.address.pincode}</p>
-                        {selectedReturn.pickupInfo.pickupInstructions && (
-                          <p className="mt-2 italic">Instructions: {selectedReturn.pickupInfo.pickupInstructions}</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Items and Status History */}
-                  <div className="space-y-4">
-                    {/* Return Items */}
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-3">Return Items</h3>
-                      <div className="space-y-3">
-                        {selectedReturn.items.map((item) => (
-                          <div key={item._id} className="flex items-center space-x-3 p-3 border rounded-lg">
-                            {item.image && (
-                              <Image
-                                src={item.image}
-                                alt={item.name}
-                                width={50}
-                                height={50}
-                                className="rounded-md object-cover"
-                              />
-                            )}
-                            <div className="flex-1">
-                              <p className="font-medium text-gray-900">{item.name}</p>
-                              <p className="text-sm text-gray-600">
-                                Qty: {item.quantity} × ₹{item.price} = ₹{(item.quantity * item.price).toFixed(2)}
-                              </p>
-                              <p className="text-xs text-gray-500">Reason: {item.returnReason}</p>
-                              <span className={`inline-block mt-1 px-2 py-1 rounded-full text-xs font-medium ${getStatusInfo(item.returnStatus).bgColor} ${getStatusInfo(item.returnStatus).color}`}>
-                                {formatStatus(item.returnStatus)}
-                              </span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Assigned Agent */}
-                    {selectedReturn.assignedPickupAgent && (
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-900 mb-3">Assigned Pickup Agent</h3>
-                        <div className="space-y-2">
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Name:</span>
-                            <span className="font-medium">{selectedReturn.assignedPickupAgent.name}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Phone:</span>
-                            <span className="font-medium">{selectedReturn.assignedPickupAgent.phone}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Assigned:</span>
-                            <span className="font-medium">{new Date(selectedReturn.assignedPickupAgent.assignedAt).toLocaleString()}</span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Status History */}
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-3">Status History</h3>
-                      <div className="space-y-2">
-                        {selectedReturn.statusHistory.map((history, index) => (
-                          <div key={index} className="flex items-start space-x-3 p-2 bg-gray-50 rounded-lg">
-                            <div className={`p-1 rounded-full ${getStatusInfo(history.status).bgColor}`}>
-                              {React.createElement(getStatusInfo(history.status).icon, { 
-                                className: `h-3 w-3 ${getStatusInfo(history.status).color}` 
-                              })}
-                            </div>
-                            <div className="flex-1">
-                              <p className="text-sm font-medium text-gray-900">
-                                {formatStatus(history.status)}
-                              </p>
-                              <p className="text-xs text-gray-600">
-                                {new Date(history.timestamp).toLocaleString()}
-                              </p>
-                              {history.note && (
-                                <p className="text-xs text-gray-500 mt-1">{history.note}</p>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+      </div>
+              {/* Details Modal */}
+              {showDetailsModal && selectedReturn && (
+          <ReturnDetailsModal
+            open={showDetailsModal}
+            onClose={() => setShowDetailsModal(false)}
+            data={selectedReturn as any}
+            role={user?.role}
+            deliveryAgents={deliveryAgents}
+            onUpdateStatus={async (status, note) => {
+              await handleStatusUpdate(selectedReturn.returnId, status, note)
+              setShowDetailsModal(false)
+            }}
+            onAssignPickup={async (agentId, note) => {
+              // reuse existing API call path
+              await fetch(`${process.env.NEXT_PUBLIC_API_URL}/returns/${selectedReturn.returnId}/status`, {
+                method: 'PUT',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'pickup_assigned', assignedPickupAgent: agentId, note: note || 'Pickup agent assigned' })
+              })
+              fetchReturns()
+              setShowDetailsModal(false)
+            }}
+            onPickupAction={async (action, note) => {
+              await handlePickupAction(selectedReturn.returnId, action, note)
+              setShowDetailsModal(false)
+            }}
+            onVerifyPickupOtp={async (otp) => {
+              // Verify OTP endpoint
+              await fetch(`${process.env.NEXT_PUBLIC_API_URL}/returns/${selectedReturn.returnId}/verify-otp`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ otp })
+              })
+              fetchReturns()
+            }}
+            onGeneratePickupOtp={async (returnId) => {
+              try {
+                const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/returns/${returnId}/resend-otp`, {
+                  method: 'POST',
+                  headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+                })
+                if (!response.ok) {
+                  throw new Error('Failed to generate pickup OTP')
+                }
+                toast.success('Pickup OTP sent to customer successfully!')
+              } catch (error) {
+                console.error('Error generating pickup OTP:', error)
+                toast.error('Failed to send pickup OTP. Please try again.')
+                throw error
+              }
+            }}
+          />
         )}
 
         {/* Assign Agent Modal */}
@@ -1224,7 +1079,6 @@ export default function AdminReturns() {
             </div>
           </div>
         )}
-      </div>
     </AdminLayout>
   )
 }

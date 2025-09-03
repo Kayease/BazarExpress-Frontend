@@ -31,6 +31,8 @@ interface OrderItem {
   variantId?: string;
   variantName?: string;
   selectedVariant?: any;
+  refundStatus?: string;
+  refundedAt?: string;
 }
 
 interface Order {
@@ -96,6 +98,13 @@ interface Order {
       igst: { percentage: number };
     };
   };
+  statusHistory?: Array<{
+    status: 'new' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'refunded';
+    timestamp: string | Date | { $date?: string };
+    updatedBy?: string | { $oid?: string };
+    note?: string;
+    _id?: string | { $oid?: string };
+  }>;
 }
 
 interface OrderDetailModalProps {
@@ -175,6 +184,77 @@ export default function OrderDetailModal({ isOpen, onClose, order }: OrderDetail
     setInvoiceOrderData(invoiceData);
     setShowInvoiceModal(true);
   };
+
+  // Helpers for timeline
+  const normalizeTimestamp = (ts: any): Date => {
+    try {
+      if (!ts) return new Date(order.createdAt);
+      if (typeof ts === 'string') return new Date(ts);
+      if (ts instanceof Date) return ts;
+      if (typeof ts === 'object' && ts.$date) return new Date(ts.$date);
+      return new Date(order.createdAt);
+    } catch {
+      return new Date(order.createdAt);
+    }
+  };
+
+  const formatDateTime = (ts: any) => {
+    const d = normalizeTimestamp(ts);
+    return `${d.toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })} • ${d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`;
+  };
+
+  const getTimelineIcon = (status: string) => {
+    switch (status) {
+      case 'delivered':
+        return <CheckCircle className="w-4 h-4 text-green-600" />;
+      case 'shipped':
+        return <Truck className="w-4 h-4 text-blue-600" />;
+      case 'processing':
+        return <Package className="w-4 h-4 text-yellow-600" />;
+      case 'cancelled':
+        return <X className="w-4 h-4 text-red-600" />;
+      case 'refunded':
+        return <CreditCard className="w-4 h-4 text-purple-600" />;
+      default:
+        return <Package className="w-4 h-4 text-gray-600" />;
+    }
+  };
+
+  const getStatusTextColor = (status: string) => {
+    switch (status) {
+      case 'delivered':
+        return 'text-green-700';
+      case 'shipped':
+        return 'text-blue-700';
+      case 'processing':
+        return 'text-yellow-700';
+      case 'cancelled':
+        return 'text-red-700';
+      case 'refunded':
+        return 'text-purple-700';
+      default:
+        return 'text-gray-700';
+    }
+  };
+
+  // Build a deduplicated, chronological timeline (collapse consecutive duplicate statuses)
+  const timelineEntries = (() => {
+    const history = Array.isArray(order.statusHistory) ? order.statusHistory : [];
+    const sorted = [...history].sort(
+      (a, b) => normalizeTimestamp(a.timestamp).getTime() - normalizeTimestamp(b.timestamp).getTime()
+    );
+    const collapsed: typeof sorted = [];
+    for (const entry of sorted) {
+      const last = collapsed[collapsed.length - 1];
+      if (!last || last.status !== entry.status) {
+        collapsed.push(entry);
+      } else {
+        // If same as previous, keep the latest timestamp/note by replacing the last one
+        collapsed[collapsed.length - 1] = entry;
+      }
+    }
+    return collapsed;
+  })();
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[999]">
@@ -260,6 +340,44 @@ export default function OrderDetailModal({ isOpen, onClose, order }: OrderDetail
             </div>
           </div>
 
+          {/* Order Timeline */}
+          {timelineEntries.length > 0 && (
+            <div className="bg-gray-50 rounded-xl p-3 sm:p-4">
+              <div className="flex items-center space-x-2 mb-2 sm:mb-3">
+                <Package className="w-4 h-4 sm:w-5 sm:h-5 text-brand-primary" />
+                <h4 className="font-semibold text-gray-900 text-sm sm:text-base">Order Timeline</h4>
+              </div>
+              <div className="relative">
+                <div className="space-y-4">
+                  {timelineEntries.map((entry, idx) => {
+                      const isLast = idx === timelineEntries.length - 1;
+                      return (
+                        <div key={(typeof entry._id === 'object' && entry._id?.$oid) || (entry._id as string) || `${entry.status}-${idx}`} className="flex items-start">
+                          <div className="relative mr-3 sm:mr-4">
+                            <div className="w-6 h-6 rounded-full bg-white border border-gray-300 flex items-center justify-center">
+                              {getTimelineIcon(entry.status)}
+                            </div>
+                            {!isLast && (
+                              <div className="absolute left-1/2 -translate-x-1/2 top-6 w-[2px] h-full bg-gray-200" />
+                            )}
+                          </div>
+                          <div className="flex-1">
+                            <div className={`text-xs sm:text-sm font-semibold ${getStatusTextColor(entry.status)}`}>
+                              {entry.status.charAt(0).toUpperCase() + entry.status.slice(1)}
+                            </div>
+                            <div className="text-[11px] sm:text-xs text-gray-500">
+                              {formatDateTime(entry.timestamp)}
+                            </div>
+
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Order Items */}
           <div>
             <h4 className="font-semibold text-gray-900 mb-3 sm:mb-4 flex items-center">
@@ -294,6 +412,9 @@ export default function OrderDetailModal({ isOpen, onClose, order }: OrderDetail
                         <span className="text-xs sm:text-sm text-gray-600 font-normal ml-1 sm:ml-2">({item.variantName})</span>
                       )}
                     </h5>
+                    {item.refundStatus === 'refunded' && (
+                      <span className="inline-block px-2 py-0.5 text-[10px] sm:text-xs rounded-full bg-green-100 text-green-700 mr-2">Refunded</span>
+                    )}
                     <div className="flex items-center space-x-2 sm:space-x-4 text-xs sm:text-sm text-gray-500">
                       <span>Qty: {item.quantity}</span>
                       {item.tax && (

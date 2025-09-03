@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 import toast from "react-hot-toast";
 import { uploadToCloudinary } from '../lib/uploadToCloudinary';
 import { apiPost, apiPut } from '../lib/api-client';
+import { validateFile, FILE_VALIDATION_CONFIG } from '@/lib/fileValidation';
 
 interface Brand {
   _id?: string;
@@ -95,18 +96,52 @@ export default function BrandFormModal({ open, onClose, onSuccess, brand }: Bran
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setLogoFile(file);
-      setLogoPreview(URL.createObjectURL(file));
-      setForm(f => ({ ...f, logo: "" }));
+      validateFile(file, {
+        allowedTypes: ['image'],
+        maxSize: FILE_VALIDATION_CONFIG.images.maxSize,
+        checkDimensions: true
+      }).then(result => {
+        if (result.isValid) {
+          if (result.warning) {
+            toast.error(result.warning);
+          }
+          setLogoFile(file);
+          setLogoPreview(URL.createObjectURL(file));
+          setForm(f => ({ ...f, logo: "" }));
+        } else {
+          toast.error(result.error || 'Invalid file');
+          e.target.value = '';
+        }
+      }).catch(error => {
+        toast.error(`Validation error: ${error.message}`);
+        e.target.value = '';
+      });
     }
   };
 
   const handleBannerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setBannerFile(file);
-      setBannerPreview(URL.createObjectURL(file));
-      setForm(f => ({ ...f, bannerImage: "" }));
+      validateFile(file, {
+        allowedTypes: ['image'],
+        maxSize: FILE_VALIDATION_CONFIG.images.maxSize,
+        checkDimensions: true
+      }).then(result => {
+        if (result.isValid) {
+          if (result.warning) {
+            toast.error(result.warning);
+          }
+          setBannerFile(file);
+          setBannerPreview(URL.createObjectURL(file));
+          setForm(f => ({ ...f, bannerImage: "" }));
+        } else {
+          toast.error(result.error || 'Invalid file');
+          e.target.value = '';
+        }
+      }).catch(error => {
+        toast.error(`Validation error: ${error.message}`);
+        e.target.value = '';
+      });
     }
   };
 
@@ -151,10 +186,18 @@ export default function BrandFormModal({ open, onClose, onSuccess, brand }: Bran
     let bannerUrl = form.bannerImage;
     try {
       if (logoFile) {
-        logoUrl = await uploadToCloudinary(logoFile, `brands/${form.slug || form.name || 'brand'}/logo`);
+        logoUrl = await uploadToCloudinary(logoFile, `brands/${form.slug || form.name || 'brand'}/logo`, {
+          validateBeforeUpload: true,
+          allowedTypes: ['image'],
+          maxSize: FILE_VALIDATION_CONFIG.images.maxSize
+        });
       }
       if (bannerFile) {
-        bannerUrl = await uploadToCloudinary(bannerFile, `brands/${form.slug || form.name || 'brand'}/banner`);
+        bannerUrl = await uploadToCloudinary(bannerFile, `brands/${form.slug || form.name || 'brand'}/banner`, {
+          validateBeforeUpload: true,
+          allowedTypes: ['image'],
+          maxSize: FILE_VALIDATION_CONFIG.images.maxSize
+        });
       }
       const payload = {
         ...form,
