@@ -49,6 +49,7 @@ import toast from "react-hot-toast";
 import Image from "next/image";
 import OrderDetailModal from "../../components/OrderDetailModal";
 import ReturnItemsModal from "../../components/ReturnItemsModal";
+import CustomerReturnDetailsModal from "../../components/CustomerReturnDetailsModal";
 
 export default function Profile() {
   const user = useAppSelector((state) => state.auth.user);
@@ -60,7 +61,7 @@ export default function Profile() {
   const [savedAddresses, setSavedAddresses] = useState<any[]>([]);
   const [isLoadingAddresses, setIsLoadingAddresses] = useState(false);
   const [activeTab, setActiveTab] = useState<
-    "profile" | "cart" | "wishlist" | "orders" | "addresses"
+    "profile" | "cart" | "wishlist" | "orders" | "addresses" | "returns"
   >("profile");
   const [formData, setFormData] = useState({
     name: user?.name ?? "",
@@ -98,8 +99,52 @@ export default function Profile() {
   const [returnReason, setReturnReason] = useState("");
   const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
   const [refundPreference, setRefundPreference] = useState<{ method: 'upi' | 'bank' | '' ; upiId?: string; bankDetails?: { accountHolderName: string; accountNumber: string; ifsc: string; bankName: string } }>({ method: '' });
+  const [existingReturnsByOrderItem, setExistingReturnsByOrderItem] = useState<Record<string, { status: string; returnId: string }>>({});
+
+  // Returns tab state
+  const [returnsList, setReturnsList] = useState<any[]>([]);
+  const [displayedReturns, setDisplayedReturns] = useState<any[]>([]);
+  const [isLoadingReturns, setIsLoadingReturns] = useState(false);
+  const [isLoadingMoreReturns, setIsLoadingMoreReturns] = useState(false);
+  const [returnsToShow, setReturnsToShow] = useState(10);
+  const [showReturnDetailsModal, setShowReturnDetailsModal] = useState(false);
+  const [selectedReturnForDetail, setSelectedReturnForDetail] = useState<any>(null);
 
 
+
+  // Helpers for Returns tab UI
+  const getReturnStatusBadge = (status: string) => {
+    const key = (status || '').toLowerCase();
+    const label = key === 'requested' ? 'Return Requested'
+      : key === 'approved' ? 'Return Approved'
+      : key === 'pickup_assigned' ? 'Pickup Scheduled'
+      : key === 'pickup_rejected' ? 'Pick-up Rejected'
+      : key === 'picked_up' ? 'Return Picked Up'
+      : key === 'received' ? 'Return Received'
+      : key === 'partially_refunded' ? 'Partially Refunded'
+      : key === 'refunded' ? 'Refunded'
+      : key === 'rejected' ? 'Return Rejected'
+      : (key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' '));
+    const className = key === 'refunded' ? 'bg-green-100 text-green-800'
+      : key === 'approved' ? 'bg-emerald-100 text-emerald-800'
+      : key === 'rejected' ? 'bg-red-100 text-red-700'
+      : key === 'received' ? 'bg-amber-100 text-amber-800'
+      : key === 'partially_refunded' ? 'bg-yellow-100 text-yellow-800'
+      : key === 'pickup_assigned' ? 'bg-indigo-100 text-indigo-800'
+      : key === 'picked_up' ? 'bg-violet-100 text-violet-800'
+      : 'bg-blue-100 text-blue-800';
+    return { label, className };
+  };
+
+  const getReturnTotalAmount = (ret: any) => {
+    try {
+      const items = Array.isArray(ret.items) ? ret.items : [];
+      const sum = items.reduce((acc: number, it: any) => acc + (Number(it.price) * Number(it.quantity || 1)), 0);
+      return isFinite(sum) ? sum : 0;
+    } catch {
+      return 0;
+    }
+  };
 
   useEffect(() => {
     if (!user) {
@@ -119,8 +164,8 @@ export default function Profile() {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
       const tabParam = urlParams.get('tab');
-      if (tabParam && ["profile", "cart", "wishlist", "orders", "addresses"].includes(tabParam)) {
-        setActiveTab(tabParam as "profile" | "cart" | "wishlist" | "orders" | "addresses");
+      if (tabParam && ["profile", "cart", "wishlist", "orders", "addresses", "returns"].includes(tabParam)) {
+        setActiveTab(tabParam as "profile" | "cart" | "wishlist" | "orders" | "addresses" | "returns");
       }
     }
   }, []);
@@ -245,6 +290,52 @@ export default function Profile() {
     }
   };
 
+  // Fetch user's returns
+  const fetchUserReturns = async () => {
+    try {
+      setIsLoadingReturns(true);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/returns/user?limit=1000`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      if (!response.ok) throw new Error('Failed to fetch returns');
+      const data = await response.json();
+      const fetched = data.returns || [];
+      setReturnsList(fetched);
+      const initial = 10;
+      setReturnsToShow(initial);
+      setDisplayedReturns(fetched.slice(0, initial));
+    } catch (e) {
+      console.error('Error fetching returns:', e);
+      setReturnsList([]);
+      setDisplayedReturns([]);
+    } finally {
+      setIsLoadingReturns(false);
+    }
+  };
+
+  const handleLoadMoreReturns = () => {
+    setIsLoadingMoreReturns(true);
+    setTimeout(() => {
+      const next = returnsToShow + 10;
+      setReturnsToShow(next);
+      setDisplayedReturns(returnsList.slice(0, next));
+      setIsLoadingMoreReturns(false);
+    }, 500);
+  };
+
+  const handleViewReturnDetails = (ret: any) => {
+    setSelectedReturnForDetail(ret);
+    setShowReturnDetailsModal(true);
+  };
+
+  const handleCloseReturnDetailsModal = () => {
+    setShowReturnDetailsModal(false);
+    setSelectedReturnForDetail(null);
+  };
+
   // Load more orders function
   const handleLoadMoreOrders = () => {
     console.log('Load More clicked - Current state:', {
@@ -281,6 +372,9 @@ export default function Profile() {
       // Fetch orders on initial load or when switching to orders tab
       if (activeTab === "orders" || orders.length === 0) {
         fetchUserOrders();
+      }
+      if (activeTab === "returns" && returnsList.length === 0) {
+        fetchUserReturns();
       }
     }
   }, [token, user, activeTab]);
@@ -540,10 +634,54 @@ export default function Profile() {
     setSelectedReturnItems([]);
     setReturnReason("");
     setShowReturnModal(true);
+    setExistingReturnsByOrderItem({});
 
     // Fetch user addresses for pickup if not already loaded
     if (savedAddresses.length === 0 && token) {
       fetchUserAddresses();
+    }
+
+    // Fetch user's existing returns to gray out items that already have a return
+    const fetchExistingReturns = async () => {
+      try {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/returns/user?limit=1000`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        if (!response.ok) return; // fail silently; UX still works
+        const data = await response.json();
+        const returns: any[] = data.returns || [];
+
+        // Build a whitelist of valid order item ids from the selected order
+        const validOrderItemIds = new Set<string>((order.items || []).map((it: any) => String(it._id)));
+
+        const map: Record<string, { status: string; returnId: string }> = {};
+        returns
+          .filter((r: any) => r.orderId === order.orderId)
+          .forEach((r: any) => {
+            const topStatus = r.status;
+            (r.items || []).forEach((it: any) => {
+              const rawId = it.orderItemId || it.orderItemID || it.itemId || it._id;
+              const orderItemId = rawId ? String(rawId) : '';
+              // Only keep if this id actually belongs to an item in this order
+              if (orderItemId && validOrderItemIds.has(orderItemId)) {
+                // Prefer latest status if duplicates
+                // Prefer the overall return status over per-item status to reflect latest progression
+                map[orderItemId] = { status: (topStatus || it.returnStatus || 'requested'), returnId: r.returnId || r._id };
+              }
+            });
+          });
+        console.log('🔁 Existing returns map for order', order.orderId, map);
+        setExistingReturnsByOrderItem(map);
+      } catch (e) {
+        // do nothing; we just won't gray out
+        console.error('Failed to fetch existing returns for user', e);
+      }
+    };
+    if (token) {
+      void fetchExistingReturns();
     }
   };
 
@@ -875,6 +1013,7 @@ export default function Profile() {
                   icon: Heart,
                 },
                 { id: "orders", label: "Orders", icon: Package },
+                { id: "returns", label: "Returns", icon: RefreshCw },
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -1799,6 +1938,153 @@ export default function Profile() {
               </div>
             )}
 
+            {/* Returns Tab */}
+            {activeTab === "returns" && (
+              <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+                <div className="p-3 sm:p-4 lg:p-6">
+                  <div className="flex items-center justify-between mb-3 sm:mb-4">
+                    <h2 className="text-lg sm:text-xl font-bold text-codGray flex items-center">
+                      <RefreshCw className="w-5 h-5 sm:w-6 sm:h-6 mr-2 sm:mr-3" />
+                      Return History
+                    </h2>
+                  </div>
+
+                  {isLoadingReturns ? (
+                    <div className="text-center py-6 sm:py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 sm:h-10 sm:w-10 border-b-2 border-brand-primary mx-auto mb-3"></div>
+                      <p className="text-gray-500 text-sm sm:text-base">Loading returns...</p>
+                    </div>
+                  ) : returnsList.length === 0 ? (
+                    <div className="text-center py-6 sm:py-8">
+                      <RefreshCw className="w-12 h-12 sm:w-16 sm:h-16 text-gray-300 mx-auto mb-3" />
+                      <h3 className="text-base sm:text-lg font-semibold text-gray-600 mb-2">
+                        No returns yet
+                      </h3>
+                      <p className="text-gray-500 mb-4 text-sm sm:text-base">
+                        Your return history will appear here after you submit a return.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 sm:space-y-3 max-h-96 overflow-y-auto">
+                      {displayedReturns.map((ret: any) => (
+                        <div key={ret._id} className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow">
+                          {/* Mobile Layout */}
+                          <div className="block sm:hidden p-2 sm:p-3">
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex-1">
+                                <h3 className="font-semibold text-gray-900 text-sm">Return #{ret.returnId}</h3>
+                                <p className="text-xs text-gray-500">{new Date(ret.createdAt).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                              </div>
+                              <div className="text-right ml-3">
+                                <div className="text-base font-bold text-gray-900">₹{getReturnTotalAmount(ret).toFixed(2)}</div>
+                                {(() => { const b = getReturnStatusBadge(ret.status); return (
+                                  <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full mt-1 ${b.className}`}>{b.label}</span>
+                                ); })()}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center space-x-3 mb-2">
+                              <div className="flex -space-x-2">
+                                {(ret.items || []).slice(0, 3).map((item: any, index: number) => (
+                                  <div key={index} className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-gray-100 border-2 border-white flex items-center justify-center overflow-hidden">
+                                    {item.image ? (
+                                      <Image src={item.image} alt={item.name} width={28} height={28} className="object-cover w-full h-full" />
+                                    ) : (
+                                      <Package className="w-3 h-3 sm:w-4 sm:h-4 text-gray-400" />
+                                    )}
+                                  </div>
+                                ))}
+                                {(ret.items || []).length > 3 && (
+                                  <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-gray-200 border-2 border-white flex items-center justify-center text-xs font-medium text-gray-600">+{ret.items.length - 3}</div>
+                                )}
+                              </div>
+                              <div className="flex-1">
+                                <p className="text-xs text-gray-600">{(ret.items || []).length} item{(ret.items || []).length !== 1 ? 's' : ''}</p>
+                              </div>
+                            </div>
+
+                            <div className="flex">
+                              <button onClick={() => handleViewReturnDetails(ret)} className="flex-1 text-brand-primary hover:text-brand-primary-dark font-medium text-sm flex items-center justify-center py-1.5 border border-brand-primary rounded-lg hover:bg-brand-primary/5 transition-colors">
+                                View Details
+                                <ArrowRight className="w-3 h-3 ml-1" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Desktop Layout */}
+                          <div className="hidden sm:block p-3 sm:p-4">
+                            <div className="flex items-center justify-between mb-2 sm:mb-3">
+                              <div>
+                                <h3 className="font-semibold text-gray-900 text-sm">Return #{ret.returnId}</h3>
+                                <p className="text-xs text-gray-500">{new Date(ret.createdAt).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-base font-bold text-gray-900">₹{getReturnTotalAmount(ret).toFixed(2)}</div>
+                                {(() => { const b = getReturnStatusBadge(ret.status); return (
+                                  <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${b.className}`}>{b.label}</span>
+                                ); })()}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center space-x-4">
+                              <div className="flex -space-x-2">
+                                {(ret.items || []).slice(0, 3).map((item: any, index: number) => (
+                                  <div key={index} className="w-8 h-8 rounded-lg bg-gray-100 border-2 border-white flex items-center justify-center overflow-hidden">
+                                    {item.image ? (
+                                      <Image src={item.image} alt={item.name} width={32} height={32} className="object-cover w-full h-full" />
+                                    ) : (
+                                      <Package className="w-4 h-4 text-gray-400" />
+                                    )}
+                                  </div>
+                                ))}
+                                {(ret.items || []).length > 3 && (
+                                  <div className="w-8 h-8 rounded-lg bg-gray-200 border-2 border-white flex items-center justify-center text-xs font-medium text-gray-600">+{ret.items.length - 3}</div>
+                                )}
+                              </div>
+                              <div className="flex-1">
+                                <p className="text-sm text-gray-600">{(ret.items || []).length} item{(ret.items || []).length !== 1 ? 's' : ''}</p>
+                              </div>
+                              <div className="flex items-center space-x-5">
+                                <button onClick={() => handleViewReturnDetails(ret)} className="text-brand-primary hover:text-brand-primary-dark font-medium text-sm flex items-center">
+                                  View Details
+                                  <ArrowRight className="w-3 h-3 ml-1" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+
+                      {(displayedReturns.length < returnsList.length || returnsToShow < returnsList.length) && (
+                        <div className="text-center pt-4 sm:pt-6">
+                          <div onClick={handleLoadMoreReturns} className="cursor-pointer group flex flex-col items-center space-y-2 text-brand-primary hover:text-brand-primary-dark transition-colors duration-200">
+                            {isLoadingMoreReturns ? (
+                              <>
+                                <div className="animate-spin rounded-full h-5 w-5 border-2 border-brand-primary border-t-transparent"></div>
+                                <span className="text-sm font-medium">Loading more returns...</span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="text-sm font-medium group-hover:underline">Load More Returns</span>
+                                <div className="animate-bounce">
+                                  <svg className="w-5 h-5 text-brand-primary group-hover:text-brand-primary-dark transition-colors duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                                  </svg>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      <div className="text-center pt-2 sm:pt-3">
+                        <p className="text-sm text-gray-500">Showing {displayedReturns.length} of {returnsList.length} returns</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Enhanced Statistics Cards */}
             <div className="space-y-4">
               {/* Top row - Two stats */}
@@ -1858,7 +2144,17 @@ export default function Profile() {
         isSubmitting={isSubmittingReturn}
         returnableItems={selectedOrderForReturn ? getReturnableItems(selectedOrderForReturn) : []}
         onPaymentChange={setRefundPreference}
+        existingReturnStatuses={existingReturnsByOrderItem}
       />
+
+      {/* Return Details Modal (read-only for customer) */}
+      {showReturnDetailsModal && selectedReturnForDetail && (
+        <CustomerReturnDetailsModal
+          open={showReturnDetailsModal}
+          onClose={handleCloseReturnDetailsModal}
+          data={selectedReturnForDetail}
+        />
+      )}
 
       {/* Order Detail Modal */}
       <OrderDetailModal

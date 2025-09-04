@@ -38,13 +38,42 @@ interface DashboardResponse {
   // Delivery Boy
   todayDeliveries?: any[]
   recentDeliveries?: any[]
+  // Returns
+  returnStats?: {
+    requested?: number
+    approved?: number
+    pickup_assigned?: number
+    pickup_rejected?: number
+    picked_up?: number
+    received?: number
+    partially_refunded?: number
+    refunded?: number
+    rejected?: number
+    today?: number
+    total?: number
+  }
 }
 
 export default function AdminDashboard() {
   const user = useAppSelector((state) => state.auth.user)
   const router = useRouter()
   const [loading, setLoading] = useState(true)
-  const [data, setData] = useState<DashboardResponse | null>(null)
+  type AdminDashboardData = DashboardResponse & {
+    returnStats?: {
+      requested?: number
+      approved?: number
+      pickup_assigned?: number
+      pickup_rejected?: number
+      picked_up?: number
+      received?: number
+      partially_refunded?: number
+      refunded?: number
+      rejected?: number
+      today?: number
+      total?: number
+    }
+  }
+  const [data, setData] = useState<AdminDashboardData | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   // Dashboard data fetching function
@@ -559,6 +588,8 @@ export default function AdminDashboard() {
         <Stat label="Warehouses" value={numberFmt.format(data?.assignedWarehouses?.length || 0)} icon={Building2} colorClass="text-indigo-600" bg="bg-indigo-100" />
       </div>
 
+      {/* Returns Overview for Warehouse/Order Manager */}
+      <SectionCard title="Order Stats"> 
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <Stat label="New" value={numberFmt.format(data?.orderStats?.new || 0)} icon={Package} colorClass="text-blue-600" bg="bg-blue-50" />
         <Stat label="Processing" value={numberFmt.format(data?.orderStats?.processing || 0)} icon={RefreshCw} colorClass="text-yellow-600" bg="bg-yellow-50" />
@@ -567,26 +598,26 @@ export default function AdminDashboard() {
         <Stat label="Cancelled" value={numberFmt.format(data?.orderStats?.cancelled || 0)} icon={X} colorClass="text-red-600" bg="bg-red-50" />
         <Stat label="Refunded" value={numberFmt.format(data?.orderStats?.refunded || 0)} icon={RefreshCw} colorClass="text-gray-600" bg="bg-gray-50" />
       </div>
-
-      {data?.assignedWarehouses?.length ? (
-        <SectionCard title="Assigned Warehouses">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {(data?.assignedWarehouses || []).map((w: any) => (
-              <div key={w._id} className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
-                    <Building2 className="h-5 w-5 text-indigo-600" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-indigo-900">{w.name}</h4>
-                    <p className="text-sm text-indigo-600">{w.address}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
+      </SectionCard>
+      
+      {data?.returnStats && (
+        <SectionCard title="Returns Overview">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Stat label="Returns Today" value={numberFmt.format(data?.returnStats?.today || 0)} icon={Clock} colorClass="text-orange-700" bg="bg-orange-100" />
+            <Stat label="Pickup Assigned" value={numberFmt.format(data?.returnStats?.pickup_assigned || 0)} icon={Truck} colorClass="text-indigo-700" bg="bg-indigo-100" />
+            <Stat label="Picked Up" value={numberFmt.format(data?.returnStats?.picked_up || 0)} icon={Package} colorClass="text-purple-700" bg="bg-purple-100" />
+            <Stat label="Received at WH" value={numberFmt.format(data?.returnStats?.received || 0)} icon={Warehouse} colorClass="text-green-700" bg="bg-green-100" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mt-4">
+            <Stat label="Requested" value={numberFmt.format(data?.returnStats?.requested || 0)} icon={Package} colorClass="text-gray-700" bg="bg-gray-100" />
+            <Stat label="Approved" value={numberFmt.format(data?.returnStats?.approved || 0)} icon={CheckCircle} colorClass="text-emerald-700" bg="bg-emerald-100" />
+            <Stat label="Rejected" value={numberFmt.format(data?.returnStats?.rejected || 0)} icon={X} colorClass="text-red-700" bg="bg-red-100" />
+            <Stat label="Partial Refund" value={numberFmt.format(data?.returnStats?.partially_refunded || 0)} icon={RefreshCw} colorClass="text-amber-700" bg="bg-amber-100" />
+            <Stat label="Refunded" value={numberFmt.format(data?.returnStats?.refunded || 0)} icon={RefreshCw} colorClass="text-blue-700" bg="bg-blue-100" />
+            <Stat label="Total Returns" value={numberFmt.format(data?.returnStats?.total || 0)} icon={BarChart3} colorClass="text-slate-700" bg="bg-slate-100" />
           </div>
         </SectionCard>
-      ) : null}
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <SectionCard title="Recent Orders">
@@ -1086,13 +1117,24 @@ export default function AdminDashboard() {
         <Stat label="Total Delivered" value={numberFmt.format(data?.cards?.deliveredOrders || 0)} icon={CheckCircle} colorClass="text-emerald-600" bg="bg-emerald-100" />
       </div>
 
-      {/* Cancelled/Refunded after delivery stats - only show if there are any */}
+      {/* Returns Overview for Delivery Agent: only three essential stats */}
+      {data?.returnStats && (
+        <SectionCard title="Returns Overview">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Stat label="Assigned Returns Today" value={numberFmt.format(data?.returnStats?.today || 0)} icon={Clock} colorClass="text-orange-700" bg="bg-orange-100" />
+            <Stat label="Picked Up" value={numberFmt.format(data?.returnStats?.picked_up || 0)} icon={Package} colorClass="text-purple-700" bg="bg-purple-100" />
+            <Stat label="Rejected" value={numberFmt.format(data?.returnStats?.rejected || 0)} icon={X} colorClass="text-red-700" bg="bg-red-100" />
+          </div>
+        </SectionCard>
+      )}
+
+      {/* Cancelled/Refunded after delivery stats - only show if there are any
       {((data?.cards?.cancelledAfterDelivery || 0) + (data?.cards?.refundedAfterDelivery || 0)) > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Stat label="Cancelled After Delivery" value={numberFmt.format(data?.cards?.cancelledAfterDelivery || 0)} icon={X} colorClass="text-red-600" bg="bg-red-100" />
           <Stat label="Refunded After Delivery" value={numberFmt.format(data?.cards?.refundedAfterDelivery || 0)} icon={RefreshCw} colorClass="text-orange-600" bg="bg-orange-100" />
         </div>
-      )}
+      )} */}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <SectionCard title="Assigned Warehouses">

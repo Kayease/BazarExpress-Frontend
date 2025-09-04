@@ -149,7 +149,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
       setStep("otp");
       setOtp("");
       setSeconds(30);
-      toast.success("Password verified. OTP sent successfully!");
+      toast.success("OTP sent successfully!");
     } catch (err: any) {
       toast.error(err.message || "Invalid password");
       setPassword(""); // Clear password field on error
@@ -435,9 +435,9 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                     type="button"
                     className="text-brand-primary hover:text-brand-primary-dark text-sm font-medium"
                     onClick={requiresPassword ? handleVerifyPassword : handleSendOtp}
-                    disabled={loading}
+                    disabled={loading || seconds > 0}
                   >
-                    {requiresPassword ? "Resend Password Verification" : `Resend Code ${seconds > 0 ? `(${seconds}s)` : ""}`}
+                    {`Resend ${requiresPassword ? 'Verification code' : 'Code'} ${seconds > 0 ? `(${seconds}s)` : ''}`}
                   </button>
                   
                   <div>

@@ -50,6 +50,7 @@ interface ReturnItemsModalProps {
   isSubmitting: boolean;
   returnableItems: ReturnItem[];
   onPaymentChange?: (pref: { method: 'upi' | 'bank' | ''; upiId?: string; bankDetails?: { accountHolderName: string; accountNumber: string; ifsc: string; bankName: string } }) => void;
+  existingReturnStatuses?: Record<string, { status: string; returnId: string }>;
 }
 
 export default function ReturnItemsModal({
@@ -63,7 +64,8 @@ export default function ReturnItemsModal({
   onSubmit,
   isSubmitting,
   returnableItems,
-  onPaymentChange
+  onPaymentChange,
+  existingReturnStatuses = {}
 }: ReturnItemsModalProps) {
   
   const [paymentMethod, setPaymentMethod] = useState<'upi' | 'bank' | ''>('');
@@ -75,6 +77,33 @@ export default function ReturnItemsModal({
     bankName: ''
   });
   const [confirmAccountNumber, setConfirmAccountNumber] = useState<string>('');
+
+  // Map internal statuses to user-friendly labels and colors
+  const getStatusBadgeProps = (status?: string): { label: string; className: string } => {
+    const key = (status || '').toLowerCase();
+    switch (key) {
+      case 'requested':
+        return { label: 'Return Requested', className: 'bg-blue-600 text-white' };
+      case 'approved':
+        return { label: 'Return Approved', className: 'bg-emerald-600 text-white' };
+      case 'rejected':
+        return { label: 'Return Rejected', className: 'bg-red-600 text-white' };
+      case 'pickup_assigned':
+        return { label: 'Pickup Scheduled', className: 'bg-indigo-600 text-white' };
+      case 'picked_up':
+        return { label: 'Return Picked Up', className: 'bg-violet-600 text-white' };
+        case 'pickup_rejected':
+          return { label: 'Pick-up Rejected', className: 'bg-red-600 text-white' };
+      case 'received':
+        return { label: 'Return Received', className: 'bg-amber-600 text-white' };
+      case 'partially_refunded':
+        return { label: 'Partially Refunded', className: 'bg-yellow-600 text-white' };
+      case 'refunded':
+        return { label: 'Refunded', className: 'bg-green-600 text-white' };
+      default:
+        return { label: 'Return In Progress', className: 'bg-gray-700 text-white' };
+    }
+  };
 
   // Lift payment preference up to parent when changes occur
   useEffect(() => {
@@ -198,27 +227,38 @@ export default function ReturnItemsModal({
               {returnableItems.length > 0 ? (
                 <div className="space-y-2 sm:space-y-3 max-h-[40vh] sm:max-h-[50vh] lg:max-h-[60vh] overflow-y-auto">
                   {returnableItems.map((item: ReturnItem, index: number) => {
-                    const itemId = item._id || index.toString();
-                    const isSelected = selectedItems.includes(itemId);
+                    // Only use the actual order item _id for status matching; do not fall back to index
+                    const orderItemId = item._id as string | undefined;
+                    const fallbackId = index.toString();
+                    const isSelected = selectedItems.includes(orderItemId || fallbackId);
+                    const existing = orderItemId ? existingReturnStatuses[orderItemId] : undefined;
+                    const isBlocked = Boolean(existing && orderItemId);
                     
                     return (
                       <div 
-                        key={`${itemId}-${item.name}`} 
-                        className={`flex items-center space-x-2 sm:space-x-3 p-2 sm:p-3 border rounded-lg transition-all cursor-pointer hover:shadow-sm ${
-                          isSelected 
-                            ? 'border-brand-primary bg-brand-primary/5' 
-                            : 'border-gray-200 hover:border-gray-300'
+                        key={`${orderItemId || fallbackId}-${item.name}`} 
+                        className={`relative flex items-center space-x-2 sm:space-x-3 p-2 sm:p-3 border rounded-lg transition-all ${
+                          isBlocked
+                            ? 'border-dashed border-gray-300 bg-gray-50 opacity-60 cursor-not-allowed'
+                            : 'cursor-pointer hover:shadow-sm'
+                        } ${
+                          !isBlocked && isSelected
+                            ? 'border-brand-primary bg-brand-primary/5'
+                            : !isBlocked
+                              ? 'border-gray-200 hover:border-gray-300'
+                              : 'border-gray-300'
                         }`}
                       >
                         <input
                           type="checkbox"
-                          id={`return-item-${itemId}`}
+                          id={`return-item-${orderItemId || fallbackId}`}
                           checked={isSelected}
-                          onChange={() => onItemToggle(itemId)}
-                          className="w-3 h-3 sm:w-4 sm:h-4 text-brand-primary border-gray-300 rounded focus:ring-brand-primary flex-shrink-0"
+                          onChange={() => !isBlocked && onItemToggle(orderItemId || fallbackId)}
+                          disabled={isBlocked}
+                          className="w-3 h-3 sm:w-4 sm:h-4 text-brand-primary border-gray-300 rounded focus:ring-brand-primary flex-shrink-0 disabled:opacity-50"
                           onClick={(e) => e.stopPropagation()}
                         />
-                        <label htmlFor={`return-item-${itemId}`} className="flex-1 cursor-pointer min-w-0" onClick={(e) => e.stopPropagation()}>
+                        <label htmlFor={`return-item-${orderItemId || fallbackId}`} className={`flex-1 min-w-0 ${isBlocked ? 'cursor-not-allowed' : 'cursor-pointer'}`} onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center space-x-2 sm:space-x-3">
                             {/* Product Image */}
                             <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
@@ -256,6 +296,19 @@ export default function ReturnItemsModal({
                             </div>
                           </div>
                         </label>
+
+                        {isBlocked && (
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            {(() => {
+                              const badge = getStatusBadgeProps(existing?.status);
+                              return (
+                                <span className={`px-2 py-1 text-[10px] sm:text-xs font-semibold rounded-md ${badge.className}`}>
+                                  {badge.label}
+                                </span>
+                              );
+                            })()}
+                          </div>
+                        )}
                       </div>
                     );
                   })}

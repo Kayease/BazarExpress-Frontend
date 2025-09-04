@@ -170,6 +170,7 @@ export default function OrdersTable({
   const [otp, setOtp] = useState(["", "", "", ""])
   const [otpSessionId, setOtpSessionId] = useState("")
   const [generatingOtp, setGeneratingOtp] = useState(false)
+  const [resendSecondsLeft, setResendSecondsLeft] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalOrders, setTotalOrders] = useState(0)
@@ -188,6 +189,19 @@ export default function OrdersTable({
   })
   const [pickingModalOrder, setPickingModalOrder] = useState<Order | null>(null) // Track which order to show picking modal for
   const ORDERS_PER_PAGE = 20
+
+  // Cooldown timer helpers (mirror ReturnDetailsModal)
+  const startResendCooldown = (seconds: number = 30) => {
+    setResendSecondsLeft(seconds)
+  }
+
+  useEffect(() => {
+    if (resendSecondsLeft <= 0) return
+    const timer = setInterval(() => {
+      setResendSecondsLeft(prev => (prev > 0 ? prev - 1 : 0))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [resendSecondsLeft])
 
   // Global stats refresh system integration
   const { isRefreshing } = useAdminStatsRefresh({
@@ -209,6 +223,10 @@ export default function OrdersTable({
   const isSearching = searchTerm !== debouncedSearchTerm
 
   const fetchOrders = useCallback(async (page = 1) => {
+    // Avoid refreshing orders while OTP modal is active to prevent modal remount/flicker
+    if (showOtpInput) {
+      return
+    }
     try {
       setLoading(true)
 
@@ -264,7 +282,7 @@ export default function OrdersTable({
     } finally {
       setLoading(false)
     }
-  }, [token, debouncedSearchTerm, filterWarehouse, filterStatus, statusFilter, ORDERS_PER_PAGE, endpoint, showStatusFilter, shouldShowDeliveryAgentFilterForUser, filterDeliveryAgent, isDeliveryAgent, user?.id])
+  }, [token, debouncedSearchTerm, filterWarehouse, filterStatus, statusFilter, ORDERS_PER_PAGE, endpoint, showStatusFilter, shouldShowDeliveryAgentFilterForUser, filterDeliveryAgent, isDeliveryAgent, user?.id, showOtpInput])
 
   // Fetch delivery agents
   const fetchDeliveryBoys = useCallback(async () => {
@@ -603,6 +621,9 @@ export default function OrdersTable({
         }
       }, 100)
       
+      // Start resend cooldown (30s)
+      startResendCooldown(30)
+      
       toast.success('Delivery OTP generated successfully')
     } catch (err) {
       console.error('Error generating delivery OTP:', err)
@@ -643,24 +664,33 @@ export default function OrdersTable({
 
       const data = await response.json()
 
-      // Update the orders list
+      // Update the orders list immediately
       setOrders(orders.map(o =>
         o.orderId === viewing.orderId
           ? { ...o, status: 'delivered' as Order['status'] }
           : o
       ))
 
-      // Refresh orders
-      await fetchOrders()
-
+      // Close modal and hide OTP first to avoid guard skipping the refresh
       setViewing(null)
       setShowOtpInput(false)
-      setOtp(["", "", "", ""])
+      setOtp(["", "", "", ""]) 
       setOtpSessionId("")
+
+      // Refresh orders after modal is closed
+      await fetchOrders()
       toast.success('Order status updated to delivered successfully')
     } catch (err) {
       console.error('Error verifying delivery OTP:', err)
       toast.error(err instanceof Error ? err.message : 'Failed to verify delivery OTP')
+      // Reset OTP inputs and focus first box on invalid/expired OTP
+      setOtp(['', '', '', ''])
+      setTimeout(() => {
+        const firstInput = document.getElementById('otp-0')
+        if (firstInput) {
+          firstInput.focus()
+        }
+      }, 100)
     } finally {
       setUpdating(false)
     }
@@ -922,6 +952,13 @@ export default function OrdersTable({
     if (e.key === 'Backspace' && !otp[index] && index > 0) {
       const prevInput = document.getElementById(`otp-${index - 1}`)
       prevInput?.focus()
+    }
+    if (e.key === 'Enter') {
+      const otpString = otp.join('')
+      if (otpString.length === 4) {
+        // Submit on Enter when 4 digits entered
+        void verifyDeliveryOtp()
+      }
     }
   }
 
@@ -1783,10 +1820,10 @@ export default function OrdersTable({
                       <div className="text-center">
                         <button
                           onClick={generateDeliveryOtp}
-                          disabled={generatingOtp}
+                          disabled={generatingOtp || resendSecondsLeft > 0}
                           className="text-sm text-brand-primary hover:text-brand-primary/80 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          {generatingOtp ? 'Resending...' : 'Resend OTP'}
+                          {generatingOtp ? 'Resending...' : (resendSecondsLeft > 0 ? `Resend in ${resendSecondsLeft}s` : 'Resend OTP')}
                         </button>
                       </div>
 

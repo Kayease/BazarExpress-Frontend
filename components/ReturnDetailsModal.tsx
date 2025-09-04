@@ -102,7 +102,27 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
   const [showOtp, setShowOtp] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [resending, setResending] = useState(false);
+  const [resendSecondsLeft, setResendSecondsLeft] = useState(0);
   const otpRefs = useMemo(() => Array(4).fill(0).map(() => React.createRef<HTMLInputElement>()), []);
+
+  const resetOtpInputs = () => {
+    setOtp(["", "", "", ""]);
+    setTimeout(() => {
+      otpRefs[0]?.current?.focus();
+    }, 0);
+  };
+
+  const startResendCooldown = (seconds: number = 30) => {
+    setResendSecondsLeft(seconds);
+  };
+
+  useEffect(() => {
+    if (resendSecondsLeft <= 0) return;
+    const timer = setInterval(() => {
+      setResendSecondsLeft(prev => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendSecondsLeft]);
 
   useEffect(() => {
     setNewStatus(data.status);
@@ -241,9 +261,6 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
                   <div className="flex-1 ml-4">
                     <h5 className="font-medium text-gray-900 mb-1">{item.name}</h5>
                     <div className="text-sm text-gray-600">Qty: {item.quantity} × ₹{item.price} = ₹{(item.price * item.quantity).toFixed(2)}</div>
-                    <div className={`inline-block mt-2 px-2 py-1 rounded-full text-xs font-medium ${statusConfig[item.returnStatus]?.bg || 'bg-gray-100'} ${statusConfig[item.returnStatus]?.color || 'text-gray-800'}`}>
-                      {statusConfig[item.returnStatus]?.label || item.returnStatus}
-                    </div>
                   </div>
                 </div>
               ))}
@@ -318,7 +335,8 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
                     {/* Admin: direct update; Warehouse: OTP required when setting picked_up */}
                     {role === 'order_warehouse_management' && newStatus === 'picked_up' && (
                       <div className="space-y-3">
-                        {/* Generate OTP Button - centered, full width */}
+                        {/* Show generate button above only before OTP is shown */}
+                        {!showOtp && (
                         <div className="flex justify-center">
                           <button
                             className="w-full px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-primary-dark disabled:opacity-50"
@@ -329,7 +347,8 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
                                 await onGeneratePickupOtp?.(data.returnId)
                                 setShowOtp(true)
                                 setOtpSent(true)
-                              } catch (error) {
+                                startResendCooldown(30)
+                              } catch (error: any) {
                                 console.error('Failed to generate pickup OTP:', error)
                                 toast.error('Failed to send OTP. Please try again.')
                               } finally {
@@ -340,6 +359,7 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
                             {submitting ? 'Generating...' : 'Generate Return Pick-up OTP'}
                           </button>
                         </div>
+                        )}
                         
                         {/* OTP Input */}
                         {showOtp && (
@@ -368,6 +388,25 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
                                     if (e.key === 'Backspace' && !otp[idx] && idx > 0) {
                                       otpRefs[idx - 1]?.current?.focus();
                                     }
+                                    // Submit on Enter if 4 digits entered (manager/warehouse flow)
+                                    if (e.key === 'Enter') {
+                                      const code = otp.join("");
+                                      if (code.length === 4) {
+                                        (async () => {
+                                          setSubmitting(true);
+                                          try {
+                                            await onVerifyPickupOtp?.(code);
+                                           // toast.success('OTP verified successfully');
+                                            await onUpdateStatus(newStatus, note);
+                                          } catch (err: any) {
+                                            toast.error(err?.message || 'Invalid or expired OTP');
+                                            resetOtpInputs();
+                                          } finally {
+                                            setSubmitting(false);
+                                          }
+                                        })();
+                                      }
+                                    }
                                   }}
                                   onFocus={(e) => e.target.select()}
                                   className="w-12 h-12 text-center text-lg font-semibold border-2 border-gray-300 rounded-lg focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 focus:outline-none" 
@@ -378,14 +417,14 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
                             {otpSent && (
                               <div className="flex justify-center">
                                 <button
-                                  className="w-full mt-2 text-sm bg-white border border-brand-primary text-brand-primary rounded-lg px-4 py-2 hover:bg-brand-primary/5 disabled:opacity-50"
-                                  disabled={submitting}
+                                  className="mt-2 text-sm text-brand-primary hover:text-brand-primary/80 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  disabled={submitting || resendSecondsLeft > 0}
                                   onClick={async () => {
                                     setSubmitting(true)
                                     try {
                                       await onGeneratePickupOtp?.(data.returnId)
                                       setShowOtp(true)
-                                      toast.success('OTP resent to customer!')
+                                      startResendCooldown(30)
                                     } catch (error) {
                                       console.error('Failed to resend pickup OTP:', error)
                                       toast.error('Failed to resend OTP. Please try again.')
@@ -394,25 +433,35 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
                                     }
                                   }}
                                 >
-                                  {submitting ? 'Resending...' : 'Resend OTP'}
+                                  {submitting ? 'Resending...' : (resendSecondsLeft > 0 ? `Resend in ${resendSecondsLeft}s` : 'Resend OTP')}
                                 </button>
                               </div>
                             )}
+                            {/* Bottom action button when OTP is visible */}
                             <div className="flex justify-end">
                               <button
                                 className="w-full px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-primary-dark disabled:opacity-50"
-                                disabled={submitting || otp.join('').length !== 4}
+                                disabled={submitting}
                                 onClick={async () => {
                                   setSubmitting(true)
                                   try {
-                                    await onVerifyPickupOtp?.(otp.join(''))
+                                    const code = otp.join('')
+                                    if (code.length !== 4) {
+                                      otpRefs[0]?.current?.focus()
+                                      return
+                                    }
+                                    await onVerifyPickupOtp?.(code)
+                                    //toast.success('OTP verified successfully')
                                     await onUpdateStatus(newStatus, note)
+                                  } catch (e: any) {
+                                    toast.error(e?.message || 'Invalid or expired OTP')
+                                    resetOtpInputs()
                                   } finally {
                                     setSubmitting(false)
                                   }
                                 }}
                               >
-                                {submitting ? 'Verifying...' : 'Verify OTP & Update Status'}
+                                {submitting ? 'Verifying...' : (otp.join('').length === 4 ? 'Verify OTP & Update Status' : 'Enter OTP')}
                               </button>
                             </div>
                           </div>
@@ -469,6 +518,7 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
 
                     {newStatus === 'picked_up' && (
                       <div className="space-y-2">
+                        {!showOtp && (
                         <div className="flex justify-center">
                           <button
                             className="w-full px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-primary-dark disabled:opacity-50"
@@ -479,7 +529,7 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
                                 await onGeneratePickupOtp?.(data.returnId)
                                 setShowOtp(true)
                                 setOtpSent(true)
-                              } catch (error) {
+                              } catch (error: any) {
                                 console.error('Failed to generate pickup OTP:', error)
                                 toast.error('Failed to send OTP. Please try again.')
                               } finally {
@@ -490,6 +540,7 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
                             {submitting ? 'Generating...' : 'Generate Return Pick-up OTP'}
                           </button>
                         </div>
+                        )}
                         {showOtp && (
                         <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
                           <div className="text-sm text-gray-600">Ask customer for OTP and enter below to confirm pickup.</div>
@@ -516,6 +567,25 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
                                   if (e.key === 'Backspace' && !otp[idx] && idx > 0) {
                                     otpRefs[idx - 1]?.current?.focus();
                                   }
+                                  // Submit on Enter if 4 digits entered (delivery flow)
+                                  if (e.key === 'Enter') {
+                                    const code = otp.join("");
+                                    if (code.length === 4) {
+                                      (async () => {
+                                        setSubmitting(true);
+                                        try {
+                                          await onVerifyPickupOtp?.(code)
+                                        //  toast.success('OTP verified successfully')
+                                          await onPickupAction?.('picked_up', note || 'Items picked up successfully')
+                                        } catch (err: any) {
+                                          toast.error(err?.message || 'Invalid or expired OTP')
+                                          resetOtpInputs()
+                                        } finally {
+                                          setSubmitting(false)
+                                        }
+                                      })();
+                                    }
+                                  }
                                 }}
                                 onFocus={(e) => e.target.select()}
                                 className="w-12 h-12 text-center text-lg font-semibold border-2 border-gray-300 rounded-lg focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 focus:outline-none" 
@@ -526,14 +596,14 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
                           {otpSent && (
                             <div className="flex justify-center">
                               <button
-                                className="w-full mt-2 text-sm bg-white border border-brand-primary text-brand-primary rounded-lg px-4 py-2 hover:bg-brand-primary/5 disabled:opacity-50"
-                                disabled={resending}
+                                className="mt-2 text-sm text-brand-primary hover:underline disabled:opacity-50"
+                                disabled={resending || resendSecondsLeft > 0}
                                 onClick={async () => {
                                   setResending(true)
                                   try {
                                     await onGeneratePickupOtp?.(data.returnId)
                                     setShowOtp(true)
-                                    toast.success('OTP resent to customer!')
+                                    startResendCooldown(30)
                                   } catch (error) {
                                     console.error('Failed to resend pickup OTP:', error)
                                     toast.error('Failed to resend OTP. Please try again.')
@@ -542,25 +612,35 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
                                   }
                                 }}
                               >
-                                {resending ? 'Resending...' : 'Resend OTP'}
+                                {resending ? 'Resending...' : (resendSecondsLeft > 0 ? `Resend in ${resendSecondsLeft}s` : 'Resend OTP')}
                               </button>
                             </div>
                           )}
+                          {/* Bottom action button when OTP is visible */}
                           <div className="flex justify-end">
                             <button
                               className="w-full px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-primary-dark disabled:opacity-50"
-                              disabled={submitting || otp.join('').length !== 4}
+                              disabled={submitting}
                               onClick={async () => {
                                 setSubmitting(true)
                                 try {
-                                  await onVerifyPickupOtp?.(otp.join(''))
+                                  const code = otp.join('')
+                                  if (code.length !== 4) {
+                                    otpRefs[0]?.current?.focus()
+                                    return
+                                  }
+                                  await onVerifyPickupOtp?.(code)
+                                  //toast.success('OTP verified successfully')
                                   await onPickupAction?.('picked_up', note || 'Items picked up successfully')
+                                } catch (e: any) {
+                                  toast.error(e?.message || 'Invalid or expired OTP')
+                                  resetOtpInputs()
                                 } finally {
                                   setSubmitting(false)
                                 }
                               }}
                             >
-                              {submitting ? 'Verifying...' : 'Verify OTP & Update Status'}
+                              {submitting ? 'Verifying...' : (otp.join('').length === 4 ? 'Verify OTP & Update Status' : 'Enter OTP')}
                             </button>
                           </div>
                         </div>

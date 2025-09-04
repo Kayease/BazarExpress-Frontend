@@ -258,12 +258,39 @@ export default function AdminReturns() {
   useEffect(() => {
     if (token && user) {
       fetchReturns()
+      // Always fetch warehouses for filters; agents only for non-delivery roles
+      fetchWarehouses()
       if (user.role !== 'delivery_boy') {
         fetchDeliveryAgents()
-        fetchWarehouses()
       }
     }
   }, [token, user, fetchReturns, fetchDeliveryAgents, fetchWarehouses])
+
+  // Auto-refetch when pagination changes
+  useEffect(() => {
+    if (token && user) {
+      fetchReturns()
+    }
+  }, [currentPage])
+
+  // Auto-refetch when server-side filters change (remove Apply Filters button)
+  useEffect(() => {
+    if (token && user) {
+      setCurrentPage(1)
+      fetchReturns()
+    }
+  }, [filters.status, filters.warehouseId, filters.assignedAgent])
+
+  // Client-side search filter for returnId and customer name
+  const displayReturns = React.useMemo(() => {
+    const term = (filters.search || '').trim().toLowerCase()
+    if (!term) return returns
+    return returns.filter(r => {
+      const byId = (r.returnId || '').toLowerCase().includes(term)
+      const byName = (r.customerInfo?.name || '').toLowerCase().includes(term)
+      return byId || byName
+    })
+  }, [returns, filters.search])
 
   // Handle status update
   const handleStatusUpdate = async (returnId: string, newStatus: string, note: string = '') => {
@@ -526,10 +553,23 @@ export default function AdminReturns() {
           </div>
         )}
 
-        {/* Filters - Only for admin/warehouse managers */}
+        {/* Filters - Admin/Warehouse Managers */}
         {user?.role !== 'delivery_boy' && (
           <div className="bg-white rounded-lg border p-4">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    value={filters.search}
+                    onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                    placeholder="Search by Return ID or Customer name"
+                    className="w-full h-[37px] pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                 <select
@@ -582,17 +622,55 @@ export default function AdminReturns() {
                   ))}
                 </select>
               </div>
+            </div>
+          </div>
+        )}
 
-              <div className="flex items-end">
-                <button
-                  onClick={() => {
-                    setCurrentPage(1)
-                    fetchReturns()
-                  }}
-                  className="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
+        {/* Filters - Delivery Agent (status + warehouse only) */}
+        {user?.role === 'delivery_boy' && (
+          <div className="bg-white rounded-lg border p-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    value={filters.search}
+                    onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                    placeholder="Search by Return ID or Customer name"
+                    className="w-full h-[37px] pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <select
+                  value={filters.status}
+                  onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  Apply Filters
-                </button>
+                  <option value="all">All Statuses</option>
+                  <option value="pickup_assigned">Pickup Assigned</option>
+                  <option value="pickup_rejected">Pickup Rejected</option>
+                  <option value="picked_up">Picked Up</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Warehouse</label>
+                <select
+                  value={filters.warehouseId}
+                  onChange={(e) => setFilters(prev => ({ ...prev, warehouseId: e.target.value }))}
+                  className="w-full h-10 border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="all">All Warehouses</option>
+                  {warehouses.map(warehouse => (
+                    <option key={warehouse._id} value={warehouse._id}>
+                      {warehouse.name}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           </div>
@@ -638,14 +716,14 @@ export default function AdminReturns() {
                       </div>
                     </td>
                   </tr>
-                ) : returns.length === 0 ? (
+                ) : displayReturns.length === 0 ? (
                   <tr>
                     <td colSpan={user?.role === 'delivery_boy' ? 6 : 7} className="px-6 py-12 text-center text-gray-500">
                       No return requests found
                     </td>
                   </tr>
                 ) : (
-                  returns.map((returnRequest) => {
+                  displayReturns.map((returnRequest) => {
                     const statusInfo = getStatusInfo(returnRequest.status)
                     const StatusIcon = statusInfo.icon
                     
@@ -845,11 +923,15 @@ export default function AdminReturns() {
             }}
             onVerifyPickupOtp={async (otp) => {
               // Verify OTP endpoint
-              await fetch(`${process.env.NEXT_PUBLIC_API_URL}/returns/${selectedReturn.returnId}/verify-otp`, {
+              const resp = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/returns/${selectedReturn.returnId}/verify-otp`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ otp })
               })
+              if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}))
+                throw new Error(err.error || 'Invalid or expired OTP')
+              }
               fetchReturns()
             }}
             onGeneratePickupOtp={async (returnId) => {

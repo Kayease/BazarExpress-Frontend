@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
 import { X, Package, MapPin, CreditCard, Calendar, Truck, CheckCircle, Download } from 'lucide-react';
 import InvoiceModal from './InvoiceModal';
+import { useAppSelector } from "../lib/store";
 
 interface OrderItem {
   productId: string;
@@ -146,6 +147,98 @@ const getStatusIcon = (status: string) => {
 export default function OrderDetailModal({ isOpen, onClose, order }: OrderDetailModalProps) {
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [invoiceOrderData, setInvoiceOrderData] = useState<any>(null);
+  const token = useAppSelector((state) => state.auth.token);
+
+  // Existing returns mapped by orderItemId for this order
+  const [existingReturnsByOrderItem, setExistingReturnsByOrderItem] = useState<Record<string, { status: string; returnId: string }>>({});
+
+  // Friendly status mapping (same semantics as ReturnItemsModal)
+  const getReturnBadgeProps = (status?: string): { label: string; className: string } => {
+    const key = (status || '').toLowerCase();
+    switch (key) {
+      case 'requested':
+        return { label: 'Return Requested', className: 'bg-blue-600 text-white' };
+      case 'approved':
+        return { label: 'Return Approved', className: 'bg-emerald-600 text-white' };
+      case 'rejected':
+        return { label: 'Return Rejected', className: 'bg-red-600 text-white' };
+      case 'pickup_assigned':
+        return { label: 'Pickup Scheduled', className: 'bg-indigo-600 text-white' };
+      case 'pickup_rejected':
+        return { label: 'Pick-up Rejected', className: 'bg-red-600 text-white' };
+      case 'picked_up':
+        return { label: 'Return Picked Up', className: 'bg-violet-600 text-white' };
+      case 'received':
+        return { label: 'Return Received', className: 'bg-amber-600 text-white' };
+      case 'partially_refunded':
+        return { label: 'Partially Refunded', className: 'bg-yellow-600 text-white' };
+      case 'refunded':
+        return { label: 'Refunded', className: 'bg-green-600 text-white' };
+      default:
+        return { label: 'Return In Progress', className: 'bg-gray-700 text-white' };
+    }
+  };
+
+  // Prevent background scroll when modal is open
+  useEffect(() => {
+    if (!isOpen) return;
+    const scrollY = window.scrollY;
+    const { style } = document.body;
+    const prevPosition = style.position;
+    const prevTop = style.top;
+    const prevWidth = style.width;
+    const prevOverflow = style.overflow;
+    style.position = 'fixed';
+    style.top = `-${scrollY}px`;
+    style.width = '100%';
+    style.overflow = 'hidden';
+    return () => {
+      style.position = prevPosition;
+      style.top = prevTop;
+      style.width = prevWidth;
+      style.overflow = prevOverflow;
+      window.scrollTo(0, scrollY);
+    };
+  }, [isOpen]);
+
+  // Fetch user's returns for this order to gray out items already in a return flow
+  useEffect(() => {
+    if (!isOpen || !order || !token) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/returns/user?limit=1000`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const returns: any[] = data.returns || [];
+        // Only consider returns for this order
+        const relevant = returns.filter((r: any) => r.orderId === order.orderId);
+        const validOrderItemIds = new Set<string>((order.items || []).map((it: any) => String((it as any)._id || (it as any).id)));
+        const map: Record<string, { status: string; returnId: string }> = {};
+        relevant.forEach((r: any) => {
+          const topStatus = r.status;
+          (r.items || []).forEach((it: any) => {
+            const rawId = it.orderItemId || it.orderItemID || it.itemId || it._id;
+            const orderItemId = rawId ? String(rawId) : '';
+            if (orderItemId && validOrderItemIds.has(orderItemId)) {
+              // Prefer overall return status to reflect most recent progression
+              map[orderItemId] = { status: (topStatus || it.returnStatus || 'requested'), returnId: r.returnId || r._id };
+            }
+          });
+        });
+        if (!cancelled) setExistingReturnsByOrderItem(map);
+      } catch (e) {
+        // ignore errors; UI simply won't gray items
+        if (!cancelled) setExistingReturnsByOrderItem({});
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isOpen, order, token]);
 
   if (!isOpen || !order) return null;
 
@@ -385,8 +478,14 @@ export default function OrderDetailModal({ isOpen, onClose, order }: OrderDetail
               Items ({order.items.length})
             </h4>
             <div className="space-y-2 sm:space-y-3">
-              {order.items.map((item, index) => (
-                <div key={`${item.productId}-${index}`} className="flex items-center p-2.5 sm:p-3 border border-gray-200 rounded-lg sm:rounded-xl hover:shadow-sm transition-shadow">
+              {order.items.map((item, index) => {
+                const anyItem: any = item as any;
+                const orderItemId = String(anyItem._id || anyItem.id || anyItem.orderItemId || anyItem.orderItemID || anyItem.itemId || '');
+                const existing = orderItemId ? existingReturnsByOrderItem[orderItemId] : undefined;
+                const isBlocked = Boolean(existing);
+                const badge = existing ? getReturnBadgeProps(existing.status) : undefined;
+                return (
+                <div key={`${item.productId}-${index}`} className={`relative flex items-center p-2.5 sm:p-3 border rounded-lg sm:rounded-xl hover:shadow-sm transition-shadow ${isBlocked ? 'border-dashed border-gray-300 bg-gray-50 opacity-75' : 'border-gray-200'}`}>
                   {/* Product Image */}
                   <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
                     {item.image ? (
@@ -412,9 +511,6 @@ export default function OrderDetailModal({ isOpen, onClose, order }: OrderDetail
                         <span className="text-xs sm:text-sm text-gray-600 font-normal ml-1 sm:ml-2">({item.variantName})</span>
                       )}
                     </h5>
-                    {item.refundStatus === 'refunded' && (
-                      <span className="inline-block px-2 py-0.5 text-[10px] sm:text-xs rounded-full bg-green-100 text-green-700 mr-2">Refunded</span>
-                    )}
                     <div className="flex items-center space-x-2 sm:space-x-4 text-xs sm:text-sm text-gray-500">
                       <span>Qty: {item.quantity}</span>
                       {item.tax && (
@@ -440,8 +536,13 @@ export default function OrderDetailModal({ isOpen, onClose, order }: OrderDetail
                       </div>
                     )}
                   </div>
+                  {isBlocked && badge && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <span className={`px-2 py-1 text-[10px] sm:text-xs font-semibold rounded-md ${badge.className}`}>{badge.label}</span>
+                    </div>
+                  )}
                 </div>
-              ))}
+              );})}
             </div>
           </div>
 
