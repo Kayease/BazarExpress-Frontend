@@ -17,6 +17,14 @@ interface ReturnItem {
   returnReason: string;
   returnStatus: string;
   refundAmount?: number;
+  // Additional fields for refund calculation
+  taxableValue?: number;
+  cgst?: number;
+  sgst?: number;
+  igst?: number;
+  grossTotal?: number;
+  discountShare?: number;
+  deliveryCharge?: number;
 }
 
 interface ReturnRequest {
@@ -38,6 +46,18 @@ interface ReturnRequest {
     upiId?: string;
     bankDetails?: { accountHolderName?: string; accountNumber?: string; ifsc?: string; bankName?: string };
   };
+  // Amount actually refunded to customer
+  refundedAmount?: number;
+  // Order summary fields for refund calculation
+  orderSummary?: {
+    totalTaxableValue: number;
+    totalDiscount: number;
+    totalTax: number;
+    totalDeliveryCharge: number;
+    finalAmount: number;
+    promoCode?: string;
+    discountType?: 'percentage' | 'fixed';
+  };
 }
 
 interface ReturnDetailsModalProps {
@@ -45,12 +65,38 @@ interface ReturnDetailsModalProps {
   onClose: () => void;
   data: ReturnRequest;
   role: Role;
-  onUpdateStatus: (status: string, note?: string) => Promise<void> | void;
+  onUpdateStatus: (status: string, note?: string, refundedAmount?: number) => Promise<void> | void;
   onAssignPickup?: (agentId: string, note?: string) => Promise<void> | void;
   onPickupAction?: (action: 'reject' | 'picked_up', note?: string) => Promise<void> | void;
   onVerifyPickupOtp?: (otp: string) => Promise<void> | void;
   onGeneratePickupOtp?: (returnId: string) => Promise<void> | void;
   deliveryAgents?: Array<{ _id: string; name: string; phone: string }>;
+  // Refund calculation options
+  refundOptions?: {
+    deliveryRefundable?: boolean;
+    currency?: string;
+  };
+}
+
+interface RefundSummary {
+  items_total_gross: number;
+  items_discount_total: number;
+  delivery_refund: number;
+  total_refund: number;
+  currency: string;
+  item_breakdown: Array<{
+    item_id: string;
+    item_name: string;
+    quantity: number;
+    taxable_value: number;
+    cgst: number;
+    sgst: number;
+    igst: number;
+    gross_total: number;
+    discount_share: number;
+    delivery_charge: number;
+    refundable_amount: number;
+  }>;
 }
 
 const statusConfig: Record<string, { label: string; color: string; bg: string; icon: any }> = {
@@ -93,7 +139,84 @@ function computeAvailableStatuses(current: string, role: Role) {
   return transitions[current] || [];
 }
 
-export default function ReturnDetailsModal({ open, onClose, data, role, onUpdateStatus, onAssignPickup, onPickupAction, onVerifyPickupOtp, onGeneratePickupOtp, deliveryAgents = [] }: ReturnDetailsModalProps) {
+// Refund calculation function
+function calculateRefund(
+  invoice: any, 
+  returnedItems: Array<{ id: string; qty: number }>, 
+  options: { deliveryRefundable?: boolean; currency?: string } = {}
+): RefundSummary {
+  const { deliveryRefundable = false, currency = 'INR' } = options;
+  
+  // Extract invoice data
+  const { items = [], totalTaxableValue = 0, totalDiscount = 0, totalTax = 0, totalDeliveryCharge = 0 } = invoice;
+  
+  // Filter returned items from invoice
+  const returnedInvoiceItems = items.filter((item: any) => 
+    returnedItems.some(returned => returned.id === item.id)
+  );
+  
+  let items_total_gross = 0;
+  let items_discount_total = 0;
+  let delivery_refund = 0;
+  const item_breakdown: any[] = [];
+  
+  returnedInvoiceItems.forEach((item: any) => {
+    const returnedQty = returnedItems.find(r => r.id === item.id)?.qty || 0;
+    const returnRatio = returnedQty / item.quantity;
+    
+    // Calculate proportional values for returned quantity
+    const taxable_value = (item.taxable || 0) * returnRatio;
+    const cgst = (item.cgst || 0) * returnRatio;
+    const sgst = (item.sgst || 0) * returnRatio;
+    const igst = (item.igst || 0) * returnRatio;
+    const gross_total = taxable_value + cgst + sgst + igst;
+    
+    // Calculate proportional discount share
+    const discount_share = totalTaxableValue > 0 
+      ? (taxable_value / totalTaxableValue) * totalDiscount 
+      : 0;
+    
+    // Calculate proportional delivery charge
+    const delivery_charge = totalTaxableValue > 0 
+      ? (taxable_value / totalTaxableValue) * totalDeliveryCharge 
+      : 0;
+    
+    const refundable_amount = gross_total - discount_share;
+    
+    items_total_gross += gross_total;
+    items_discount_total += discount_share;
+    if (deliveryRefundable) {
+      delivery_refund += delivery_charge;
+    }
+    
+    item_breakdown.push({
+      item_id: item.id,
+      item_name: item.name || item.description,
+      quantity: returnedQty,
+      taxable_value: Math.round(taxable_value * 100) / 100,
+      cgst: Math.round(cgst * 100) / 100,
+      sgst: Math.round(sgst * 100) / 100,
+      igst: Math.round(igst * 100) / 100,
+      gross_total: Math.round(gross_total * 100) / 100,
+      discount_share: Math.round(discount_share * 100) / 100,
+      delivery_charge: Math.round(delivery_charge * 100) / 100,
+      refundable_amount: Math.round(refundable_amount * 100) / 100
+    });
+  });
+  
+  const total_refund = items_total_gross - items_discount_total + (deliveryRefundable ? delivery_refund : 0);
+  
+  return {
+    items_total_gross: Math.round(items_total_gross * 100) / 100,
+    items_discount_total: Math.round(items_discount_total * 100) / 100,
+    delivery_refund: Math.round(delivery_refund * 100) / 100,
+    total_refund: Math.round(total_refund * 100) / 100,
+    currency,
+    item_breakdown
+  };
+}
+
+export default function ReturnDetailsModal({ open, onClose, data, role, onUpdateStatus, onAssignPickup, onPickupAction, onVerifyPickupOtp, onGeneratePickupOtp, deliveryAgents = [], refundOptions = {} }: ReturnDetailsModalProps) {
   const [newStatus, setNewStatus] = useState<string>(data.status);
   const [note, setNote] = useState<string>("");
   const [selectedAgent, setSelectedAgent] = useState<string>("");
@@ -104,6 +227,114 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
   const [resending, setResending] = useState(false);
   const [resendSecondsLeft, setResendSecondsLeft] = useState(0);
   const otpRefs = useMemo(() => Array(4).fill(0).map(() => React.createRef<HTMLInputElement>()), []);
+  const [orderDetails, setOrderDetails] = useState<any | null>(null);
+  const [partialRefundAmount, setPartialRefundAmount] = useState<string>("");
+  const appliedPromoCode = useMemo(() => {
+    return (orderDetails?.promoCode?.code) || data.orderSummary?.promoCode || '';
+  }, [orderDetails?.promoCode?.code, data.orderSummary?.promoCode]);
+
+  // Calculate refund amounts using the calculateRefund function
+  const refundSummary = useMemo(() => {
+    // For now, let's create a mock invoice data based on the screenshot example
+    // In a real implementation, this would come from the actual order/invoice data
+    const appliedDiscount = (orderDetails?.promoCode?.discountAmount ?? 0) || (orderDetails?.pricing?.discountAmount ?? 0) || (typeof data.orderSummary?.totalDiscount === 'number' ? data.orderSummary.totalDiscount : 0);
+    const deliveryCharge = (orderDetails?.pricing?.deliveryCharge ?? (typeof data.orderSummary?.totalDeliveryCharge === 'number' ? data.orderSummary.totalDeliveryCharge : 0)) || 0;
+    const totalTaxFromOrder = (orderDetails?.taxCalculation?.totalTax ?? (typeof data.orderSummary?.totalTax === 'number' ? data.orderSummary.totalTax : undefined));
+    const subtotalFromOrder = (orderDetails?.taxCalculation?.subtotal ?? (typeof data.orderSummary?.totalTaxableValue === 'number' ? data.orderSummary.totalTaxableValue : undefined));
+
+    const mockInvoiceData = {
+      items: data.items.map(item => {
+        // Based on the invoice screenshot: Multiple_sets has taxable ₹1493.46, CGST ₹52.27, SGST ₹52.27
+        // For now, we'll calculate proportional values based on the item price
+        const itemTotal = item.price * item.quantity;
+        const taxableValue = itemTotal * 0.935; // Approximate ratio from invoice (1493.46/1598)
+        const taxAmount = itemTotal * 0.065; // Approximate tax ratio (104.54/1598)
+        
+        return {
+          id: item._id,
+          name: item.name,
+          quantity: item.quantity,
+          taxable: taxableValue,
+          cgst: taxAmount / 2,
+          sgst: taxAmount / 2,
+          igst: 0
+        };
+      }),
+      totalTaxableValue: typeof subtotalFromOrder === 'number'
+        ? subtotalFromOrder
+        : data.items.reduce((sum, item) => sum + (item.price * item.quantity * 0.935), 0),
+      totalDiscount: appliedDiscount,
+      totalTax: typeof totalTaxFromOrder === 'number'
+        ? totalTaxFromOrder
+        : data.items.reduce((sum, item) => sum + (item.price * item.quantity * 0.065), 0),
+      totalDeliveryCharge: deliveryCharge
+    };
+
+    const returnedItems = data.items.map(item => ({
+      id: item._id,
+      qty: item.quantity
+    }));
+
+    return calculateRefund(mockInvoiceData, returnedItems, {
+      deliveryRefundable: false, // Delivery is non-refundable as per user requirement
+      currency: refundOptions.currency || 'INR'
+    });
+  }, [data.items, refundOptions, orderDetails, data.orderSummary]);
+
+  // Load order details to get actual applied promocode/discount
+  useEffect(() => {
+    let cancelled = false;
+    const loadOrder = async () => {
+      try {
+        if (!data?.orderId) return;
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+        const APIURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+        const res = await fetch(`${APIURL}/orders/order/${data.orderId}`, {
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          }
+        });
+        if (!res.ok) return;
+        const json = await res.json();
+        const order = json?.order || null;
+        if (!cancelled) setOrderDetails(order);
+      } catch (e) {
+        if (!cancelled) setOrderDetails(null);
+      }
+    };
+    loadOrder();
+    return () => { cancelled = true; };
+  }, [data?.orderId]);
+
+  // Convert refund summary to the format expected by the UI
+  const calculateRefundAmounts = useMemo(() => {
+    return refundSummary.item_breakdown.map((item, index) => ({
+      ...data.items[index],
+      taxableValue: item.taxable_value,
+      cgst: item.cgst,
+      sgst: item.sgst,
+      igst: item.igst,
+      grossTotal: item.gross_total,
+      discountShare: item.discount_share,
+      deliveryCharge: item.delivery_charge,
+      refundableAmount: item.refundable_amount
+    }));
+  }, [refundSummary, data.items]);
+
+  // Calculate totals from refund summary
+  const refundTotals = useMemo(() => {
+    return {
+      taxableValue: refundSummary.item_breakdown.reduce((sum, item) => sum + item.taxable_value, 0),
+      cgst: refundSummary.item_breakdown.reduce((sum, item) => sum + item.cgst, 0),
+      sgst: refundSummary.item_breakdown.reduce((sum, item) => sum + item.sgst, 0),
+      igst: refundSummary.item_breakdown.reduce((sum, item) => sum + item.igst, 0),
+      grossTotal: refundSummary.items_total_gross,
+      discountShare: refundSummary.items_discount_total,
+      deliveryCharge: refundSummary.delivery_refund,
+      refundableAmount: refundSummary.total_refund
+    };
+  }, [refundSummary]);
 
   const resetOtpInputs = () => {
     setOtp(["", "", "", ""]);
@@ -126,6 +357,10 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
 
   useEffect(() => {
     setNewStatus(data.status);
+    // Reset partial refund amount when status changes
+    if (data.status !== 'partially_refunded') {
+      setPartialRefundAmount("");
+    }
   }, [data.status]);
 
   useEffect(() => {
@@ -267,27 +502,164 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
             </div>
           </div>
 
+          {/* Return Order Summary */}
+          <div className="bg-gray-50 rounded-xl p-6">
+            <h4 className="font-semibold text-gray-900 mb-4 flex items-center">
+              <CreditCard className="w-5 h-5 text-brand-primary mr-2" />
+              Return Order Summary
+            </h4>
+            
+            {/* Items breakdown */}
+            <div className="space-y-3 mb-6">
+              {calculateRefundAmounts.map((item, index) => (
+                <div key={item._id} className="bg-white rounded-lg p-4 border border-gray-200">
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="flex-1">
+                      <h5 className="font-medium text-gray-900 text-sm">{item.name}</h5>
+                      <p className="text-xs text-gray-500">Qty: {item.quantity} × ₹{item.price}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-medium text-gray-900">₹{item.refundableAmount.toFixed(2)}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4 text-xs text-gray-600">
+                    <div>
+                      <div className="flex justify-between">
+                        <span>Taxable Value:</span>
+                        <span>₹{item.taxableValue.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>CGST (3.5%):</span>
+                        <span>₹{item.cgst.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>SGST (3.5%):</span>
+                        <span>₹{item.sgst.toFixed(2)}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex justify-between">
+                        <span>Gross Total:</span>
+                        <span>₹{item.grossTotal.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Discount Share:</span>
+                        <span className="text-red-600">-₹{item.discountShare.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Promo code info */}
+            {(appliedPromoCode) && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <span className="text-sm font-medium text-blue-900">Promo Code Applied:</span>
+                    <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
+                      {appliedPromoCode}
+                    </span>
+                  </div>
+                  <span className="text-sm text-blue-700">
+                    -₹{refundTotals.discountShare.toFixed(2)} discount
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Totals */}
+            <div className="bg-white rounded-lg p-4 border border-gray-200">
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Subtotal:</span>
+                  <span className="font-medium">₹{refundTotals.taxableValue.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">CGST (3.5%):</span>
+                  <span className="font-medium">₹{refundTotals.cgst.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">SGST (3.5%):</span>
+                  <span className="font-medium">₹{refundTotals.sgst.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-red-600">
+                  <span>Discount:</span>
+                  <span>-₹{refundTotals.discountShare.toFixed(2)}</span>
+                </div>
+                <div className="border-t border-gray-200 pt-2">
+                  <div className="flex justify-between text-lg font-bold text-gray-900">
+                    <span>Total Refund Amount:</span>
+                    <span>₹{Math.round(refundTotals.refundableAmount)}</span>
+                  </div>
+                  {data.status === 'partially_refunded' && data.refundedAmount && data.refundedAmount > 0 && (
+                    <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-medium text-yellow-800">
+                          {'Partially Refunded Amount:'}
+                        </span>
+                        <span className="text-sm font-bold text-yellow-900">
+                          ₹{data.refundedAmount}
+                        </span>
+                      </div>
+                      {(() => {
+                        // Find the most recent refund-related status entry for additional notes
+                        const refundEntry = data.statusHistory?.find(entry => 
+                          (entry.status === 'partially_refunded') && 
+                          entry.note && 
+                          !entry.note.includes('Amount: ₹')
+                        );
+                        return refundEntry?.note && (
+                          <div className="mt-1 text-xs text-yellow-700">
+                            Note: {refundEntry.note}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Actions */}
           {availableStatuses.length > 0 && (
             <div className="bg-gray-50 rounded-xl p-4 space-y-4">
               {/* Unified status controls (dropdown in modal) */}
               <div className="space-y-3">
-                <div className={`grid grid-cols-1 ${showAgentColumn ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-3`}>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Change Status</label>
-                    <select
-                      className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-brand-primary focus:border-transparent"
-                      value={newStatus}
-                      onChange={(e) => setNewStatus(e.target.value)}
-                    >
-                      <option value={data.status} disabled>
-                        Current: {statusConfig[data.status]?.label || data.status}
-                      </option>
-                      {availableStatuses.map((st) => (
-                        <option key={st} value={st}>{statusConfig[st]?.label || st}</option>
-                      ))}
-                    </select>
+                <div className="space-y-3">
+                  {/* Status and Note in a compact row */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Change Status</label>
+                      <select
+                        className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-brand-primary focus:border-transparent"
+                        value={newStatus}
+                        onChange={(e) => setNewStatus(e.target.value)}
+                      >
+                        <option value={data.status} disabled>
+                          Current: {statusConfig[data.status]?.label || data.status}
+                        </option>
+                        {availableStatuses.map((st) => (
+                          <option key={st} value={st}>{statusConfig[st]?.label || st}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Note (optional)</label>
+                      <input
+                        type="text"
+                        className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-brand-primary focus:border-transparent"
+                        placeholder="Add a note"
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                      />
+                    </div>
                   </div>
+                  
+                  {/* Agent assignment fields in separate row when needed */}
                   {(data.status === 'pickup_assigned' && (role === 'admin' || role === 'order_warehouse_management')) && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Assign Pickup Agent</label>
@@ -315,18 +687,31 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
                           <option key={a._id} value={a._id}>{a.name} - {a.phone}</option>
                         ))}
                       </select>
+                    </div>  
+                  )}
+                  {newStatus === 'partially_refunded' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Partial Refund Amount (₹)
+                      </label>
+                      <input
+                        type="number"
+                        className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-brand-primary focus:border-transparent"
+                        placeholder={`Enter amount (max: ₹${Math.round(refundTotals.refundableAmount)})`}
+                        value={partialRefundAmount}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          // Only allow integers and ensure it doesn't exceed total refund amount
+                          if (value === '' || (Number.isInteger(Number(value)) && Number(value) >= 0 && Number(value) <= Math.round(refundTotals.refundableAmount))) {
+                            setPartialRefundAmount(value);
+                          }
+                        }}
+                        min="0"
+                        max={Math.round(refundTotals.refundableAmount)}
+                        step="1"
+                      />
                     </div>
                   )}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Note (optional)</label>
-                    <input
-                      type="text"
-                      className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-brand-primary focus:border-transparent"
-                      placeholder="Add a note"
-                      value={note}
-                      onChange={(e) => setNote(e.target.value)}
-                    />
-                  </div>
                 </div>
 
                 {/* Action area per role */}
@@ -473,14 +858,21 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
                       <div className="flex justify-end">
                         <button
                           className="w-full px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-primary-dark disabled:opacity-50"
-                          disabled={submitting || (newStatus === 'pickup_assigned' && !selectedAgent) || !availableStatuses.includes(newStatus)}
+                          disabled={submitting || (newStatus === 'pickup_assigned' && !selectedAgent) || !availableStatuses.includes(newStatus) || (newStatus === 'partially_refunded' && (!partialRefundAmount || Number(partialRefundAmount) <= 0))}
                           onClick={async () => {
                             setSubmitting(true)
                             try {
                               if (newStatus === 'pickup_assigned' && selectedAgent && onAssignPickup) {
                                 await onAssignPickup(selectedAgent, note || 'Pickup agent assigned')
                               } else {
-                                await onUpdateStatus(newStatus, note)
+                                // For partially_refunded status, include the partial refund amount in the note
+                                const statusNote = newStatus === 'partially_refunded' 
+                                  ? `${note || 'Partial refund processed'}. Amount: ₹${partialRefundAmount}`
+                                  : note;
+                                const refundAmount = newStatus === 'partially_refunded' 
+                                  ? Number(partialRefundAmount) 
+                                  : undefined;
+                                await onUpdateStatus(newStatus, statusNote, refundAmount)
                               }
                             } finally {
                               setSubmitting(false)

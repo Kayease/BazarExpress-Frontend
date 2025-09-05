@@ -25,6 +25,7 @@ interface Tax {
   percentage: number;
   description?: string;
   status: "active" | "inactive";
+  hsnCodes?: string[];
 }
 
 interface TaxFormModalProps {
@@ -42,12 +43,14 @@ export default function TaxFormModal({ open, onClose, tax, onSuccess }: TaxFormM
     percentage: 0,
     description: "",
     status: "active",
+    hsnCodes: [],
   };
   const [form, setForm] = useState<Tax>(formInitialState);
+  const [hsnInput, setHsnInput] = useState<string>("");
 
   useEffect(() => {
     if (tax) {
-      setForm({ ...tax });
+      setForm({ ...tax, hsnCodes: tax.hsnCodes || [] });
     } else {
       setForm(formInitialState);
     }
@@ -61,7 +64,7 @@ export default function TaxFormModal({ open, onClose, tax, onSuccess }: TaxFormM
     e.preventDefault();
     setLoading(true);
     try {
-      let payload = { ...form };
+      let payload = { ...form, hsnCodes: form.hsnCodes || [] };
       let data;
       
       if (tax) {
@@ -84,6 +87,34 @@ export default function TaxFormModal({ open, onClose, tax, onSuccess }: TaxFormM
     }
   };
 
+  const isValidHsn = (value: string) => {
+    const trimmed = value.trim();
+    if (!/^\d+$/.test(trimmed)) return false;
+    return trimmed.length === 6 || trimmed.length === 8;
+  };
+
+  const addHsnFromInput = () => {
+    const value = hsnInput.trim();
+    if (!value) return;
+    if (!isValidHsn(value)) {
+      toast.error("HSN must be 6 or 8 digits");
+      return;
+    }
+    // prevent duplicates
+    const existing = form.hsnCodes || [];
+    if (existing.includes(value)) {
+      toast.success("HSN already added");
+      setHsnInput("");
+      return;
+    }
+    setForm((prev) => ({ ...prev, hsnCodes: [...(prev.hsnCodes || []), value] }));
+    setHsnInput("");
+  };
+
+  const removeHsn = (code: string) => {
+    setForm((prev) => ({ ...prev, hsnCodes: (prev.hsnCodes || []).filter((c) => c !== code) }));
+  };
+
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
       <DialogContent className="max-w-lg w-full p-0">
@@ -100,6 +131,45 @@ export default function TaxFormModal({ open, onClose, tax, onSuccess }: TaxFormM
           <div>
             <label className="block text-sm font-medium mb-1">Percentage (%)</label>
             <Input type="number" step="0.01" value={form.percentage === undefined || form.percentage === null ? "" : String(form.percentage)} onChange={e => handleChange("percentage", parseFloat(e.target.value))} min={0} max={100} required />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">HSN Codes</label>
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="Enter 6 or 8 digit HSN and press Enter"
+                value={hsnInput}
+                onChange={e => setHsnInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addHsnFromInput();
+                  }
+                }}
+                inputMode="numeric"
+                maxLength={8}
+              />
+              <Button
+                type="button"
+                onClick={addHsnFromInput}
+                className="h-9 px-3 bg-brand-primary text-white hover:bg-brand-primary-dark rounded-md"
+              >
+                Add
+              </Button>
+            </div>
+            {form.hsnCodes && form.hsnCodes.length > 0 ? (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {form.hsnCodes.map((code) => (
+                  <span key={code} className="inline-flex items-center gap-1 bg-gray-100 text-gray-700 text-xs font-medium px-2 py-1 rounded">
+                    {code}
+                    <button type="button" className="ml-1 text-gray-500 hover:text-red-600" onClick={() => removeHsn(code)} aria-label={`Remove ${code}`}>
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <div className="text-xs text-gray-500 mt-1">No HSN codes added yet.</div>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Description</label>

@@ -92,6 +92,8 @@ interface ReturnRequest {
       bankName?: string
     }
   }
+  // Amount actually refunded to customer
+  refundedAmount?: number
 }
 
 interface ReturnStats {
@@ -293,15 +295,20 @@ export default function AdminReturns() {
   }, [returns, filters.search])
 
   // Handle status update
-  const handleStatusUpdate = async (returnId: string, newStatus: string, note: string = '') => {
+  const handleStatusUpdate = async (returnId: string, newStatus: string, note: string = '', refundedAmount?: number) => {
     try {
+      const requestBody: any = { status: newStatus, note };
+      if (refundedAmount !== undefined) {
+        requestBody.refundedAmount = refundedAmount;
+      }
+
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/returns/${returnId}/status`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ status: newStatus, note })
+        body: JSON.stringify(requestBody)
       })
 
       if (!response.ok) {
@@ -752,12 +759,10 @@ export default function AdminReturns() {
                         </td>
                         
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">
-                            {returnRequest.items.length} item{returnRequest.items.length !== 1 ? 's' : ''}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            ₹{returnRequest.items.reduce((sum, item) => sum + (item.price * item.quantity), 0).toFixed(2)}
-                          </div>
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-codGray">{returnRequest.items.length}</p>
+                          <p className="text-xs text-gray-500">Item{returnRequest.items.length !== 1 ? 's' : ''}</p>
+                        </div>
                         </td>
                         
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -903,8 +908,8 @@ export default function AdminReturns() {
             data={selectedReturn as any}
             role={user?.role}
             deliveryAgents={deliveryAgents}
-            onUpdateStatus={async (status, note) => {
-              await handleStatusUpdate(selectedReturn.returnId, status, note)
+            onUpdateStatus={async (status, note, refundedAmount) => {
+              await handleStatusUpdate(selectedReturn.returnId, status, note, refundedAmount)
               setShowDetailsModal(false)
             }}
             onAssignPickup={async (agentId, note) => {

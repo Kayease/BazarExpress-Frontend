@@ -35,6 +35,7 @@ interface Tax {
   state?: string;
   description?: string;
   status: "active" | "inactive";
+  hsnCodes?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -289,6 +290,15 @@ export default function AdminTaxes() {
                 <div className="flex flex-wrap gap-1 items-center text-xs">
                   <span className="bg-gray-100 rounded px-2 py-0.5 font-semibold">{tax.percentage}%</span>
                   <span className={`rounded px-2 py-0.5 font-semibold ${tax.status === "active" ? "bg-green-100 text-green-700" : "bg-gray-200 text-gray-400"}`}>{tax.status === "active" ? "Active" : "Inactive"}</span>
+                  {tax.hsnCodes && tax.hsnCodes.length > 0 && (
+                    <span className="text-gray-500 ml-1">•</span>
+                  )}
+                  {tax.hsnCodes && tax.hsnCodes.slice(0,3).map(code => (
+                    <span key={code} className="bg-blue-50 text-blue-700 rounded px-2 py-0.5 font-semibold">HSN {code}</span>
+                  ))}
+                  {tax.hsnCodes && tax.hsnCodes.length > 3 && (
+                    <span className="text-gray-500">+{tax.hsnCodes.length - 3} more</span>
+                  )}
                 </div>
                 <div className="flex gap-1 sm:ml-2">
                   <button
