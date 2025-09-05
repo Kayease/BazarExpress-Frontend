@@ -325,7 +325,7 @@ export default function AdminReturns() {
       pickup_rejected: ['approved', 'pickup_assigned', 'rejected'],
       picked_up: ['received'],
       received: ['partially_refunded', 'refunded'],
-      partially_refunded: ['refunded'],
+      partially_refunded: [], // No status changes allowed from partially_refunded
       refunded: [],
       rejected: []
     }
