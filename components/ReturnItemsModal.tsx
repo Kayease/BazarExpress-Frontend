@@ -14,6 +14,9 @@ interface ReturnItem {
   image?: string;
   returnWindow?: number;
   returnable?: boolean;
+  variantName?: string;
+  variantId?: string;
+  selectedVariant?: any;
 }
 
 interface Address {
@@ -198,7 +201,7 @@ export default function ReturnItemsModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[999] p-2 sm:p-4">
-      <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl w-full max-w-sm sm:max-w-2xl lg:max-w-6xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl w-full max-w-sm sm:max-w-2xl lg:max-w-6xl max-h-[85vh] sm:max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="px-3 sm:px-4 lg:px-6 py-2 sm:py-3 lg:py-4 border-b border-gray-200 bg-gradient-to-r from-brand-primary to-brand-primary-dark text-white rounded-t-xl sm:rounded-t-2xl">
           <div className="flex justify-between items-center">
@@ -225,7 +228,7 @@ export default function ReturnItemsModal({
               </h4>
               
               {returnableItems.length > 0 ? (
-                <div className="space-y-2 sm:space-y-3 max-h-[40vh] sm:max-h-[50vh] lg:max-h-[60vh] overflow-y-auto">
+                <div className="space-y-2 sm:space-y-3 max-h-[30vh] sm:max-h-[50vh] lg:max-h-[60vh] overflow-y-auto">
                   {returnableItems.map((item: ReturnItem, index: number) => {
                     // Only use the actual order item _id for status matching; do not fall back to index
                     const orderItemId = item._id as string | undefined;
@@ -282,6 +285,29 @@ export default function ReturnItemsModal({
                               <p className="font-medium text-gray-900 text-xs sm:text-sm mb-1 truncate">
                                 {item.name}
                               </p>
+                              
+                              {/* Enhanced Variant Display */}
+                              {(() => {
+                                // Extract variant name with fallback logic
+                                let variantName = item.variantName;
+                                
+                                if (!variantName && item.selectedVariant) {
+                                  if (typeof item.selectedVariant === 'object' && item.selectedVariant !== null) {
+                                    variantName = item.selectedVariant.name || item.selectedVariant.variantName || item.selectedVariant.displayName || item.selectedVariant.sku;
+                                  } else if (typeof item.selectedVariant === 'string') {
+                                    variantName = item.selectedVariant;
+                                  }
+                                }
+                                
+                                return variantName ? (
+                                  <div className="mb-1">
+                                    <div className="inline-flex items-center px-2 py-1 text-xs font-semibold bg-gradient-to-r from-brand-primary to-brand-primary-dark text-white rounded-full shadow-sm">
+                                      {variantName}
+                                    </div>
+                                  </div>
+                                ) : null
+                              })()}
+                              
                               <p className="text-xs text-gray-600 mb-1">
                                 Qty: {item.quantity} × ₹{item.price}
                               </p>
@@ -322,9 +348,9 @@ export default function ReturnItemsModal({
             </div>
 
             {/* Right Column - Address, Reason, and Actions */}
-            <div className="space-y-4 sm:space-y-6">
+            <div className="space-y-3 sm:space-y-6">
               {/* Pick-up Address */}
-              <div className="bg-gray-50 rounded-lg sm:rounded-xl p-3 sm:p-4">
+              <div className="bg-gray-50 rounded-lg sm:rounded-xl p-2 sm:p-4">
                 <div className="flex items-center space-x-2 mb-2 sm:mb-3">
                   <MapPin className="w-4 h-4 sm:w-5 sm:h-5 text-brand-primary" />
                   <h4 className="font-semibold text-gray-900 text-sm sm:text-base">Pick-up Address</h4>
@@ -346,7 +372,7 @@ export default function ReturnItemsModal({
               </div>
 
               {/* Refund Method - user selects preferred refund method that admin must honor */}
-              <div className="bg-white border border-gray-200 rounded-lg sm:rounded-xl p-3 sm:p-4 shadow-sm">
+              <div className="bg-white border border-gray-200 rounded-lg sm:rounded-xl p-2 sm:p-4 shadow-sm">
                 <div className="flex items-center space-x-2 mb-2 sm:mb-3">
                   <div className="w-2 h-2 bg-brand-primary rounded-full"></div>
                   <h4 className="text-xs sm:text-sm font-semibold text-gray-900">Refund Method *</h4>
@@ -462,7 +488,7 @@ export default function ReturnItemsModal({
               </div>
 
               {/* Return Reason */}
-              <div className="bg-white border border-gray-200 rounded-lg sm:rounded-xl p-3 sm:p-4 shadow-sm">
+              <div className="bg-white border border-gray-200 rounded-lg sm:rounded-xl p-2 sm:p-4 shadow-sm">
                 <div className="flex items-center space-x-2 mb-2 sm:mb-3">
                   <div className="w-2 h-2 bg-red-500 rounded-full"></div>
                   <label htmlFor="returnReason" className="text-xs sm:text-sm font-semibold text-gray-900">
@@ -508,7 +534,7 @@ export default function ReturnItemsModal({
               </div>
 
               {/* Action Buttons */}
-              <div className="flex space-x-2 sm:space-x-3 pt-2 sm:pt-4">
+              <div className="flex space-x-2 sm:space-x-3 pt-1 sm:pt-4">
                 <button
                   onClick={onClose}
                   className="flex-1 px-3 sm:px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-xs sm:text-sm font-medium"

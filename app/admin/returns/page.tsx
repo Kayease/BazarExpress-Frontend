@@ -867,22 +867,58 @@ export default function AdminReturns() {
                       <ChevronLeft className="h-5 w-5" />
                     </button>
                     
-                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                      const pageNum = Math.max(1, Math.min(currentPage - 2 + i, totalPages - 4 + i))
-                      return (
-                        <button
-                          key={pageNum}
-                          onClick={() => setCurrentPage(pageNum)}
-                          className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
-                            currentPage === pageNum
-                              ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
-                              : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
-                          }`}
-                        >
-                          {pageNum}
-                        </button>
-                      )
-                    })}
+                    {(() => {
+                      const maxVisiblePages = 5;
+                      const pages = [];
+
+                      if (totalPages <= maxVisiblePages) {
+                        // Show all pages if total is small
+                        for (let i = 1; i <= totalPages; i++) {
+                          pages.push(i);
+                        }
+                      } else {
+                        // Smart pagination logic
+                        const startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+                        const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+                        
+                        // Adjust start if we're near the end
+                        const adjustedStart = Math.max(1, endPage - maxVisiblePages + 1);
+                        
+                        for (let i = adjustedStart; i <= endPage; i++) {
+                          pages.push(i);
+                        }
+                        
+                        // Add ellipsis and first/last page if needed
+                        if (adjustedStart > 1) {
+                          pages.unshift('...');
+                          pages.unshift(1);
+                        }
+                        if (endPage < totalPages) {
+                          pages.push('...');
+                          pages.push(totalPages);
+                        }
+                      }
+
+                      return pages.map((page, index) => (
+                        page === '...' ? (
+                          <span key={`ellipsis-${index}`} className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
+                            ...
+                          </span>
+                        ) : (
+                          <button
+                            key={page}
+                            onClick={() => setCurrentPage(page as number)}
+                            className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                              currentPage === page
+                                ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
+                                : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                            }`}
+                          >
+                            {page}
+                          </button>
+                        )
+                      ));
+                    })()}
                     
                     <button
                       onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
@@ -1046,8 +1082,8 @@ export default function AdminReturns() {
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900 mb-3">Select Items to Refund</h3>
                     <div className="space-y-3">
-                      {selectedReturn.items.map((item) => (
-                        <div key={item._id} className={`flex items-center space-x-3 p-3 border rounded-lg ${item.returnStatus === 'refunded' ? 'bg-gray-50 opacity-60' : ''}`}>
+                      {selectedReturn.items.map((item, index) => (
+                        <div key={item._id || `refund-item-${index}`} className={`flex items-center space-x-3 p-3 border rounded-lg ${item.returnStatus === 'refunded' ? 'bg-gray-50 opacity-60' : ''}`}>
                           {item.returnStatus !== 'refunded' ? (
                             <input
                               type="checkbox"

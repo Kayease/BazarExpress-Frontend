@@ -1495,47 +1495,56 @@ export default function OrdersTable({
 
                       {/* Product Info */}
                       <div className="flex-1 ml-4">
-                        <h5 className="font-medium text-gray-900 mb-1">
+                        <h5 className="font-medium text-gray-900 mb-2">
                           {item.name}
-                          {(() => {
-                            // Enhanced variant name extraction
-                            let variantName = null
-                            
-                            // Priority order for variant name extraction:
-                            // 1. Direct variantName field
-                            // 2. selectedVariant.name if selectedVariant exists
-                            // 3. selectedVariant as string if it's a string
-                            // 4. Look up variant in productId.variants array using variantId
-                            // 5. Extract from product name if it contains variant info
-                            if (item.variantName) {
-                              variantName = item.variantName
-                            } else if (item.selectedVariant && typeof item.selectedVariant === 'object' && item.selectedVariant.name) {
-                              variantName = item.selectedVariant.name
-                            } else if (item.selectedVariant && typeof item.selectedVariant === 'string') {
-                              variantName = item.selectedVariant
-                            } else if (typeof item.productId === 'object' && (item.productId as any).variantName) {
-                              variantName = (item.productId as any).variantName
-                            } else if (item.variantId && typeof item.productId === 'object' && (item.productId as any).variants) {
-                              // Look up variant in the product's variants array
-                              const variant = (item.productId as any).variants.find((v: any) => v._id === item.variantId || v.id === item.variantId)
-                              if (variant && variant.name) {
-                                variantName = variant.name
-                              }
-                            } else if (item.name && item.name.includes('(') && item.name.includes(')')) {
-                              // Fallback: Extract from product name if it contains variant info
-                              const match = item.name.match(/\(([^)]+)\)/)
-                              if (match && match[1]) {
-                                variantName = match[1]
-                              }
-                            }
-                            
-                            return variantName ? (
-                              <span className="text-sm text-blue-600 font-medium ml-2 bg-blue-50 px-2 py-1 rounded">
-                                {variantName}
-                              </span>
-                            ) : null
-                          })()}
                         </h5>
+                        
+                        {/* Enhanced Variant Display */}
+                        {(() => {
+                          // Enhanced variant name extraction with fallback logic
+                          let variantName = item.variantName;
+                          
+                          // Debug logging for variant information
+                          console.log(`OrdersTable - Item ${index}:`, {
+                            name: item.name,
+                            variantName: item.variantName,
+                            variantId: item.variantId,
+                            selectedVariant: item.selectedVariant
+                          });
+                          
+                          if (!variantName && item.selectedVariant) {
+                            if (typeof item.selectedVariant === 'object' && item.selectedVariant !== null) {
+                              variantName = item.selectedVariant.name || item.selectedVariant.variantName || item.selectedVariant.displayName || item.selectedVariant.sku;
+                            } else if (typeof item.selectedVariant === 'string') {
+                              variantName = item.selectedVariant;
+                            }
+                          }
+                          
+                          // Additional fallback: Look up variant in productId.variants array using variantId
+                          if (!variantName && item.variantId && typeof item.productId === 'object' && (item.productId as any).variants) {
+                            const variant = (item.productId as any).variants.find((v: any) => v._id === item.variantId || v.id === item.variantId);
+                            if (variant && variant.name) {
+                              variantName = variant.name;
+                            }
+                          }
+                          
+                          // Final fallback: Extract from product name if it contains variant info
+                          if (!variantName && item.name && item.name.includes('(') && item.name.includes(')')) {
+                            const match = item.name.match(/\(([^)]+)\)/);
+                            if (match && match[1]) {
+                              variantName = match[1];
+                            }
+                          }
+                          
+                          return variantName ? (
+                            <div className="mb-2">
+                              <div className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-gradient-to-r from-brand-primary to-brand-primary-dark text-white rounded-full shadow-sm">
+                                {variantName}
+                              </div>
+                            </div>
+                          ) : null
+                        })()}
+                        
                         <div className="flex items-center space-x-4 text-sm text-gray-500">
                           <span>Qty: {item.quantity}</span>
                           {item.brandId && (

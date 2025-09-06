@@ -11,6 +11,9 @@ interface ReturnItem {
   price: number;
   quantity: number;
   image?: string;
+  variantName?: string;
+  variantId?: string;
+  selectedVariant?: any;
 }
 
 interface ReturnRequest {
@@ -102,7 +105,7 @@ export default function CustomerReturnDetailsModal({ open, onClose, data }: Cust
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 z-[1000]">
-      <div className="bg-white rounded-xl sm:rounded-2xl w-full max-w-sm sm:max-w-2xl lg:max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto shadow-2xl">
+      <div className="bg-white rounded-xl sm:rounded-2xl w-full max-w-sm sm:max-w-2xl lg:max-w-4xl max-h-[85vh] sm:max-h-[90vh] overflow-y-auto shadow-2xl">
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-brand-primary to-brand-primary-dark text-white rounded-t-2xl">
           <div className="flex justify-between items-center">
@@ -116,10 +119,10 @@ export default function CustomerReturnDetailsModal({ open, onClose, data }: Cust
           </div>
         </div>
 
-        <div className="p-6 space-y-6">
+        <div className="p-3 sm:p-6 space-y-4 sm:space-y-6">
           {/* Top summary */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-gray-50 rounded-xl p-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
+            <div className="bg-gray-50 rounded-xl p-3 sm:p-4">
               <div className="flex items-center space-x-2 mb-2">
                 <StatusIcon className="w-4 h-4 text-brand-primary" />
                 <span className="text-sm font-medium text-gray-600">Return Status</span>
@@ -128,14 +131,14 @@ export default function CustomerReturnDetailsModal({ open, onClose, data }: Cust
                 {statusConfig[data.status]?.label || data.status}
               </span>
             </div>
-            <div className="bg-gray-50 rounded-xl p-4">
+            <div className="bg-gray-50 rounded-xl p-3 sm:p-4">
               <div className="flex items-center space-x-2 mb-2">
                 <Calendar className="w-4 h-4 text-brand-primary" />
                 <span className="text-sm font-medium text-gray-600">Created</span>
               </div>
               <p className="text-sm font-semibold text-gray-900">{new Date(data.createdAt).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })}</p>
             </div>
-            <div className="bg-gray-50 rounded-xl p-4">
+            <div className="bg-gray-50 rounded-xl p-3 sm:p-4">
               <div className="flex items-center space-x-2 mb-2">
                 <CreditCard className="w-4 h-4 text-brand-primary" />
                 <span className="text-sm font-medium text-gray-600">Refund Method</span>
@@ -145,8 +148,8 @@ export default function CustomerReturnDetailsModal({ open, onClose, data }: Cust
           </div>
 
           {/* Address */}
-          <div className="bg-gray-50 rounded-xl p-4">
-            <div className="flex items-center space-x-2 mb-3">
+          <div className="bg-gray-50 rounded-xl p-3 sm:p-4">
+            <div className="flex items-center space-x-2 mb-2 sm:mb-3">
               <MapPin className="w-5 h-5 text-brand-primary" />
               <h4 className="font-semibold text-gray-900">Pickup Address</h4>
             </div>
@@ -163,8 +166,8 @@ export default function CustomerReturnDetailsModal({ open, onClose, data }: Cust
 
           {/* Return Timeline (after address) */}
           {timeline.length > 0 && (
-            <div className="bg-gray-50 rounded-xl p-4">
-              <div className="flex items-center space-x-2 mb-3">
+            <div className="bg-gray-50 rounded-xl p-3 sm:p-4">
+              <div className="flex items-center space-x-2 mb-2 sm:mb-3">
                 <RefreshCw className="w-5 h-5 text-brand-primary" />
                 <h4 className="font-semibold text-gray-900">Return Timeline</h4>
               </div>
@@ -195,13 +198,13 @@ export default function CustomerReturnDetailsModal({ open, onClose, data }: Cust
 
           {/* Items */}
           <div>
-            <h4 className="font-semibold text-gray-900 mb-4 flex items-center">
+            <h4 className="font-semibold text-gray-900 mb-3 sm:mb-4 flex items-center">
               <Package className="w-5 h-5 text-brand-primary mr-2" />
               Return Items ({data.items.length})
             </h4>
-            <div className="space-y-3">
+            <div className="space-y-3 max-h-[40vh] sm:max-h-none overflow-y-auto">
               {data.items.map((item) => (
-                <div key={item._id || item.name} className="flex items-center p-4 border border-gray-200 rounded-xl hover:shadow-sm transition-shadow">
+                <div key={item._id || item.name} className="flex items-center p-3 sm:p-4 border border-gray-200 rounded-xl hover:shadow-sm transition-shadow">
                   <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
                     {item.image ? (
                       <Image src={item.image} alt={item.name} width={64} height={64} className="object-cover w-full h-full" />
@@ -212,7 +215,30 @@ export default function CustomerReturnDetailsModal({ open, onClose, data }: Cust
                     )}
                   </div>
                   <div className="flex-1 ml-4">
-                    <h5 className="font-medium text-gray-900 mb-1">{item.name}</h5>
+                    <h5 className="font-medium text-gray-900 mb-2">{item.name}</h5>
+                    
+                    {/* Enhanced Variant Display */}
+                    {(() => {
+                      // Extract variant name with fallback logic
+                      let variantName = item.variantName;
+                      
+                      if (!variantName && item.selectedVariant) {
+                        if (typeof item.selectedVariant === 'object' && item.selectedVariant !== null) {
+                          variantName = item.selectedVariant.name || item.selectedVariant.variantName || item.selectedVariant.displayName || item.selectedVariant.sku;
+                        } else if (typeof item.selectedVariant === 'string') {
+                          variantName = item.selectedVariant;
+                        }
+                      }
+                      
+                      return variantName ? (
+                        <div className="mb-2">
+                          <div className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-gradient-to-r from-brand-primary to-brand-primary-dark text-white rounded-full shadow-sm">
+                            {variantName}
+                          </div>
+                        </div>
+                      ) : null
+                    })()}
+                    
                     <div className="text-sm text-gray-600">Qty: {item.quantity} × ₹{item.price} = ₹{(item.price * item.quantity).toFixed(2)}</div>
                   </div>
                 </div>

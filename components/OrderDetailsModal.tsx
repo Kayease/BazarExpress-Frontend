@@ -470,63 +470,68 @@ export default function OrderDetailsModal({
 
                     {/* Product Info */}
                     <div className="flex-1 ml-4">
-                      <h5 className="font-medium text-gray-900 mb-1">
+                      <h5 className="font-medium text-gray-900 mb-2">
                         {item.name}
-                        {(() => {
-                          // Enhanced variant name extraction with debugging
-                          let variantName = null
-                          
-                          // Debug: Log item data to understand structure
-                          console.log('OrderDetailsModal - Item variant data:', {
-                            productId: item.productId,
-                            variantId: item.variantId,
-                            variantName: item.variantName,
-                            selectedVariant: item.selectedVariant,
-                            itemName: item.name
-                          })
-                          
-                          // Priority order for variant name extraction:
-                          // 1. Direct variantName field (most reliable)
-                          if (item.variantName) {
-                            variantName = item.variantName
-                            console.log('OrderDetailsModal - Using direct variantName:', variantName)
-                          } 
-                          // 2. selectedVariant.name if selectedVariant is an object
-                          else if (item.selectedVariant && typeof item.selectedVariant === 'object' && item.selectedVariant.name) {
-                            variantName = item.selectedVariant.name
-                            console.log('OrderDetailsModal - Using selectedVariant.name:', variantName)
-                          } 
-                          // 3. selectedVariant as string if it's a string
-                          else if (item.selectedVariant && typeof item.selectedVariant === 'string') {
-                            variantName = item.selectedVariant
-                            console.log('OrderDetailsModal - Using selectedVariant as string:', variantName)
-                          } 
-                          // 4. Look up variant in productId.variants array using variantId
-                          else if (item.variantId && typeof item.productId === 'object' && (item.productId as any).variants) {
-                            const variant = (item.productId as any).variants.find((v: any) => v._id === item.variantId || v.id === item.variantId)
-                            if (variant && variant.name) {
-                              variantName = variant.name
-                              console.log('OrderDetailsModal - Found variant in product variants:', variantName)
-                            }
-                          }
-                          // 5. Fallback: Extract from product name if it contains variant info
-                          else if (item.name && item.name.includes('(') && item.name.includes(')')) {
-                            const match = item.name.match(/\(([^)]+)\)/)
-                            if (match && match[1]) {
-                              variantName = match[1]
-                              console.log('OrderDetailsModal - Extracted from product name:', variantName)
-                            }
-                          }
-                          
-                          console.log('OrderDetailsModal - Final variant name:', variantName)
-                          
-                          return variantName ? (
-                            <span className="text-sm text-blue-600 font-medium ml-2 bg-blue-50 px-2 py-1 rounded">
-                              {variantName}
-                            </span>
-                          ) : null
-                        })()}
                       </h5>
+                      
+                      {/* Enhanced Variant Display */}
+                      {(() => {
+                        // Enhanced variant name extraction with debugging
+                        let variantName = null
+                        
+                        // Debug: Log item data to understand structure
+                        console.log('OrderDetailsModal - Item variant data:', {
+                          productId: item.productId,
+                          variantId: item.variantId,
+                          variantName: item.variantName,
+                          selectedVariant: item.selectedVariant,
+                          itemName: item.name
+                        })
+                        
+                        // Priority order for variant name extraction:
+                        // 1. Direct variantName field (most reliable)
+                        if (item.variantName) {
+                          variantName = item.variantName
+                          console.log('OrderDetailsModal - Using direct variantName:', variantName)
+                        } 
+                        // 2. selectedVariant.name if selectedVariant is an object
+                        else if (item.selectedVariant && typeof item.selectedVariant === 'object' && item.selectedVariant.name) {
+                          variantName = item.selectedVariant.name
+                          console.log('OrderDetailsModal - Using selectedVariant.name:', variantName)
+                        } 
+                        // 3. selectedVariant as string if it's a string
+                        else if (item.selectedVariant && typeof item.selectedVariant === 'string') {
+                          variantName = item.selectedVariant
+                          console.log('OrderDetailsModal - Using selectedVariant as string:', variantName)
+                        } 
+                        // 4. Look up variant in productId.variants array using variantId
+                        else if (item.variantId && typeof item.productId === 'object' && (item.productId as any).variants) {
+                          const variant = (item.productId as any).variants.find((v: any) => v._id === item.variantId || v.id === item.variantId)
+                          if (variant && variant.name) {
+                            variantName = variant.name
+                            console.log('OrderDetailsModal - Found variant in product variants:', variantName)
+                          }
+                        }
+                        // 5. Fallback: Extract from product name if it contains variant info
+                        else if (item.name && item.name.includes('(') && item.name.includes(')')) {
+                          const match = item.name.match(/\(([^)]+)\)/)
+                          if (match && match[1]) {
+                            variantName = match[1]
+                            console.log('OrderDetailsModal - Extracted from product name:', variantName)
+                          }
+                        }
+                        
+                        console.log('OrderDetailsModal - Final variant name:', variantName)
+                        
+                        return variantName ? (
+                          <div className="mb-2">
+                            <div className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-full shadow-sm">
+                              <div className="w-2 h-2 bg-white rounded-full mr-2 opacity-80"></div>
+                              {variantName}
+                            </div>
+                          </div>
+                        ) : null
+                      })()}
                       <div className="flex items-center space-x-4 text-sm text-gray-500 mb-1">
                         <span>Qty: {item.quantity}</span>
                         {item.brandId && (

@@ -1506,7 +1506,7 @@ export default function Profile() {
                                 {item.name}
                               </h3>
                               {item.variantName && (
-                                <p className="text-sm text-variant-400 font-medium">
+                                <p className="text-sm font-medium text-purple-600">
                                   Variant: {item.variantName}
                                 </p>
                               )}

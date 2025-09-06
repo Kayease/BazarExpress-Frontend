@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { X, Package, User, Calendar, MapPin, Phone, RefreshCw, CheckCircle, XCircle, Truck, UserCheck, CreditCard } from "lucide-react";
 import toast from "react-hot-toast";
+import { calculateCartTax, ProductTaxInfo } from "@/lib/tax-calculation";
 
 type Role = 'admin' | 'order_warehouse_management' | 'delivery_boy' | string;
 
@@ -17,6 +18,16 @@ interface ReturnItem {
   returnReason: string;
   returnStatus: string;
   refundAmount?: number;
+  // Tax information
+  priceIncludesTax?: boolean;
+  tax?: {
+    _id: string;
+    name: string;
+    percentage: number;
+    description?: string;
+  };
+  // Link to original order item
+  orderItemId?: string;
   // Additional fields for refund calculation
   taxableValue?: number;
   cgst?: number;
@@ -25,6 +36,10 @@ interface ReturnItem {
   grossTotal?: number;
   discountShare?: number;
   deliveryCharge?: number;
+  // Variant information
+  variantName?: string;
+  variantId?: string;
+  selectedVariant?: any;
 }
 
 interface ReturnRequest {
@@ -99,6 +114,60 @@ interface RefundSummary {
   }>;
 }
 
+// Helper function to extract state from address
+function extractStateFromAddress(address: string): string {
+  if (!address) return '';
+  
+  // Common state patterns in Indian addresses
+  const statePatterns = [
+    /\b(Andhra Pradesh|AP)\b/i,
+    /\b(Arunachal Pradesh|AR)\b/i,
+    /\b(Assam|AS)\b/i,
+    /\b(Bihar|BR)\b/i,
+    /\b(Chhattisgarh|CG)\b/i,
+    /\b(Goa|GA)\b/i,
+    /\b(Gujarat|GJ)\b/i,
+    /\b(Haryana|HR)\b/i,
+    /\b(Himachal Pradesh|HP)\b/i,
+    /\b(Jharkhand|JH)\b/i,
+    /\b(Karnataka|KA)\b/i,
+    /\b(Kerala|KL)\b/i,
+    /\b(Madhya Pradesh|MP)\b/i,
+    /\b(Maharashtra|MH)\b/i,
+    /\b(Manipur|MN)\b/i,
+    /\b(Meghalaya|ML)\b/i,
+    /\b(Mizoram|MZ)\b/i,
+    /\b(Nagaland|NL)\b/i,
+    /\b(Odisha|OR)\b/i,
+    /\b(Punjab|PB)\b/i,
+    /\b(Rajasthan|RJ)\b/i,
+    /\b(Sikkim|SK)\b/i,
+    /\b(Tamil Nadu|TN)\b/i,
+    /\b(Telangana|TS)\b/i,
+    /\b(Tripura|TR)\b/i,
+    /\b(Uttar Pradesh|UP)\b/i,
+    /\b(Uttarakhand|UK)\b/i,
+    /\b(West Bengal|WB)\b/i,
+    /\b(Delhi|DL)\b/i,
+    /\b(Jammu and Kashmir|JK)\b/i,
+    /\b(Ladakh|LA)\b/i,
+    /\b(Chandigarh|CH)\b/i,
+    /\b(Puducherry|PY)\b/i,
+    /\b(Andaman and Nicobar Islands|AN)\b/i,
+    /\b(Dadra and Nagar Haveli and Daman and Diu|DN)\b/i,
+    /\b(Lakshadweep|LD)\b/i
+  ];
+  
+  for (const pattern of statePatterns) {
+    const match = address.match(pattern);
+    if (match) {
+      return match[1] || match[0];
+    }
+  }
+  
+  return '';
+}
+
 const statusConfig: Record<string, { label: string; color: string; bg: string; icon: any }> = {
   requested: { label: 'Requested', color: 'text-blue-600', bg: 'bg-blue-100', icon: Calendar },
   approved: { label: 'Approved', color: 'text-green-600', bg: 'bg-green-100', icon: CheckCircle },
@@ -139,60 +208,204 @@ function computeAvailableStatuses(current: string, role: Role) {
   return transitions[current] || [];
 }
 
-// Refund calculation function
+// Refund calculation function using proper tax logic
 function calculateRefund(
-  invoice: any, 
-  returnedItems: Array<{ id: string; qty: number }>, 
+  returnItems: ReturnItem[],
+  orderDetails: any,
   options: { deliveryRefundable?: boolean; currency?: string } = {}
 ): RefundSummary {
   const { deliveryRefundable = false, currency = 'INR' } = options;
   
-  // Extract invoice data
-  const { items = [], totalTaxableValue = 0, totalDiscount = 0, totalTax = 0, totalDeliveryCharge = 0 } = invoice;
+  if (!returnItems || returnItems.length === 0) {
+    return {
+      items_total_gross: 0,
+      items_discount_total: 0,
+      delivery_refund: 0,
+      total_refund: 0,
+      currency,
+      item_breakdown: []
+    };
+  }
+
+  // Get customer and warehouse states for interstate determination
+  const customerState = orderDetails?.shippingAddress?.state || '';
+  const warehouseState = orderDetails?.warehouse?.address ? 
+    extractStateFromAddress(orderDetails.warehouse.address) : '';
   
-  // Filter returned items from invoice
-  const returnedInvoiceItems = items.filter((item: any) => 
-    returnedItems.some(returned => returned.id === item.id)
-  );
-  
-  let items_total_gross = 0;
-  let items_discount_total = 0;
-  let delivery_refund = 0;
-  const item_breakdown: any[] = [];
-  
-  returnedInvoiceItems.forEach((item: any) => {
-    const returnedQty = returnedItems.find(r => r.id === item.id)?.qty || 0;
-    const returnRatio = returnedQty / item.quantity;
+  // Determine if this is interstate delivery
+  // Also check if the order details already have interstate information
+  const isInterState = !!(customerState && warehouseState &&
+    customerState.toLowerCase().trim() !== warehouseState.toLowerCase().trim()) ||
+    orderDetails?.taxCalculation?.isInterState === true;
+
+  // Prepare items for tax calculation
+  // If tax info is not available in return items, try to get it from order details
+  const itemsForTax: ProductTaxInfo[] = returnItems.map(item => {
+    // First try to get tax info from return item
+    let taxInfo = item.tax;
+    let priceIncludesTax = item.priceIncludesTax;
     
-    // Calculate proportional values for returned quantity
-    const taxable_value = (item.taxable || 0) * returnRatio;
-    const cgst = (item.cgst || 0) * returnRatio;
-    const sgst = (item.sgst || 0) * returnRatio;
-    const igst = (item.igst || 0) * returnRatio;
-    const gross_total = taxable_value + cgst + sgst + igst;
-    
-    // Calculate proportional discount share
-    const discount_share = totalTaxableValue > 0 
-      ? (taxable_value / totalTaxableValue) * totalDiscount 
-      : 0;
-    
-    // Calculate proportional delivery charge
-    const delivery_charge = totalTaxableValue > 0 
-      ? (taxable_value / totalTaxableValue) * totalDeliveryCharge 
-      : 0;
-    
-    const refundable_amount = gross_total - discount_share;
-    
-    items_total_gross += gross_total;
-    items_discount_total += discount_share;
-    if (deliveryRefundable) {
-      delivery_refund += delivery_charge;
+    // If not available, try to get from order details
+    if (!taxInfo && orderDetails?.items) {
+      const orderItem = orderDetails.items.find((orderItem: any) => 
+        orderItem._id === item.orderItemId || 
+        (orderItem.productId === item.productId && orderItem.name === item.name)
+      );
+      if (orderItem) {
+        taxInfo = orderItem.tax;
+        priceIncludesTax = orderItem.priceIncludesTax;
+      }
     }
     
-    item_breakdown.push({
-      item_id: item.id,
-      item_name: item.name || item.description,
-      quantity: returnedQty,
+    return {
+      price: item.price,
+      priceIncludesTax: priceIncludesTax || false,
+      tax: taxInfo ? {
+        id: taxInfo._id,
+        name: taxInfo.name,
+        percentage: taxInfo.percentage,
+        description: taxInfo.description
+      } : null,
+      quantity: item.quantity
+    };
+  });
+
+  // Calculate tax using the proper tax calculation logic
+  // If order details have tax calculation, use that as fallback for interstate determination
+  const finalIsInterState = isInterState || orderDetails?.taxCalculation?.isInterState === true;
+  const taxCalculation = calculateCartTax(itemsForTax, finalIsInterState, warehouseState, customerState);
+  
+  // Debug logging
+  console.log('ReturnDetailsModal Tax Calculation Debug:', {
+    returnItems: returnItems.map(item => ({
+      name: item.name,
+      price: item.price,
+      quantity: item.quantity,
+      hasTaxInfo: !!item.tax,
+      priceIncludesTax: item.priceIncludesTax,
+      tax: item.tax
+    })),
+    orderDetails: orderDetails ? {
+      hasItems: !!orderDetails.items,
+      itemsCount: orderDetails.items?.length || 0,
+      taxCalculation: orderDetails.taxCalculation,
+      shippingAddress: orderDetails.shippingAddress,
+      warehouse: orderDetails.warehouse
+    } : null,
+    itemsForTax: itemsForTax.map(item => ({
+      price: item.price,
+      quantity: item.quantity,
+      priceIncludesTax: item.priceIncludesTax,
+      hasTax: !!item.tax,
+      taxPercentage: item.tax?.percentage
+    })),
+    interstateDetection: {
+      customerState,
+      warehouseState,
+      isInterState,
+      finalIsInterState,
+      customerStateTrimmed: customerState.toLowerCase().trim(),
+      warehouseStateTrimmed: warehouseState.toLowerCase().trim(),
+      statesMatch: customerState.toLowerCase().trim() === warehouseState.toLowerCase().trim(),
+      orderTaxCalculationIsInterState: orderDetails?.taxCalculation?.isInterState
+    },
+    taxCalculation: {
+      subtotal: taxCalculation.subtotal,
+      totalTax: taxCalculation.totalTax,
+      totalCGST: taxCalculation.totalCGST,
+      totalSGST: taxCalculation.totalSGST,
+      totalIGST: taxCalculation.totalIGST,
+      finalTotal: taxCalculation.finalTotal,
+      isInterState: taxCalculation.isInterState
+    }
+  });
+  
+  // Get discount information from order
+  const totalDiscount = orderDetails?.promoCode?.discountAmount || 
+                       orderDetails?.pricing?.discountAmount || 
+                       orderDetails?.orderSummary?.totalDiscount || 0;
+  
+  const totalDeliveryCharge = orderDetails?.pricing?.deliveryCharge || 
+                             orderDetails?.orderSummary?.totalDeliveryCharge || 0;
+
+  // Calculate proportional discount and delivery charge
+  const subtotal = taxCalculation.subtotal;
+  const discountRatio = subtotal > 0 ? totalDiscount / (subtotal + taxCalculation.totalTax) : 0;
+  const deliveryRatio = subtotal > 0 ? totalDeliveryCharge / (subtotal + taxCalculation.totalTax) : 0;
+
+  const items_total_gross = taxCalculation.finalTotal;
+  const items_discount_total = items_total_gross * discountRatio;
+  const delivery_refund = deliveryRefundable ? items_total_gross * deliveryRatio : 0;
+  const total_refund = items_total_gross - items_discount_total + delivery_refund;
+
+  // Create item breakdown
+  const item_breakdown = returnItems.map((item, index) => {
+    // Get tax info for this specific item (same logic as above)
+    let taxInfo = item.tax;
+    let priceIncludesTax = item.priceIncludesTax;
+    
+    if (!taxInfo && orderDetails?.items) {
+      const orderItem = orderDetails.items.find((orderItem: any) => 
+        orderItem._id === item.orderItemId || 
+        (orderItem.productId === item.productId && orderItem.name === item.name)
+      );
+      if (orderItem) {
+        taxInfo = orderItem.tax;
+        priceIncludesTax = orderItem.priceIncludesTax;
+      }
+    }
+    
+    const itemTaxInfo: ProductTaxInfo = {
+      price: item.price,
+      priceIncludesTax: priceIncludesTax || false,
+      tax: taxInfo ? {
+        id: taxInfo._id,
+        name: taxInfo.name,
+        percentage: taxInfo.percentage,
+        description: taxInfo.description
+      } : null,
+      quantity: item.quantity
+    };
+
+    // Calculate individual item tax
+    const itemTaxCalc = calculateCartTax([itemTaxInfo], finalIsInterState, warehouseState, customerState);
+    
+    const taxable_value = itemTaxCalc.subtotal;
+    const cgst = itemTaxCalc.totalCGST;
+    const sgst = itemTaxCalc.totalSGST;
+    const igst = itemTaxCalc.totalIGST;
+    const gross_total = itemTaxCalc.finalTotal;
+    
+    // Debug logging for individual item
+    console.log(`Item ${item.name} tax calculation:`, {
+      itemTaxInfo,
+      isInterState,
+      finalIsInterState,
+      itemTaxCalc: {
+        subtotal: itemTaxCalc.subtotal,
+        totalCGST: itemTaxCalc.totalCGST,
+        totalSGST: itemTaxCalc.totalSGST,
+        totalIGST: itemTaxCalc.totalIGST,
+        finalTotal: itemTaxCalc.finalTotal,
+        isInterState: itemTaxCalc.isInterState
+      },
+      calculatedValues: {
+        taxable_value,
+        cgst,
+        sgst,
+        igst,
+        gross_total
+      }
+    });
+    
+    const discount_share = gross_total * discountRatio;
+    const delivery_charge = deliveryRefundable ? gross_total * deliveryRatio : 0;
+    const refundable_amount = gross_total - discount_share;
+
+    return {
+      item_id: item._id,
+      item_name: item.name,
+      quantity: item.quantity,
       taxable_value: Math.round(taxable_value * 100) / 100,
       cgst: Math.round(cgst * 100) / 100,
       sgst: Math.round(sgst * 100) / 100,
@@ -201,11 +414,9 @@ function calculateRefund(
       discount_share: Math.round(discount_share * 100) / 100,
       delivery_charge: Math.round(delivery_charge * 100) / 100,
       refundable_amount: Math.round(refundable_amount * 100) / 100
-    });
+    };
   });
-  
-  const total_refund = items_total_gross - items_discount_total + (deliveryRefundable ? delivery_refund : 0);
-  
+
   return {
     items_total_gross: Math.round(items_total_gross * 100) / 100,
     items_discount_total: Math.round(items_discount_total * 100) / 100,
@@ -233,53 +444,13 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
     return (orderDetails?.promoCode?.code) || data.orderSummary?.promoCode || '';
   }, [orderDetails?.promoCode?.code, data.orderSummary?.promoCode]);
 
-  // Calculate refund amounts using the calculateRefund function
+  // Calculate refund amounts using the proper tax calculation logic
   const refundSummary = useMemo(() => {
-    // For now, let's create a mock invoice data based on the screenshot example
-    // In a real implementation, this would come from the actual order/invoice data
-    const appliedDiscount = (orderDetails?.promoCode?.discountAmount ?? 0) || (orderDetails?.pricing?.discountAmount ?? 0) || (typeof data.orderSummary?.totalDiscount === 'number' ? data.orderSummary.totalDiscount : 0);
-    const deliveryCharge = (orderDetails?.pricing?.deliveryCharge ?? (typeof data.orderSummary?.totalDeliveryCharge === 'number' ? data.orderSummary.totalDeliveryCharge : 0)) || 0;
-    const totalTaxFromOrder = (orderDetails?.taxCalculation?.totalTax ?? (typeof data.orderSummary?.totalTax === 'number' ? data.orderSummary.totalTax : undefined));
-    const subtotalFromOrder = (orderDetails?.taxCalculation?.subtotal ?? (typeof data.orderSummary?.totalTaxableValue === 'number' ? data.orderSummary.totalTaxableValue : undefined));
-
-    const mockInvoiceData = {
-      items: data.items.map(item => {
-        // Based on the invoice screenshot: Multiple_sets has taxable ₹1493.46, CGST ₹52.27, SGST ₹52.27
-        // For now, we'll calculate proportional values based on the item price
-        const itemTotal = item.price * item.quantity;
-        const taxableValue = itemTotal * 0.935; // Approximate ratio from invoice (1493.46/1598)
-        const taxAmount = itemTotal * 0.065; // Approximate tax ratio (104.54/1598)
-        
-        return {
-          id: item._id,
-          name: item.name,
-          quantity: item.quantity,
-          taxable: taxableValue,
-          cgst: taxAmount / 2,
-          sgst: taxAmount / 2,
-          igst: 0
-        };
-      }),
-      totalTaxableValue: typeof subtotalFromOrder === 'number'
-        ? subtotalFromOrder
-        : data.items.reduce((sum, item) => sum + (item.price * item.quantity * 0.935), 0),
-      totalDiscount: appliedDiscount,
-      totalTax: typeof totalTaxFromOrder === 'number'
-        ? totalTaxFromOrder
-        : data.items.reduce((sum, item) => sum + (item.price * item.quantity * 0.065), 0),
-      totalDeliveryCharge: deliveryCharge
-    };
-
-    const returnedItems = data.items.map(item => ({
-      id: item._id,
-      qty: item.quantity
-    }));
-
-    return calculateRefund(mockInvoiceData, returnedItems, {
+    return calculateRefund(data.items, orderDetails, {
       deliveryRefundable: false, // Delivery is non-refundable as per user requirement
       currency: refundOptions.currency || 'INR'
     });
-  }, [data.items, refundOptions, orderDetails, data.orderSummary]);
+  }, [data.items, refundOptions, orderDetails]);
 
   // Load order details to get actual applied promocode/discount
   useEffect(() => {
@@ -379,7 +550,18 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
     if (!availableStatuses.includes(newStatus)) return;
     setSubmitting(true);
     try {
-      await onUpdateStatus(newStatus, note);
+      let refundedAmount: number | undefined;
+      
+      // Calculate refunded amount based on status
+      if (newStatus === 'refunded') {
+        // For full refund, use the total calculated refund amount
+        refundedAmount = Math.round(refundTotals.refundableAmount);
+      } else if (newStatus === 'partially_refunded' && partialRefundAmount) {
+        // For partial refund, use the manually entered amount
+        refundedAmount = Number(partialRefundAmount);
+      }
+      
+      await onUpdateStatus(newStatus, note, refundedAmount);
     } finally {
       setSubmitting(false);
     }
@@ -482,8 +664,8 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
               Return Items ({data.items.length})
             </h4>
             <div className="space-y-3">
-              {data.items.map((item) => (
-                <div key={item._id} className="flex items-center p-4 border border-gray-200 rounded-xl hover:shadow-sm transition-shadow">
+              {data.items.map((item, index) => (
+                <div key={item._id || `item-${index}`} className="flex items-center p-4 border border-gray-200 rounded-xl hover:shadow-sm transition-shadow">
                   <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
                     {item.image ? (
                       <Image src={item.image} alt={item.name} width={64} height={64} className="object-cover w-full h-full" />
@@ -494,7 +676,30 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
                     )}
                   </div>
                   <div className="flex-1 ml-4">
-                    <h5 className="font-medium text-gray-900 mb-1">{item.name}</h5>
+                    <h5 className="font-medium text-gray-900 mb-2">{item.name}</h5>
+                    
+                    {/* Enhanced Variant Display */}
+                    {(() => {
+                      // Extract variant name with fallback logic
+                      let variantName = item.variantName;
+                      
+                      if (!variantName && item.selectedVariant) {
+                        if (typeof item.selectedVariant === 'object' && item.selectedVariant !== null) {
+                          variantName = item.selectedVariant.name || item.selectedVariant.variantName || item.selectedVariant.displayName || item.selectedVariant.sku;
+                        } else if (typeof item.selectedVariant === 'string') {
+                          variantName = item.selectedVariant;
+                        }
+                      }
+                      
+                      return variantName ? (
+                        <div className="mb-2">
+                          <div className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-gradient-to-r from-brand-primary to-brand-primary-dark text-white rounded-full shadow-sm">
+                            {variantName}
+                          </div>
+                        </div>
+                      ) : null
+                    })()}
+                    
                     <div className="text-sm text-gray-600">Qty: {item.quantity} × ₹{item.price} = ₹{(item.price * item.quantity).toFixed(2)}</div>
                   </div>
                 </div>
@@ -512,7 +717,7 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
             {/* Items breakdown */}
             <div className="space-y-3 mb-6">
               {calculateRefundAmounts.map((item, index) => (
-                <div key={item._id} className="bg-white rounded-lg p-4 border border-gray-200">
+                <div key={item._id || `refund-item-${index}`} className="bg-white rounded-lg p-4 border border-gray-200">
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex-1">
                       <h5 className="font-medium text-gray-900 text-sm">{item.name}</h5>
@@ -529,14 +734,23 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
                         <span>Taxable Value:</span>
                         <span>₹{item.taxableValue.toFixed(2)}</span>
                       </div>
-                      <div className="flex justify-between">
-                        <span>CGST (3.5%):</span>
-                        <span>₹{item.cgst.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>SGST (3.5%):</span>
-                        <span>₹{item.sgst.toFixed(2)}</span>
-                      </div>
+                      {Math.abs(item.igst) > 0.01 ? (
+                        <div className="flex justify-between">
+                          <span>IGST:</span>
+                          <span>₹{item.igst.toFixed(2)}</span>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex justify-between">
+                            <span>CGST:</span>
+                            <span>₹{item.cgst.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>SGST:</span>
+                            <span>₹{item.sgst.toFixed(2)}</span>
+                          </div>
+                        </>
+                      )}
                     </div>
                     <div>
                       <div className="flex justify-between">
@@ -577,14 +791,23 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
                   <span className="text-gray-600">Subtotal:</span>
                   <span className="font-medium">₹{refundTotals.taxableValue.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">CGST (3.5%):</span>
-                  <span className="font-medium">₹{refundTotals.cgst.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">SGST (3.5%):</span>
-                  <span className="font-medium">₹{refundTotals.sgst.toFixed(2)}</span>
-                </div>
+                {Math.abs(refundTotals.igst) > 0.01 ? (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">IGST:</span>
+                    <span className="font-medium">₹{refundTotals.igst.toFixed(2)}</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">CGST:</span>
+                      <span className="font-medium">₹{refundTotals.cgst.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">SGST:</span>
+                      <span className="font-medium">₹{refundTotals.sgst.toFixed(2)}</span>
+                    </div>
+                  </>
+                )}
                 <div className="flex justify-between text-red-600">
                   <span>Discount:</span>
                   <span>-₹{refundTotals.discountShare.toFixed(2)}</span>
@@ -865,14 +1088,22 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
                               if (newStatus === 'pickup_assigned' && selectedAgent && onAssignPickup) {
                                 await onAssignPickup(selectedAgent, note || 'Pickup agent assigned')
                               } else {
+                                // Calculate refunded amount based on status
+                                let refundedAmount: number | undefined;
+                                if (newStatus === 'refunded') {
+                                  // For full refund, use the total calculated refund amount
+                                  refundedAmount = Math.round(refundTotals.refundableAmount);
+                                } else if (newStatus === 'partially_refunded' && partialRefundAmount) {
+                                  // For partial refund, use the manually entered amount
+                                  refundedAmount = Number(partialRefundAmount);
+                                }
+                                
                                 // For partially_refunded status, include the partial refund amount in the note
                                 const statusNote = newStatus === 'partially_refunded' 
                                   ? `${note || 'Partial refund processed'}. Amount: ₹${partialRefundAmount}`
                                   : note;
-                                const refundAmount = newStatus === 'partially_refunded' 
-                                  ? Number(partialRefundAmount) 
-                                  : undefined;
-                                await onUpdateStatus(newStatus, statusNote, refundAmount)
+                                
+                                await onUpdateStatus(newStatus, statusNote, refundedAmount)
                               }
                             } finally {
                               setSubmitting(false)

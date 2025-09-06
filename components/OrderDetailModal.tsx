@@ -350,8 +350,8 @@ export default function OrderDetailModal({ isOpen, onClose, order }: OrderDetail
   })();
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[999]">
-      <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 z-[999]">
+      <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[85vh] sm:max-h-[90vh] overflow-y-auto shadow-2xl">
         {/* Header */}
         <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 bg-gradient-to-r from-brand-primary to-brand-primary-dark text-white rounded-t-2xl">
           <div className="flex justify-between items-center">
@@ -378,10 +378,10 @@ export default function OrderDetailModal({ isOpen, onClose, order }: OrderDetail
           </div>
         </div>
         
-        <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+        <div className="p-3 sm:p-6 space-y-3 sm:space-y-6">
           {/* Order Status and Info */}
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
-            <div className="bg-gray-50 rounded-xl p-3 sm:p-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-4">
+            <div className="bg-gray-50 rounded-xl p-2 sm:p-4">
               <div className="flex items-center space-x-2 mb-2">
                 {getStatusIcon(order.status)}
                 <span className="text-sm font-medium text-gray-600">Status</span>
@@ -391,7 +391,7 @@ export default function OrderDetailModal({ isOpen, onClose, order }: OrderDetail
               </span>
             </div>
             
-            <div className="bg-gray-50 rounded-xl p-3 sm:p-4">
+            <div className="bg-gray-50 rounded-xl p-2 sm:p-4">
               <div className="flex items-center space-x-2 mb-2">
                 <Calendar className="w-4 h-4" />
                 <span className="text-sm font-medium text-gray-600">Date</span>
@@ -405,7 +405,7 @@ export default function OrderDetailModal({ isOpen, onClose, order }: OrderDetail
               </p>
             </div>
             
-            <div className="bg-gray-50 rounded-xl p-3 sm:p-4 col-span-2 md:col-span-1">
+            <div className="bg-gray-50 rounded-xl p-2 sm:p-4 col-span-2 md:col-span-1">
               <div className="flex items-center space-x-2 mb-2">
                 <CreditCard className="w-4 h-4" />
                 <span className="text-sm font-medium text-gray-600">Payment</span>
@@ -417,7 +417,7 @@ export default function OrderDetailModal({ isOpen, onClose, order }: OrderDetail
           </div>
 
           {/* Delivery Address */}
-          <div className="bg-gray-50 rounded-xl p-3 sm:p-4">
+          <div className="bg-gray-50 rounded-xl p-2 sm:p-4">
             <div className="flex items-center space-x-2 mb-2 sm:mb-3">
               <MapPin className="w-4 h-4 sm:w-5 sm:h-5 text-brand-primary" />
               <h4 className="font-semibold text-gray-900 text-sm sm:text-base">Delivery Address</h4>
@@ -435,7 +435,7 @@ export default function OrderDetailModal({ isOpen, onClose, order }: OrderDetail
 
           {/* Order Timeline */}
           {timelineEntries.length > 0 && (
-            <div className="bg-gray-50 rounded-xl p-3 sm:p-4">
+            <div className="bg-gray-50 rounded-xl p-2 sm:p-4">
               <div className="flex items-center space-x-2 mb-2 sm:mb-3">
                 <Package className="w-4 h-4 sm:w-5 sm:h-5 text-brand-primary" />
                 <h4 className="font-semibold text-gray-900 text-sm sm:text-base">Order Timeline</h4>
@@ -473,17 +473,36 @@ export default function OrderDetailModal({ isOpen, onClose, order }: OrderDetail
 
           {/* Order Items */}
           <div>
-            <h4 className="font-semibold text-gray-900 mb-3 sm:mb-4 flex items-center">
+            <h4 className="font-semibold text-gray-900 mb-2 sm:mb-4 flex items-center">
               <Package className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-brand-primary" />
               Items ({order.items.length})
             </h4>
-            <div className="space-y-2 sm:space-y-3">
+            <div className="space-y-2 sm:space-y-3 max-h-[40vh] sm:max-h-none overflow-y-auto">
               {order.items.map((item, index) => {
                 const anyItem: any = item as any;
                 const orderItemId = String(anyItem._id || anyItem.id || anyItem.orderItemId || anyItem.orderItemID || anyItem.itemId || '');
                 const existing = orderItemId ? existingReturnsByOrderItem[orderItemId] : undefined;
                 const isBlocked = Boolean(existing);
                 const badge = existing ? getReturnBadgeProps(existing.status) : undefined;
+                
+                // Debug logging for variant information
+                console.log(`OrderDetailModal - Item ${index}:`, {
+                  name: item.name,
+                  variantName: item.variantName,
+                  variantId: item.variantId,
+                  selectedVariant: item.selectedVariant
+                });
+                
+                // Extract variant name with fallback logic
+                let displayVariantName = item.variantName;
+                if (!displayVariantName && item.selectedVariant) {
+                  if (typeof item.selectedVariant === 'object' && item.selectedVariant !== null) {
+                    displayVariantName = item.selectedVariant.name || item.selectedVariant.variantName || item.selectedVariant.displayName || item.selectedVariant.sku;
+                  } else if (typeof item.selectedVariant === 'string') {
+                    displayVariantName = item.selectedVariant;
+                  }
+                }
+                
                 return (
                 <div key={`${item.productId}-${index}`} className={`relative flex items-center p-2.5 sm:p-3 border rounded-lg sm:rounded-xl hover:shadow-sm transition-shadow ${isBlocked ? 'border-dashed border-gray-300 bg-gray-50 opacity-75' : 'border-gray-200'}`}>
                   {/* Product Image */}
@@ -505,12 +524,19 @@ export default function OrderDetailModal({ isOpen, onClose, order }: OrderDetail
                   
                   {/* Product Info */}
                   <div className="flex-1 ml-2.5 sm:ml-3 min-w-0">
-                    <h5 className="font-medium text-gray-900 text-sm sm:text-base mb-0.5 sm:mb-1 truncate">
+                    <h5 className="font-medium text-gray-900 text-sm sm:text-base mb-1 sm:mb-2 truncate">
                       {item.name}
-                      {item.variantName && (
-                        <span className="text-xs sm:text-sm text-gray-600 font-normal ml-1 sm:ml-2">({item.variantName})</span>
-                      )}
                     </h5>
+                    
+                    {/* Enhanced Variant Display */}
+                    {displayVariantName && (
+                      <div className="mb-2">
+                              <div className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-gradient-to-r from-brand-primary to-brand-primary-dark text-white rounded-full shadow-sm">
+                                {displayVariantName}
+                              </div>
+                      </div>
+                    )}
+                    
                     <div className="flex items-center space-x-2 sm:space-x-4 text-xs sm:text-sm text-gray-500">
                       <span>Qty: {item.quantity}</span>
                       {item.tax && (
@@ -547,8 +573,8 @@ export default function OrderDetailModal({ isOpen, onClose, order }: OrderDetail
           </div>
 
           {/* Order Summary */}
-          <div className="bg-gray-50 rounded-xl p-4 sm:p-6">
-            <h4 className="font-semibold text-gray-900 mb-3 sm:mb-4 text-sm sm:text-base">Order Summary</h4>
+          <div className="bg-gray-50 rounded-xl p-3 sm:p-6">
+            <h4 className="font-semibold text-gray-900 mb-2 sm:mb-4 text-sm sm:text-base">Order Summary</h4>
             <div className="space-y-2 sm:space-y-3">
               {/* Subtotal */}
               <div className="flex justify-between text-xs sm:text-sm">
