@@ -57,6 +57,7 @@
         "date-fns": "^3.6.0",
         "deps": "^1.0.0",
         "embla-carousel-react": "^8.5.1",
+        "exceljs": "^4.4.0",
         "headlessui": "^0.0.0",
         "html-parse-stringify": "^3.0.1",
         "input-otp": "^1.4.1",

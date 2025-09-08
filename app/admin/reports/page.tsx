@@ -7,6 +7,7 @@ import { useAppSelector } from '../../../lib/store'
 import { isAdminUser, hasAccessToSection } from '../../../lib/adminAuth'
 import { BarChart3, TrendingUp, TrendingDown, IndianRupee, Users, ShoppingCart, Calendar, RotateCcw } from "lucide-react"
 import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 import DateRangePicker from '../../../components/ui/DateRangePicker'
 import { format as formatDate } from 'date-fns'
 import { calculateCartTax, ProductTaxInfo } from '../../../lib/tax-calculation'
@@ -254,21 +255,7 @@ export default function AdminReports() {
     }
   }, [queryString, returnQueryString, activeTab])
 
-  const exportCsv = useCallback(async () => {
-    if (!apiBase) return
-    const endpoint = activeTab === 'orders' ? 'reports/export/csv' : 'reports/returns/export/csv'
-    const query = activeTab === 'orders' ? queryString : returnQueryString
-    const res = await fetch(`${apiBase}/${endpoint}?${query}`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-    const blob = await res.blob()
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${activeTab}-reports.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-  }, [apiBase, token, queryString, returnQueryString, activeTab])
+  
 
   const exportTally = useCallback(async () => {
     if (!apiBase) return
@@ -281,118 +268,792 @@ export default function AdminReports() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${activeTab}-tally.xml`
+    const fmt = (d: Date) => `${d.getFullYear().toString().slice(-2)}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
+    const s = activeTab === 'orders' ? startDate : returnStartDate
+    const e = activeTab === 'orders' ? endDate : returnEndDate
+    const today = new Date()
+    const start = s ? new Date(s) : today
+    const end = e ? new Date(e) : start
+    const range = `${fmt(start)}-${fmt(end)}`
+    const prefix = activeTab === 'orders' ? 'Order Report' : 'Return Report'
+    a.download = `${prefix} ${range}.xml`
     a.click()
     URL.revokeObjectURL(url)
   }, [apiBase, token, queryString, returnQueryString, activeTab])
 
-  const exportPdf = useCallback(() => {
-    const doc = new jsPDF({ orientation: 'p', unit: 'pt', format: 'a4' })
-    let y = 40
-    doc.setFontSize(16)
-    doc.text(`${activeTab === 'orders' ? 'Orders' : 'Returns'} Reports Summary`, 40, y)
-    y += 24
-    doc.setFontSize(12)
-    
+  const exportXlsx = useCallback(async () => {
+    // Dynamically import exceljs for browser
+    const ExcelJS = await import('exceljs').then(m => m.default || m)
+
+    // Build data arrays
+    const amt = (n: any) => Number(n || 0)
+    const fmtISODate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+    const getRefundMethod = (ret: any, ordOverride?: any, explicitPref?: any) => {
+      const order = ordOverride || ret?.orderObjectId || {}
+      const pref = explicitPref || ret?.refundPreference || order?.refundPreference || ret?.refundInfo || order?.refundInfo || {}
+      const method = (pref?.method || pref?.type || pref?.mode || ret?.refundMethod || '').toString().toLowerCase()
+      if (method === 'upi' || pref?.upiId) {
+        const upi = pref?.upiId ? String(pref.upiId) : ''
+        return upi ? `UPI: ${upi}` : 'UPI'
+      }
+      if (method === 'bank' || pref?.bankDetails) {
+        const bank = pref?.bankDetails || {}
+        const mask = (acc: any) => acc ? `XXXX${String(acc).slice(-4)}` : ''
+        const parts = [ 'Bank', bank.bankName || '', mask(bank.accountNumber), bank.ifsc || '' ].filter(Boolean)
+        return parts.join(' ')
+      }
+      return 'N/A'
+    }
+
+    // When exporting, enrich data to accurately derive missing fields (PIN, refund preference)
+    const orderDetailById = new Map<string, any>()
+    const returnDetailById = new Map<string, any>()
+    const returnListById = new Map<string, any>()
+    const tryParseReturn = (json: any) => (json?.return || json?.data || json?.result || json || null)
+    if (activeTab === 'returns') {
+      try {
+        const ids = Array.from(new Set((returns || []).map((ret: any) => ret?.orderObjectId?.orderId || ret?.orderId).filter(Boolean))) as string[]
+        const retIds = Array.from(new Set((returns || []).map((ret: any) => ret?.returnId || ret?._id).filter(Boolean))) as string[]
+        if (ids.length && apiBase) {
+          const fetched = await Promise.all(ids.map(async (oid) => {
+            try {
+              const res = await fetch(`${apiBase}/orders/order/${oid}`, { headers: { 'Authorization': `Bearer ${token}` } })
+              if (res.ok) {
+                const json = await res.json()
+                return [oid, json?.order || null] as const
+              }
+            } catch {}
+            return [oid, null] as const
+          }))
+          fetched.forEach(([oid, ord]) => { if (ord) orderDetailById.set(oid, ord) })
+        }
+        if (retIds.length && apiBase) {
+          const fetchedReturns = await Promise.all(retIds.map(async (rid) => {
+            const headers = { 'Authorization': `Bearer ${token}` }
+            const paths = [
+              `${apiBase}/returns/${rid}`,
+              `${apiBase}/returns/return/${rid}`,
+              `${apiBase}/returns/details/${rid}`
+            ]
+            for (const url of paths) {
+              try {
+                const res = await fetch(url, { headers })
+                if (res.ok) {
+                  const json = await res.json()
+                  const ret = tryParseReturn(json)
+                  if (ret) return [rid, ret] as const
+                }
+              } catch {}
+            }
+            return [rid, null] as const
+          }))
+          fetchedReturns.forEach(([rid, ret]) => { if (ret) returnDetailById.set(rid, ret) })
+          // Also enrich via by-order endpoints
+          const orderIdsForMissing = Array.from(new Set(
+            (returns || [])
+              .filter((ret: any) => !returnDetailById.has(ret?.returnId || ret?._id))
+              .map((ret: any) => ret?.orderObjectId?.orderId || ret?.orderId)
+              .filter(Boolean)
+          )) as string[]
+          if (orderIdsForMissing.length) {
+            await Promise.all(orderIdsForMissing.map(async (oid) => {
+              const paths = [
+                `${apiBase}/returns/by-order/${oid}`,
+                `${apiBase}/orders/${oid}/returns`
+              ]
+              for (const url of paths) {
+                try {
+                  const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } })
+                  if (res.ok) {
+                    const json = await res.json()
+                    const list = (json?.returns || json?.data || json) as any[]
+                    if (Array.isArray(list)) {
+                      list.forEach((ret: any) => {
+                        const key = ret?.returnId || ret?._id
+                        if (key && ret && !returnDetailById.has(key)) returnDetailById.set(key, ret)
+                      })
+                    }
+                  }
+                } catch {}
+              }
+            }))
+          }
+        }
+        // Admin returns list for explicit refundPreference
+        try {
+          const resList = await fetch(`${apiBase}/returns/admin/all?limit=1000`, { headers: { 'Authorization': `Bearer ${token}` } })
+          if (resList.ok) {
+            const json = await resList.json().catch(() => ({} as any))
+            const list = json?.returns || json?.data || []
+            if (Array.isArray(list)) {
+              list.forEach((ret: any) => {
+                const key = ret?.returnId || ret?._id
+                if (key) returnListById.set(key, ret)
+              })
+            }
+          }
+        } catch {}
+      } catch {}
+    }
+    // Enrich Orders too, to ensure delivery address is present for Delivery PIN
     if (activeTab === 'orders') {
-      const cards = summary.cards || { totalOrders: 0, totalRevenue: 0, avgOrderValue: 0 }
-      const lines = [
-        `Total Orders: ${cards.totalOrders}`,
-        `Total Revenue: ${numberFmt.format(cards.totalRevenue)}`,
-        `Avg Order Value: ${numberFmt.format(cards.avgOrderValue)}`,
-        `Filters: ${[startDate && `from ${startDate}`, endDate && `to ${endDate}`, warehouseId !== 'all' && `WH ${warehouseId}`, status !== 'all' && `status ${status}`, paymentMethod !== 'all' && `pay ${paymentMethod}`].filter(Boolean).join(', ')}`
-      ]
-      lines.forEach((t) => { doc.text(t, 40, y); y += 18 })
-      y += 10
-      doc.text('Recent Orders', 40, y); y += 20
-      const head = ['InvoiceID', 'Date', 'Warehouse', 'Total']
-      doc.setFontSize(10)
-      doc.text(head.join('    '), 40, y); y += 14
-      orders.slice(0, 25).forEach((o) => {
-        const row = [o.invoiceNumber || o.orderId, new Date(o.createdAt).toLocaleString(), o.warehouseInfo?.warehouseName || '', String(o.pricing?.total || '')]
-        doc.text(row.join('    '), 40, y)
-        y += 14
-        if (y > 780) { doc.addPage(); y = 40 }
+      try {
+        const ids = Array.from(new Set((orders || []).map((o: any) => o?.orderId).filter(Boolean))) as string[]
+        if (ids.length && apiBase) {
+          const fetched = await Promise.all(ids.map(async (oid) => {
+            try {
+              const res = await fetch(`${apiBase}/orders/order/${oid}`, { headers: { 'Authorization': `Bearer ${token}` } })
+              if (res.ok) {
+                const json = await res.json()
+                return [oid, json?.order || null] as const
+              }
+            } catch {}
+            return [oid, null] as const
+          }))
+          fetched.forEach(([oid, ord]) => { if (ord) orderDetailById.set(oid, ord) })
+        }
+      } catch {}
+    }
+    const getPinFromObject = (obj: any): string => {
+      if (!obj) return ''
+      const a = obj?.address || obj
+      const direct = (
+        a?.pincode || a?.pinCode || a?.postalCode || a?.zip || a?.zipcode || a?.zipCode
+      )
+      if (direct) return String(direct)
+      // Try common address string fields
+      const candidates: string[] = [a?.area, a?.address, a?.building, a?.landmark, a?.city, a?.state, a?.warehouseAddress]
+        .filter(Boolean)
+        .map(String)
+      const joined = candidates.join(' ')
+      const m = joined.match(/\b\d{6}\b/)
+      return m ? m[0] : ''
+    }
+    const buildOrders = () => {
+      const headers = ['Date','InvoiceID','OrderID','Warehouse','Customer','Phone','Delivery PIN','Payment','Status','Subtotal','CGST','SGST','IGST','Discount','Delivery','Items','Total','Products']
+      const rows = orders.map((o: any) => {
+        const created = new Date(o.createdAt)
+        const dateStr = fmtISODate(created)
+        const subtotal = (typeof o?.pricing?.subtotal === 'number' ? o.pricing.subtotal : (o.items || []).reduce((s: number, it: any) => s + (Number(it.price) || 0) * (Number(it.quantity) || 1), 0)) || 0
+        const discount = (o?.pricing?.discount ?? o?.pricing?.discountAmount ?? 0) || 0
+        const delivery = (o?.pricing?.delivery ?? o?.pricing?.shipping ?? o?.pricing?.deliveryCharge ?? 0) || 0
+        const total = (o?.pricing?.total ?? 0) || 0
+        const cgst = o?.taxCalculation?.taxBreakdown?.cgst?.amount ?? 0
+        const sgst = o?.taxCalculation?.taxBreakdown?.sgst?.amount ?? 0
+        const igst = o?.taxCalculation?.taxBreakdown?.igst?.amount ?? 0
+        const itemsCount = (o.items?.length || 0)
+        const enrichedOrder = orderDetailById.get(o?.orderId) || o
+        const deliveryPin = getPinFromObject(enrichedOrder?.deliveryInfo) || getPinFromObject(enrichedOrder?.warehouseInfo) || getPinFromObject(o?.deliveryInfo) || getPinFromObject(o?.warehouseInfo)
+        const productsTextRaw = (o.items || []).map((it: any) => {
+          const pct = it?.tax?.percentage ?? 0
+          const inc = it?.priceIncludesTax ? 'Inc.' : 'Excl.'
+          return `${it?.name || ''} - ${pct}%(${inc})`
+        }).join('\n')
+        return [
+          dateStr,
+          o.invoiceNumber || '',
+          o.orderId || '',
+          o.warehouseInfo?.warehouseName || '-',
+          o.customerInfo?.name || '-',
+          o.customerInfo?.phone || '-',
+          deliveryPin,
+          (o.paymentInfo?.method || '-').toUpperCase(),
+          (o.status || '-').toString(),
+          amt(subtotal),
+          amt(cgst),
+          amt(sgst),
+          amt(igst),
+          amt(discount),
+          amt(delivery),
+          itemsCount,
+          amt(total),
+          productsTextRaw
+        ]
       })
-    } else {
-      const cards = returnSummary.cards || { totalReturns: 0, totalReturnValue: 0, avgReturnValue: 0 }
-      const lines = [
-        `Total Returns: ${cards.totalReturns}`,
-        `Total Return Value: ${numberFmt.format(cards.totalReturnValue)}`,
-        `Avg Return Value: ${numberFmt.format(cards.avgReturnValue)}`,
-        `Filters: ${[returnStartDate && `from ${returnStartDate}`, returnEndDate && `to ${returnEndDate}`, returnWarehouseId !== 'all' && `WH ${returnWarehouseId}`, returnStatus !== 'all' && `status ${returnStatus}`].filter(Boolean).join(', ')}`
-      ]
-      lines.forEach((t) => { doc.text(t, 40, y); y += 18 })
-      y += 10
-      doc.text('Recent Returns', 40, y); y += 20
-      const head = ['Invoice ID', 'Customer', 'Items', 'Status', 'Warehouse', 'CGST', 'SGST', 'IGST', 'Refund Amount']
-      doc.setFontSize(10)
-      doc.text(head.join('    '), 40, y); y += 14
-      returns.slice(0, 25).forEach((r) => {
-        // Determine if order is interstate or intrastate (same logic as ReturnDetailsModal)
-        const order = r.orderObjectId;
-        
-        // Get customer and warehouse states for interstate determination
-        const customerState = order?.deliveryInfo?.address?.state || '';
+      return { headers, rows }
+    }
+    const buildReturns = () => {
+      const headers = ['Date','InvoiceID','ReturnID','Warehouse','Customer','Phone','Pickup PIN','Payment Preference','Status','Subtotal','CGST','SGST','IGST','Discount','Items','Refund Amount','Products']
+      const rows = returns.map((r: any) => {
+        const order = orderDetailById.get(r?.orderObjectId?.orderId || r?.orderId) || r.orderObjectId
+        const returnIdKey = r?.returnId || r?._id
+        const orderIdKey = r?.orderObjectId?.orderId || r?.orderId
+        const fullReturn = returnDetailById.get(returnIdKey) || r
+        const fullOrder = orderDetailById.get(orderIdKey) || order
+        const explicitPref = returnListById.get(returnIdKey)?.refundPreference
+        const customerState = order?.deliveryInfo?.address?.state || ''
         const warehouseState = order?.warehouseInfo?.warehouseId?.address ? 
           extractStateFromAddress(order.warehouseInfo.warehouseId.address) : 
-          (order?.warehouseInfo?.warehouseId?.state || '');
-        
-        // Determine if this is interstate delivery
-        // Also check if the order details already have interstate information
-        const isInterstate = !!(customerState && warehouseState &&
-          customerState.toLowerCase().trim() !== warehouseState.toLowerCase().trim()) ||
-          order?.taxCalculation?.isInterState === true;
-        
-        // Calculate tax amounts using the same logic as ReturnDetailsModal
-        let cgst = 0;
-        let sgst = 0;
-        let igst = 0;
-        
+          (order?.warehouseInfo?.warehouseId?.state || '')
+        const isInterstate = !!(customerState && warehouseState && customerState.toLowerCase().trim() !== warehouseState.toLowerCase().trim()) || order?.taxCalculation?.isInterState === true
+        let cgst = 0, sgst = 0, igst = 0, taxSubtotal = 0, totalTax = 0, finalTotal = 0
         if (r.items && r.items.length > 0) {
-          // Prepare items for tax calculation (same as ReturnDetailsModal)
-          const itemsForTax: ProductTaxInfo[] = r.items.map(item => ({
+          const itemsForTax: ProductTaxInfo[] = r.items.map((item: any) => ({
             price: item.price,
             priceIncludesTax: item.priceIncludesTax || false,
-            tax: item.tax ? {
-              id: item.tax._id,
-              name: item.tax.name,
-              percentage: item.tax.percentage,
-              description: item.tax.description
-            } : null,
+            tax: item.tax ? { id: item.tax._id, name: item.tax.name, percentage: item.tax.percentage, description: item.tax.description } : null,
             quantity: item.quantity
-          }));
-          
-          // Calculate tax using the proper tax calculation logic
-          const taxCalculation = calculateCartTax(itemsForTax, isInterstate, warehouseState, customerState);
-          
-          cgst = taxCalculation.totalCGST;
-          sgst = taxCalculation.totalSGST;
-          igst = taxCalculation.totalIGST;
+          }))
+          const taxCalculation = calculateCartTax(itemsForTax, isInterstate, warehouseState, customerState)
+          cgst = taxCalculation.totalCGST
+          sgst = taxCalculation.totalSGST
+          igst = taxCalculation.totalIGST
+          taxSubtotal = taxCalculation.subtotal
+          totalTax = taxCalculation.totalTax
+          finalTotal = taxCalculation.finalTotal
         }
-
-        const itemsText = r.items && r.items.length > 0 
-          ? `${r.items.length} item${r.items.length !== 1 ? 's' : ''}: ${r.items.slice(0, 2).map(item => item.name).join(', ')}${r.items.length > 2 ? '...' : ''}`
-          : 'No items';
-
-        const row = [
-          `${r.orderObjectId?.invoiceNumber || r.orderObjectId?.orderId || r.orderId || '-'} (${r.returnId || r._id}) - ${new Date(r.createdAt).toLocaleString()}`,
-          r.customerInfo?.name || '-',
-          itemsText,
-          r.status.replace('_', ' '),
+        const created = new Date(r.createdAt)
+        const dateStr = fmtISODate(created)
+        const subtotal = taxSubtotal
+        const orderForDiscount = fullOrder || order
+        let totalDiscountFromOrder = (
+          orderForDiscount?.promoCode?.discountAmount ??
+          orderForDiscount?.promoCode?.discount ??
+          orderForDiscount?.pricing?.discountAmount ??
+          orderForDiscount?.pricing?.discountTotal ??
+          orderForDiscount?.pricing?.discount ??
+          orderForDiscount?.orderSummary?.totalDiscount ??
+          orderForDiscount?.appliedPromocode?.discountValue ??
+          orderForDiscount?.coupon?.discountAmount ??
+          orderForDiscount?.discount ??
+          0
+        ) as number
+        if (!totalDiscountFromOrder) {
+          const delivery = (orderForDiscount?.pricing?.delivery ?? orderForDiscount?.pricing?.shipping ?? orderForDiscount?.pricing?.deliveryCharge ?? 0) || 0
+          const ocgst = orderForDiscount?.taxCalculation?.taxBreakdown?.cgst?.amount ?? 0
+          const osgst = orderForDiscount?.taxCalculation?.taxBreakdown?.sgst?.amount ?? 0
+          const oigst = orderForDiscount?.taxCalculation?.taxBreakdown?.igst?.amount ?? 0
+          const ototal = (orderForDiscount?.pricing?.total ?? 0) || 0
+          const osub = (orderForDiscount?.pricing?.subtotal ?? 0) || 0
+          const derived = osub + delivery + ocgst + osgst + oigst - ototal
+          totalDiscountFromOrder = derived > 0 ? derived : 0
+        }
+        const denom = taxSubtotal + totalTax
+        const discountRatio = denom > 0 ? totalDiscountFromOrder / denom : 0
+        const discount = finalTotal * discountRatio
+        const total = (typeof r.refundedAmount === 'number' ? r.refundedAmount : Math.max(0, finalTotal - discount))
+        const itemsCount = r.items?.length || 0
+        const productsTextRaw = (r.items || []).map((it: any) => {
+          const pct = it?.tax?.percentage ?? 0
+          const inc = it?.priceIncludesTax ? 'Inc.' : 'Excl.'
+          return `${it?.name || ''} - ${pct}%(${inc})`
+        }).join('\n')
+        const refundMethod = getRefundMethod(fullReturn, fullOrder, explicitPref)
+        // Prefer explicit pickup address; fallback to order delivery address
+        const pickupPin = getPinFromObject(fullReturn?.pickupInfo) || getPinFromObject(fullOrder?.deliveryInfo)
+        return [
+          dateStr,
+          r.orderObjectId?.invoiceNumber || r.orderObjectId?.orderId || r.orderId || '-',
+          r.returnId || r._id || '-',
           r.warehouseInfo?.warehouseName || '-',
-          cgst > 0 ? `₹${numberFmt.format(cgst)}` : '-',
-          sgst > 0 ? `₹${numberFmt.format(sgst)}` : '-',
-          igst > 0 ? `₹${numberFmt.format(igst)}` : '-',
-          `₹${numberFmt.format(r.refundedAmount || 0)}`
+          r.customerInfo?.name || '-',
+          r.customerInfo?.phone || '-',
+          pickupPin,
+          refundMethod,
+          r.status.replace('_', ' '),
+          amt(subtotal),
+          amt(cgst),
+          amt(sgst),
+          amt(igst),
+          amt(discount),
+          itemsCount,
+          amt(total),
+          productsTextRaw
         ]
-        doc.text(row.join('    '), 40, y)
-        y += 14
-        if (y > 780) { doc.addPage(); y = 40 }
       })
+      return { headers, rows }
     }
-    doc.save(`${activeTab}-reports.pdf`)
-  }, [summary, orders, returnSummary, returns, numberFmt, startDate, endDate, warehouseId, status, paymentMethod, returnStartDate, returnEndDate, returnWarehouseId, returnStatus, activeTab])
+
+    const { headers, rows } = activeTab === 'orders' ? buildOrders() : buildReturns()
+
+    // Create workbook and worksheet
+    const workbook = new ExcelJS.Workbook()
+    const sheet = workbook.addWorksheet(activeTab === 'orders' ? 'Orders' : 'Returns')
+
+    // Define only widths (no headers) to avoid ExcelJS auto-inserting a header row at A1
+    // Added PIN column after Phone, so insert a width for it
+    const baseWidths = [16, 22, 22, 24, 22, 16, 12, 18, 16, 14, 12, 12, 12, 14]
+    const allWidths = activeTab === 'orders' ? [...baseWidths, 14, 10, 16, 100] : [...baseWidths, 10, 16, 100]
+    sheet.columns = allWidths.map((w) => ({ width: w })) as any
+
+    // Title and metadata rows
+    const brandColor = activeTab === 'orders' ? 'FF2563EB' : 'FFDC2626'
+    const titleRow = sheet.addRow([`${activeTab === 'orders' ? 'Order Report' : 'Return Report'}`])
+    sheet.mergeCells(1, 1, 1, headers.length)
+    // Apply style to all cells in merged range to ensure background color shows
+    for (let c = 1; c <= headers.length; c++) {
+      const cell = titleRow.getCell(c)
+      cell.font = { bold: true, size: 16, color: { argb: 'FFFFFFFF' } }
+      cell.alignment = { vertical: 'middle', horizontal: 'left' }
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: brandColor } }
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+        left: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+        bottom: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+        right: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+      }
+    }
+    titleRow.height = 28
+
+    const fmt = (d: Date) => `${d.getFullYear().toString().slice(-2)}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
+    const sRaw = activeTab === 'orders' ? startDate : returnStartDate
+    const eRaw = activeTab === 'orders' ? endDate : returnEndDate
+    const today = new Date()
+    const startD = sRaw ? new Date(sRaw) : today
+    const endD = eRaw ? new Date(eRaw) : startD
+    const hasDateRange = Boolean(sRaw || eRaw)
+    const rangeHuman = hasDateRange ? `${fmtISODate(startD)} to ${fmtISODate(endD)}` : 'All dates'
+    const getWarehouseLabel = (id?: string) => {
+      if (!id || id === 'all') return 'All'
+      const w = warehouses.find((wh) => (wh._id || wh.id) === id)
+      return w?.name || id
+    }
+    const filtersText = (activeTab === 'orders'
+      ? [
+          (warehouseId !== 'all' && `Warehouse=${getWarehouseLabel(warehouseId)}`) || '',
+          (status !== 'all' && `Status=${status}`) || '',
+          (paymentMethod !== 'all' && `Payment=${paymentMethod}`) || '',
+        ].filter(Boolean)
+      : [
+          (returnWarehouseId !== 'all' && `Warehouse=${getWarehouseLabel(returnWarehouseId)}`) || '',
+          (returnStatus !== 'all' && `ReturnStatus=${returnStatus}`) || '',
+        ].filter(Boolean)
+    ).join(' | ') || 'None'
+
+    const meta1 = sheet.addRow([`Date Range: ${rangeHuman}`])
+    sheet.mergeCells(2, 1, 2, headers.length)
+    meta1.getCell(1).alignment = { vertical: 'middle', horizontal: 'left' }
+    const meta2 = sheet.addRow([`Filters: ${filtersText}`])
+    sheet.mergeCells(3, 1, 3, headers.length)
+    meta2.getCell(1).alignment = { vertical: 'middle', horizontal: 'left' }
+    const meta3 = sheet.addRow([`Generated At: ${new Date().toLocaleString()}`])
+    sheet.mergeCells(4, 1, 4, headers.length)
+    meta3.getCell(1).alignment = { vertical: 'middle', horizontal: 'left' }
+
+    sheet.addRow([]) // blank separator
+
+    // Header row starts at 6
+    const headerRowIndex = sheet.rowCount + 1
+    const headerRow = sheet.addRow(headers)
+    headerRow.height = 22
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: brandColor } }
+      cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+        left: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+        bottom: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+        right: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+      }
+    })
+
+    // Data rows start after header
+    rows.forEach((r) => sheet.addRow(r))
+
+    // Freeze panes below header
+    sheet.views = [{ state: 'frozen', ySplit: headerRowIndex }]
+
+    // Style data cells and zebra striping
+    const lastColIndex = headers.length
+    for (let r = headerRowIndex + 1; r <= sheet.rowCount; r++) {
+      const row = sheet.getRow(r)
+      const isZebra = (r - headerRowIndex) % 2 === 0
+      for (let c = 1; c <= headers.length; c++) {
+        const cell = row.getCell(c)
+        const sourceRow = rows[r - headerRowIndex - 1] || []
+        // Exclude Items column from numeric formatting to avoid decimals
+        const numericCols = activeTab === 'orders' ? [10,11,12,13,14,15,17] : [10,11,12,13,14,16]
+        const isNumeric = numericCols.includes(c) && typeof sourceRow[c - 1] === 'number'
+        // Center align all table cells; keep wrap where needed
+        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: c === lastColIndex || c === 4 || c === 5 }
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FFF0F0F0' } },
+          left: { style: 'thin', color: { argb: 'FFF0F0F0' } },
+          bottom: { style: 'thin', color: { argb: 'FFF0F0F0' } },
+          right: { style: 'thin', color: { argb: 'FFF0F0F0' } },
+        }
+        if (isNumeric) cell.numFmt = '#,##0.00'
+        // Force Items column to show whole numbers (no decimals)
+        const itemsColIndex = activeTab === 'orders' ? 16 : 15
+        if (c === itemsColIndex) {
+          cell.numFmt = '0'
+        }
+        if (isZebra) {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } }
+        }
+      }
+      // Dynamic row height based on products cell lines (approx)
+      const productsText = (rows[r - headerRowIndex - 1] || [])[lastColIndex - 1] as string
+      if (productsText) {
+        const lines = String(productsText).split('\n').length
+        row.height = Math.min(120, Math.max(16, lines * 14))
+      }
+    }
+
+    // Auto filter
+    sheet.autoFilter = {
+      from: { row: headerRowIndex, column: 1 },
+      to: { row: sheet.rowCount, column: headers.length }
+    }
+
+    // Download
+    const range = hasDateRange ? `${fmt(startD)}-${fmt(endD)}` : 'All'
+    const prefix = activeTab === 'orders' ? 'Order Report' : 'Return Report'
+
+    const buffer = await workbook.xlsx.writeBuffer()
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${prefix} ${range}.xlsx`
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [activeTab, orders, returns, startDate, endDate, returnStartDate, returnEndDate])
+
+  const exportPdf = useCallback(async () => {
+    const doc = new jsPDF({ orientation: 'l', unit: 'pt', format: 'a4' })
+
+    // Common helpers (kept local to avoid side effects)
+    const fmtISODate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+    const fmtYYMMDD = (d: Date) => `${d.getFullYear().toString().slice(-2)}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`
+    const getPinFromObject = (obj: any): string => {
+      if (!obj) return ''
+      const a = obj?.address || obj
+      const direct = (
+        a?.pincode || a?.pinCode || a?.postalCode || a?.zip || a?.zipcode || a?.zipCode
+      )
+      if (direct) return String(direct)
+      const candidates: string[] = [a?.area, a?.address, a?.building, a?.landmark, a?.city, a?.state, a?.warehouseAddress]
+        .filter(Boolean).map(String)
+      const joined = candidates.join(' ')
+      const m = joined.match(/\b\d{6}\b/)
+      return m ? m[0] : ''
+    }
+    const getRefundMethod = (ret: any, ord?: any) => {
+      const pref = ret?.refundPreference || ret?.refundInfo || ord?.refundPreference || ord?.refundInfo || {}
+      const method = (pref?.method || pref?.type || pref?.mode || ret?.refundMethod || '').toString().toLowerCase()
+      if (method === 'upi' || pref?.upiId) return pref?.upiId ? `UPI: ${String(pref.upiId)}` : 'UPI'
+      if (method === 'bank' || pref?.bankDetails) {
+        const bank = pref?.bankDetails || {}
+        const mask = (acc: any) => acc ? `XXXX${String(acc).slice(-4)}` : ''
+        return ['Bank', bank.bankName || '', mask(bank.accountNumber), bank.ifsc || ''].filter(Boolean).join(' ')
+      }
+      return 'N/A'
+    }
+
+    // Header/metadata
+    const isOrders = activeTab === 'orders'
+    const brandColor = isOrders ? '#2563EB' : '#DC2626'
+    const sRaw = isOrders ? startDate : returnStartDate
+    const eRaw = isOrders ? endDate : returnEndDate
+    const hasDateRange = Boolean(sRaw || eRaw)
+    const today = new Date()
+    const startD = sRaw ? new Date(sRaw) : today
+    const endD = eRaw ? new Date(eRaw) : startD
+
+    doc.setFontSize(14)
+    doc.setTextColor(255,255,255)
+    // Colored title band aligned to content width (same margins as table)
+    doc.setFillColor(brandColor)
+    const pageWidth = doc.internal.pageSize.getWidth()
+    const margin = 30
+    const contentWidth = pageWidth - margin * 2
+    doc.rect(margin, 28, contentWidth, 24, 'F')
+    doc.text(isOrders ? 'Order Report' : 'Return Report', margin + 10, 46)
+    doc.setTextColor(0,0,0)
+
+    doc.setFontSize(9)
+    const metaY = 70
+    doc.text(`Date Range: ${hasDateRange ? `${fmtISODate(startD)} to ${fmtISODate(endD)}` : 'All dates'}`, margin, metaY)
+    const getWarehouseLabel = (id?: string) => {
+      if (!id || id === 'all') return 'All'
+      const w = warehouses.find((wh) => (wh._id || wh.id) === id)
+      return w?.name || id
+    }
+    const filtersText = (isOrders
+      ? [
+          (warehouseId !== 'all' && `Warehouse=${getWarehouseLabel(warehouseId)}`) || '',
+          (status !== 'all' && `Status=${status}`) || '',
+          (paymentMethod !== 'all' && `Payment=${paymentMethod}`) || '',
+        ].filter(Boolean)
+      : [
+          (returnWarehouseId !== 'all' && `Warehouse=${getWarehouseLabel(returnWarehouseId)}`) || '',
+          (returnStatus !== 'all' && `ReturnStatus=${returnStatus}`) || '',
+        ].filter(Boolean)
+    ).join(' | ') || 'None'
+    doc.text(`Filters: ${filtersText}`, margin, metaY + 18)
+    doc.text(`Generated At: ${new Date().toLocaleString()}`, margin, metaY + 36)
+
+    // Build table
+    const headers = isOrders
+      ? ['Date','InvoiceID','OrderID','Warehouse','Customer','Phone','Delivery PIN','Payment','Status','Subtotal','CGST','SGST','IGST','Discount','Delivery','Items','Total','Products']
+      : ['Date','InvoiceID','ReturnID','Warehouse','Customer','Phone','Pickup PIN','Payment Preference','Status','Subtotal','CGST','SGST','IGST','Discount','Items','Refund Amount','Products']
+
+    // Enrich details similar to Excel export to improve PIN/refund preference/discount accuracy
+    const orderDetailById = new Map<string, any>()
+    const returnListById = new Map<string, any>()
+    try {
+      if (isOrders) {
+        const ids = Array.from(new Set((orders || []).map((o: any) => o?.orderId).filter(Boolean))) as string[]
+        if (ids.length && apiBase) {
+          const fetched = await Promise.all(ids.map(async (oid) => {
+            try {
+              const res = await fetch(`${apiBase}/orders/order/${oid}`, { headers: { 'Authorization': `Bearer ${token}` } })
+              if (res.ok) {
+                const json = await res.json()
+                return [oid, json?.order || null] as const
+              }
+            } catch {}
+            return [oid, null] as const
+          }))
+          fetched.forEach(([oid, ord]) => { if (ord) orderDetailById.set(oid, ord) })
+        }
+      } else {
+        // Returns admin list (for explicit refundPreference)
+        if (apiBase) {
+          try {
+            const resList = await fetch(`${apiBase}/returns/admin/all?limit=1000`, { headers: { 'Authorization': `Bearer ${token}` } })
+            if (resList.ok) {
+              const json = await resList.json().catch(() => ({} as any))
+              const list = json?.returns || json?.data || []
+              if (Array.isArray(list)) {
+                list.forEach((ret: any) => {
+                  const key = ret?.returnId || ret?._id
+                  if (key) returnListById.set(key, ret)
+                })
+              }
+            }
+          } catch {}
+        }
+        // Related orders for returns rows
+        const ids = Array.from(new Set((returns || []).map((r: any) => r?.orderObjectId?.orderId || r?.orderId).filter(Boolean))) as string[]
+        if (ids.length && apiBase) {
+          const fetched = await Promise.all(ids.map(async (oid) => {
+            try {
+              const res = await fetch(`${apiBase}/orders/order/${oid}`, { headers: { 'Authorization': `Bearer ${token}` } })
+              if (res.ok) {
+                const json = await res.json()
+                return [oid, json?.order || null] as const
+              }
+            } catch {}
+            return [oid, null] as const
+          }))
+          fetched.forEach(([oid, ord]) => { if (ord) orderDetailById.set(oid, ord) })
+        }
+      }
+    } catch {}
+
+    const body = (isOrders ? orders : returns).map((obj: any) => {
+      if (isOrders) {
+        const o = obj
+        const created = new Date(o.createdAt)
+        const dateStr = fmtISODate(created)
+        const subtotal = (typeof o?.pricing?.subtotal === 'number' ? o.pricing.subtotal : (o.items || []).reduce((s: number, it: any) => s + (Number(it.price) || 0) * (Number(it.quantity) || 1), 0)) || 0
+        const discount = (o?.pricing?.discount ?? o?.pricing?.discountAmount ?? 0) || 0
+        const delivery = (o?.pricing?.delivery ?? o?.pricing?.shipping ?? o?.pricing?.deliveryCharge ?? 0) || 0
+        const total = (o?.pricing?.total ?? 0) || 0
+        const cgst = o?.taxCalculation?.taxBreakdown?.cgst?.amount ?? 0
+        const sgst = o?.taxCalculation?.taxBreakdown?.sgst?.amount ?? 0
+        const igst = o?.taxCalculation?.taxBreakdown?.igst?.amount ?? 0
+        const itemsCount = (o.items?.length || 0)
+        const enrichedOrder = orderDetailById.get(o?.orderId) || o
+        const deliveryPin = getPinFromObject(enrichedOrder?.deliveryInfo) || getPinFromObject(enrichedOrder?.warehouseInfo) || getPinFromObject(o?.deliveryInfo) || getPinFromObject(o?.warehouseInfo)
+        const productsTextRaw = (o.items || []).map((it: any) => {
+          const pct = it?.tax?.percentage ?? 0
+          const inc = it?.priceIncludesTax ? 'Inc.' : 'Excl.'
+          return `${it?.name || ''} - ${pct}%(${inc})`
+        }).join('\n')
+        return [
+          dateStr,
+          o.invoiceNumber || '',
+          o.orderId || '',
+          o.warehouseInfo?.warehouseName || '-',
+          o.customerInfo?.name || '-',
+          o.customerInfo?.phone || '-',
+          deliveryPin,
+          (o.paymentInfo?.method || '-').toUpperCase(),
+          (o.status || '-').toString(),
+          numberFmt.format(subtotal),
+          cgst ? numberFmt.format(cgst) : '-',
+          sgst ? numberFmt.format(sgst) : '-',
+          igst ? numberFmt.format(igst) : '-',
+          numberFmt.format(discount),
+          numberFmt.format(delivery),
+          String(itemsCount),
+          numberFmt.format(total),
+          productsTextRaw
+        ]
+      }
+      // returns
+      const r = obj
+      const order = orderDetailById.get(r?.orderObjectId?.orderId || r?.orderId) || r.orderObjectId
+      const customerState = order?.deliveryInfo?.address?.state || ''
+      const warehouseState = order?.warehouseInfo?.warehouseId?.address ? extractStateFromAddress(order.warehouseInfo.warehouseId.address) : (order?.warehouseInfo?.warehouseId?.state || '')
+      const isInterstate = !!(customerState && warehouseState && customerState.toLowerCase().trim() !== warehouseState.toLowerCase().trim()) || order?.taxCalculation?.isInterState === true
+      let cgst = 0, sgst = 0, igst = 0, taxSubtotal = 0, totalTax = 0, finalTotal = 0
+        if (r.items && r.items.length > 0) {
+          const itemsForTax: ProductTaxInfo[] = r.items.map((item: any) => ({
+            price: item.price,
+            priceIncludesTax: item.priceIncludesTax || false,
+          tax: item.tax ? { id: item.tax._id, name: item.tax.name, percentage: item.tax.percentage, description: item.tax.description } : null,
+            quantity: item.quantity
+        }))
+        const taxCalculation = calculateCartTax(itemsForTax, isInterstate, warehouseState, customerState)
+        cgst = taxCalculation.totalCGST
+        sgst = taxCalculation.totalSGST
+        igst = taxCalculation.totalIGST
+        taxSubtotal = taxCalculation.subtotal
+        totalTax = taxCalculation.totalTax
+        finalTotal = taxCalculation.finalTotal
+      }
+        const created = new Date(r.createdAt)
+      const dateStr = fmtISODate(created)
+      const subtotal = taxSubtotal
+      const orderForDiscount = order
+      let totalDiscountFromOrder = (
+        orderForDiscount?.promoCode?.discountAmount ??
+        orderForDiscount?.promoCode?.discount ??
+        orderForDiscount?.pricing?.discountAmount ??
+        orderForDiscount?.pricing?.discountTotal ??
+        orderForDiscount?.pricing?.discount ??
+        orderForDiscount?.orderSummary?.totalDiscount ??
+        orderForDiscount?.appliedPromocode?.discountValue ??
+        orderForDiscount?.coupon?.discountAmount ??
+        orderForDiscount?.discount ??
+        0
+      ) as number
+      if (!totalDiscountFromOrder) {
+        const delivery = (orderForDiscount?.pricing?.delivery ?? orderForDiscount?.pricing?.shipping ?? orderForDiscount?.pricing?.deliveryCharge ?? 0) || 0
+        const ocgst = orderForDiscount?.taxCalculation?.taxBreakdown?.cgst?.amount ?? 0
+        const osgst = orderForDiscount?.taxCalculation?.taxBreakdown?.sgst?.amount ?? 0
+        const oigst = orderForDiscount?.taxCalculation?.taxBreakdown?.igst?.amount ?? 0
+        const ototal = (orderForDiscount?.pricing?.total ?? 0) || 0
+        const osub = (orderForDiscount?.pricing?.subtotal ?? 0) || 0
+        const derived = osub + delivery + ocgst + osgst + oigst - ototal
+        totalDiscountFromOrder = derived > 0 ? derived : 0
+      }
+      const denom = taxSubtotal + totalTax
+      const discount = denom > 0 ? finalTotal * ((totalDiscountFromOrder || 0) / denom) : 0
+      const total = (typeof r.refundedAmount === 'number' ? r.refundedAmount : Math.max(0, finalTotal - discount))
+        const itemsCount = r.items?.length || 0
+      const explicitPref = returnListById.get(r?.returnId || r?._id)?.refundPreference
+      const refundMethod = getRefundMethod({ ...r, refundPreference: explicitPref }, order)
+      const pickupPin = getPinFromObject(r?.pickupInfo) || getPinFromObject(order?.deliveryInfo)
+        const productsTextRaw = (r.items || []).map((it: any) => {
+          const pct = it?.tax?.percentage ?? 0
+          const inc = it?.priceIncludesTax ? 'Inc.' : 'Excl.'
+          return `${it?.name || ''} - ${pct}%(${inc})`
+      }).join('\n')
+      return [
+          dateStr,
+          r.orderObjectId?.invoiceNumber || r.orderObjectId?.orderId || r.orderId || '-',
+          r.returnId || r._id || '-',
+          r.warehouseInfo?.warehouseName || '-',
+          r.customerInfo?.name || '-',
+          r.customerInfo?.phone || '-',
+        pickupPin,
+          refundMethod,
+          r.status.replace('_', ' '),
+        numberFmt.format(subtotal),
+        numberFmt.format(cgst),
+        numberFmt.format(sgst),
+        numberFmt.format(igst),
+        numberFmt.format(discount),
+          String(itemsCount),
+        numberFmt.format(total),
+        productsTextRaw
+      ]
+    })
+
+    // Let autotable calculate widths to perfectly fill the available content width
+    // while we just specify alignment for text-heavy columns
+    const columnStyles: Record<number, any> = {}
+    columnStyles[3] = { halign: 'left' }
+    columnStyles[4] = { halign: 'left' }
+    columnStyles[headers.length - 1] = { halign: 'left' }
+
+    // Compute startY just below metadata to avoid overlap and keep consistent alignment
+    const tableStartY = metaY + 50
+    autoTable(doc, {
+      head: [headers],
+      body,
+      startY: tableStartY,
+      styles: { fontSize: 6, cellPadding: 2, halign: 'center', valign: 'middle', overflow: 'linebreak' },
+      headStyles: { fillColor: isOrders ? [37, 99, 235] : [220, 38, 38], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+      columnStyles,
+      bodyStyles: { lineColor: [240,240,240], lineWidth: 0.5 },
+      alternateRowStyles: { fillColor: [249, 250, 251] },
+      tableWidth: 'auto',
+      margin: { left: margin, right: margin },
+    })
+
+    // Filename like Excel
+    const rangeLabel = hasDateRange ? `${fmtYYMMDD(startD)}-${fmtYYMMDD(endD)}` : 'All'
+    const prefix = isOrders ? 'Order Report' : 'Return Report'
+    doc.save(`${prefix} ${rangeLabel}.pdf`)
+  }, [activeTab, orders, returns, startDate, endDate, returnStartDate, returnEndDate, warehouses, warehouseId, status, paymentMethod, returnWarehouseId, returnStatus, numberFmt, summary, returnSummary])
+
+  // Lightweight inline SVG Pie Chart with hover tooltip
+  const PieChart: React.FC<{ data: Array<{ name: string; value: number }>; size?: number }> = ({ data, size = 200 }) => {
+    const [hoverIdx, setHoverIdx] = useState<number | null>(null)
+    const total = Math.max(1, data.reduce((s, d) => s + (Number(d.value) || 0), 0))
+    const radius = size / 2 - 6
+    const cx = size / 2
+    const cy = size / 2
+    // pleasant color palette
+    const colors = [
+      '#22c55e', // green-500
+      '#3b82f6', // blue-500
+      '#f59e0b', // amber-500
+      '#ef4444', // red-500
+      '#a855f7', // purple-500
+      '#06b6d4', // cyan-500
+      '#84cc16', // lime-500
+      '#f97316', // orange-500
+    ]
+    let startAngle = -90 // start at top
+    const arcs = data.map((d, i) => {
+      const slice = (Number(d.value) || 0) / total
+      const endAngle = startAngle + slice * 360
+      const largeArcFlag = endAngle - startAngle > 180 ? 1 : 0
+      const toRad = (deg: number) => (deg * Math.PI) / 180
+      const x1 = cx + radius * Math.cos(toRad(startAngle))
+      const y1 = cy + radius * Math.sin(toRad(startAngle))
+      const x2 = cx + radius * Math.cos(toRad(endAngle))
+      const y2 = cy + radius * Math.sin(toRad(endAngle))
+      const dPath = `M ${cx} ${cy} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2} Z`
+      const fill = colors[i % colors.length]
+      const idx = i
+      startAngle = endAngle
+      return { dPath, fill, idx }
+    })
+    const tooltip = hoverIdx !== null ? data[hoverIdx] : null
+    return (
+      <div className="relative flex items-center justify-center">
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+          {arcs.map((a) => (
+            <path
+              key={a.idx}
+              d={a.dPath}
+              fill={a.fill}
+              className="cursor-pointer transition-opacity"
+              opacity={hoverIdx === null || hoverIdx === a.idx ? 1 : 0.5}
+              onMouseEnter={() => setHoverIdx(a.idx)}
+              onMouseLeave={() => setHoverIdx(null)}
+            />
+          ))}
+          {/* white inner circle to make it a donut */}
+          <circle cx={cx} cy={cy} r={radius * 0.5} fill="#ffffff" />
+        </svg>
+        {tooltip && (
+          <div className="absolute left-1/2 -translate-x-1/2 bottom-2 px-2 py-1 text-xs rounded bg-black text-white shadow">
+            {tooltip.name}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <AdminLayout>
@@ -405,17 +1066,8 @@ export default function AdminReports() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={exportPdf} className="bg-white border hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg transition-colors">Export PDF</button>
-            <button onClick={exportCsv} className="bg-white border hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg transition-colors">Export CSV</button>
             <button onClick={exportTally} className="bg-white border hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg transition-colors">Export Tally XML</button>
-            <button onClick={() => { 
-              if (activeTab === 'orders') {
-                fetchSummary(); 
-                fetchOrders(); 
-              } else {
-                fetchReturnSummary(); 
-                fetchReturns(); 
-              }
-            }} className="bg-brand-primary hover:bg-brand-primary-dark text-white px-4 py-2 rounded-lg transition-colors">Generate</button>
+            <button onClick={exportXlsx} className="bg-brand-primary text-white hover:bg-brand-primary-dark px-4 py-2 rounded-lg transition-colors">Export Excel</button>
           </div>
         </div>
 
@@ -740,32 +1392,14 @@ export default function AdminReports() {
           <div className="bg-white rounded-lg p-6 shadow-md">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-codGray">{activeTab === 'orders' ? 'Top Categories' : 'Top Return Categories'}</h3>
-              <div className="flex items-center gap-1 text-sm">
-                {typeof (activeTab === 'orders' ? summary.cards?.growthPct : returnSummary.cards?.growthPct) === 'number' && (
-                  <span className={`inline-flex items-center px-2 py-1 rounded ${(activeTab === 'orders' ? summary.cards.growthPct : returnSummary.cards.growthPct) >= 0 ? 'text-green-700 bg-green-50' : 'text-red-700 bg-red-50'}`}>
-                    {(activeTab === 'orders' ? summary.cards.growthPct : returnSummary.cards.growthPct) >= 0 ? <TrendingUp className="h-4 w-4 mr-1" /> : <TrendingDown className="h-4 w-4 mr-1" />} 
-                    {`${(activeTab === 'orders' ? summary.cards.growthPct : returnSummary.cards.growthPct) >= 0 ? '+' : ''}${Number(activeTab === 'orders' ? summary.cards.growthPct : returnSummary.cards.growthPct).toFixed(1)}%`}
-                  </span>
-                )}
-              </div>
             </div>
-            <div className="max-h-64 overflow-auto pr-1 space-y-3">
-              {((activeTab === 'orders' ? summary.topCategories : returnSummary.topReturnCategories) || []).map((category: any, index: number) => {
-                const topValue = ((activeTab === 'orders' ? summary.topCategories : returnSummary.topReturnCategories)?.[0]?.revenue || 1);
-                const pct = Math.max(2, Math.round((category.revenue / topValue) * 100));
-                const isGrowth = (activeTab === 'orders' ? summary.cards?.growthPct : returnSummary.cards?.growthPct) >= 0;
-                return (
-                  <div key={index} className="">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium text-codGray truncate pr-3">{category.name || 'Category'}</span>
-                      <span className="text-sm text-gray-500 whitespace-nowrap">₹{numberFmt.format(category.revenue || 0)}</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
-                      <div className={`${isGrowth ? 'bg-green-500' : 'bg-red-500'} h-2 rounded-full transition-all duration-300`} style={{ width: `${pct}%` }} />
-                    </div>
-                  </div>
-                )
-              })}
+            <div className="mb-4 h-60 flex items-center justify-center">
+              <PieChart
+                size={250}
+                data={(
+                  activeTab === 'orders' ? (summary.topCategories || []) : (returnSummary.topReturnCategories || [])
+                ).map((c: any) => ({ name: c.name || 'Category', value: Number(c.revenue) || 0 }))}
+              />
             </div>
           </div>
         </div>
@@ -858,7 +1492,7 @@ export default function AdminReports() {
                 <tbody>
                   {returns.map((r) => {
                     // Determine if order is interstate or intrastate (same logic as ReturnDetailsModal)
-                    const order = r.orderObjectId;
+                    const order = r.orderObjectId
                     
                     // Get customer and warehouse states for interstate determination
                     const customerState = order?.deliveryInfo?.address?.state || '';
@@ -879,7 +1513,7 @@ export default function AdminReports() {
                     
                     if (r.items && r.items.length > 0) {
                       // Prepare items for tax calculation (same as ReturnDetailsModal)
-                      const itemsForTax: ProductTaxInfo[] = r.items.map(item => ({
+                      const itemsForTax: ProductTaxInfo[] = r.items.map((item: any) => ({
                         price: item.price,
                         priceIncludesTax: item.priceIncludesTax || false,
                         tax: item.tax ? {

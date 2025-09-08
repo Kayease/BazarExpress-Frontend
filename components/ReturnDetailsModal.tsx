@@ -676,7 +676,32 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
                     )}
                   </div>
                   <div className="flex-1 ml-4">
-                    <h5 className="font-medium text-gray-900 mb-2">{item.name}</h5>
+                    <h5 className="font-medium text-gray-900 mb-1 flex items-center justify-between">
+                      <span className="truncate">{item.name}</span>
+                      {(() => {
+                        // Determine tax info and whether price includes tax
+                        let taxInfo = item.tax;
+                        let priceIncludesTax = item.priceIncludesTax;
+                        if (!taxInfo && orderDetails?.items) {
+                          const orderItem = orderDetails.items.find((orderItem: any) =>
+                            orderItem._id === item.orderItemId ||
+                            (orderItem.productId === item.productId && orderItem.name === item.name)
+                          );
+                          if (orderItem) {
+                            taxInfo = orderItem.tax;
+                            priceIncludesTax = orderItem.priceIncludesTax;
+                          }
+                        }
+                        if (taxInfo && typeof taxInfo.percentage === 'number') {
+                          return (
+                            <span className="text-xs font-semibold text-purple-600 ml-2 whitespace-nowrap">
+                              {`Tax: ${taxInfo.percentage}% (${priceIncludesTax ? 'Incl.' : 'Excl.'})`}
+                            </span>
+                          );
+                        }
+                        return null;
+                      })()}
+                    </h5>
                     
                     {/* Enhanced Variant Display */}
                     {(() => {
