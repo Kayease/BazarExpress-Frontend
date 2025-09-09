@@ -37,7 +37,7 @@ export function ProductLoadingState({
 
   if (error) {
     return (
-      <div className="text-center py-14 px-4">
+      <div className="flex items-center justify-center py-16 px-4 text-center min-h-[60vh]">
         <div className="max-w-md mx-auto">
           <div className="mb-6">
             <div className="w-24 h-24 mx-auto bg-red-100 rounded-full flex items-center justify-center">
@@ -71,7 +71,7 @@ export function ProductLoadingState({
   if (isEmpty) {
     if (hasActiveFilters) {
       return (
-        <div className="text-center py-14 px-4">
+        <div className="flex items-center justify-center py-16 px-4 text-center min-h-[60vh]">
           <div className="max-w-md mx-auto">
             <div className="mb-6">
               <div className="w-24 h-24 mx-auto bg-yellow-100 rounded-full flex items-center justify-center">
@@ -109,52 +109,41 @@ export function ProductLoadingState({
       : categoryName || '';
 
     return (
-      <div className="text-center py-14 px-4">
-        <div className="max-w-md mx-auto">
+      <div className="min-h-[60vh] flex items-center justify-center px-4 text-center">
+        <div>
           <div className="mb-6">
-            <div className="w-24 h-24 mx-auto bg-gray-100 rounded-full flex items-center justify-center">
-              <Grid3X3 className="h-12 w-12 text-gray-400" />
+            <div className="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-full bg-gray-100">
+              <Grid3X3 className="h-8 w-8 text-gray-400" />
             </div>
           </div>
-          <h3 className="text-xl font-semibold text-gray-900 mb-3">
+
+          <h3 className="text-2xl font-semibold tracking-tight text-gray-900">
             {searchQuery 
-              ? `No products match "${searchQuery}"` 
+              ? `No results for "${searchQuery}"` 
               : categoryDisplay 
-                ? `No products in ${categoryDisplay}` 
+                ? `Nothing in ${categoryDisplay} yet` 
                 : 'No products available'
             }
           </h3>
-          <p className="text-gray-600 mb-6 leading-relaxed">
+
+          <p className="mx-auto mt-3 max-w-prose text-sm leading-6 text-gray-600">
             {searchQuery 
-              ? "Try adjusting your search terms or browse our categories to find what you're looking for."
+              ? "Try different keywords, remove special characters, or browse all products."
               : categoryDisplay
-                ? "This category is currently empty. You can stay on this page or explore other categories."
-                : "No products available. Check back later or explore our categories."
+                ? "Hang tight—this category will be available soon!"
+                : "We couldn't find anything to show. Check back soon or browse our catalog."
             }
           </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+
+          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
             {searchQuery && (
               <button
                 onClick={onClearSearch}
-                className="px-6 py-3 bg-brand-primary text-white rounded-lg hover:bg-brand-primary-dark transition-colors font-medium"
+                className="inline-flex items-center justify-center rounded-lg bg-brand-primary px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-primary-dark"
               >
-                Clear Search
+                Clear search
               </button>
             )}
-            {categoryDisplay && onStayInCategory && (
-              <button
-                onClick={onStayInCategory}
-                className="px-6 py-3 bg-brand-primary text-white rounded-lg hover:bg-brand-primary-dark transition-colors font-medium"
-              >
-                Stay in {categoryName}
-              </button>
-            )}
-            <button
-              onClick={onBrowseAll}
-              className="px-6 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
-            >
-              Browse All Products
-            </button>
           </div>
         </div>
       </div>

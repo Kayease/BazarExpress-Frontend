@@ -48,8 +48,8 @@ export default function OrderSuccessModal({
 
         {/* Success Icon */}
         <div className="text-center mb-6">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <CheckCircle className="h-8 w-8 text-green-600" />
+          <div className="w-16 h-16 bg-brand-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+            <CheckCircle className="h-8 w-8 text-brand-primary" />
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">
             Order Placed Successfully!
@@ -68,7 +68,7 @@ export default function OrderSuccessModal({
           
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm font-medium text-gray-600">Total Amount</span>
-            <span className="text-lg font-bold text-green-600">₹{orderData.total}</span>
+            <span className="text-lg font-bold text-brand-primary">₹{orderData.total}</span>
           </div>
           
           <div className="flex items-center justify-between mb-3">
@@ -93,7 +93,7 @@ export default function OrderSuccessModal({
         <div className="flex gap-3">
           <Button
             onClick={onViewOrder}
-            className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold py-3"
+            className="flex-1 bg-brand-primary hover:bg-brand-primary-dark text-white font-semibold py-3"
           >
             <Package className="h-4 w-4 mr-2" />
             View Order
@@ -101,7 +101,7 @@ export default function OrderSuccessModal({
           <Button
             onClick={onClose}
             variant="outline"
-            className="flex-1 border-green-600 text-green-600 hover:bg-green-50 font-semibold py-3"
+            className="flex-1 border-brand-primary text-brand-primary hover:bg-brand-primary/10 font-semibold py-3"
           >
             Continue Shopping
           </Button>

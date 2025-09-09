@@ -288,7 +288,8 @@ export default function ProductsPage() {
     setMaxPrice('100000');
     setCategory(undefined);
     setSubcategory(undefined);
-  }, [setBrand, setSort, setMinPrice, setMaxPrice, setCategory, setSubcategory]);
+    setSearch(undefined);
+  }, [setBrand, setSort, setMinPrice, setMaxPrice, setCategory, setSubcategory, setSearch]);
 
   // Handle product click
   const handleProductClick = useCallback((product: any) => {

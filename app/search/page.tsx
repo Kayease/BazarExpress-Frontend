@@ -658,14 +658,14 @@ function SearchPage() {
         {productsLoading || showSkeletonOnTyping ? (
           <ProductGridSkeleton count={14} viewMode={filters.viewMode} />
         ) : sortedProducts.length === 0 && searchQuery ? (
-          <div className="text-center py-16">
+          <div className="min-h-[60vh] flex items-center justify-center px-4 text-center">
             <div className="max-w-md mx-auto">
               <div className="mb-6">
                 <div className="w-24 h-24 mx-auto bg-gray-100 rounded-full flex items-center justify-center">
                   <Search className="h-12 w-12 text-gray-400" />
                 </div>
               </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-3">
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">
                 No products found
               </h3>
               <p className="text-gray-600 mb-6">

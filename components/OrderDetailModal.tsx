@@ -618,7 +618,7 @@ export default function OrderDetailModal({ isOpen, onClose, order }: OrderDetail
               <div className="border-t pt-2 sm:pt-3 mt-2 sm:mt-3">
                 <div className="flex justify-between">
                   <span className="text-base sm:text-lg font-semibold text-gray-900">Total</span>
-                  <span className="text-lg sm:text-xl font-bold text-green-600">₹{order.pricing.total.toFixed(2)}</span>
+                  <span className="text-lg sm:text-xl font-bold text-brand-primary">₹{order.pricing.total.toFixed(2)}</span>
                 </div>
               </div>
             </div>

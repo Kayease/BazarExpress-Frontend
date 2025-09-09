@@ -185,6 +185,7 @@ function CategorySidebar({
               width={48}
               height={48}
               className="w-full h-full object-cover"
+              sizes="48px"
               priority={false}
               quality={60}
             />
