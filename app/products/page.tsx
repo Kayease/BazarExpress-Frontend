@@ -18,7 +18,7 @@ import ProductGrid from "./components/ProductGrid";
 import { ProductLoadingState } from "./components/ProductLoadingState";
 
 // Types
-import { ViewMode } from "./types";
+import { ViewMode, Category } from "./types";
 
 export default function ProductsPage() {
   // Debug logging
@@ -336,6 +336,24 @@ export default function ProductsPage() {
   const priceRange = useMemo(() => [parseInt(minPrice || '10'), parseInt(maxPrice || '100000')] as [number, number], [minPrice, maxPrice]);
   const productsCount = useMemo(() => products.length, [products.length]);
 
+  // Preload parent categories for sidebar immediate render
+  const [initialParentCategories, setInitialParentCategories] = useState<Category[] | undefined>(undefined);
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL as string;
+        const res = await fetch(`${apiUrl}/categories`, { cache: 'force-cache' });
+        if (res.ok) {
+          const all = await res.json();
+          const parents = (all as Category[]).filter(c => !c.parentId || c.parentId === '');
+          if (isMounted) setInitialParentCategories(parents);
+        }
+      } catch {}
+    })();
+    return () => { isMounted = false; };
+  }, []);
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-full mx-auto px-2 sm:px-4 py-4 sm:py-6">
@@ -346,6 +364,7 @@ export default function ProductsPage() {
             selectedSubcategory={subcategory}
             onCategoryChange={handleCategoryChange}
             onSubcategoryChange={handleSubcategoryChange}
+            initialParentCategories={initialParentCategories}
           />
 
           {/* Main Content */}

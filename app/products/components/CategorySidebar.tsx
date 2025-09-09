@@ -10,6 +10,7 @@ interface CategorySidebarProps {
   selectedSubcategory?: string;
   onCategoryChange: (category?: string) => void;
   onSubcategoryChange: (subcategory?: string) => void;
+  initialParentCategories?: Category[];
 }
 
 // Cache for categories to prevent refetching
@@ -20,10 +21,11 @@ function CategorySidebar({
   selectedCategory,
   selectedSubcategory,
   onCategoryChange,
-  onSubcategoryChange
+  onSubcategoryChange,
+  initialParentCategories
 }: CategorySidebarProps) {
   // State
-  const [parentCategories, setParentCategories] = useState<Category[]>([]);
+  const [parentCategories, setParentCategories] = useState<Category[]>(initialParentCategories || []);
   const [subcategories, setSubcategories] = useState<Category[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(false);
   const [sidebarMode, setSidebarMode] = useState<'parent' | 'subcategory'>('parent');
@@ -111,10 +113,13 @@ function CategorySidebar({
     }
   }, [isCacheValid, logDebug]);
 
-  // Fetch parent categories on mount
+  // Initialize from props then fetch/fill cache
   useEffect(() => {
+    if (initialParentCategories && initialParentCategories.length > 0) {
+      categoriesCache.set('parent', { data: initialParentCategories, timestamp: Date.now() });
+    }
     fetchParentCategories();
-  }, [fetchParentCategories]);
+  }, [initialParentCategories, fetchParentCategories]);
 
   // Track if we've manually set the sidebar mode
   const manualModeChange = useRef(false);
@@ -163,7 +168,7 @@ function CategorySidebar({
   }, [selectedCategory, parentCategories.length, selectedSubcategory, sidebarMode, fetchSubcategories]);
 
   // Memoized category rendering functions for better performance
-  const renderCategoryButton = useCallback((cat: Category, isSelected: boolean, onClick: () => void, title: string) => (
+  const renderCategoryButton = useCallback((cat: Category, isSelected: boolean, onClick: () => void, title: string, index?: number) => (
     <div key={cat._id} className="flex flex-col items-center">
       <button
         onClick={onClick}
@@ -186,7 +191,7 @@ function CategorySidebar({
               height={48}
               className="w-full h-full object-cover"
               sizes="48px"
-              priority={false}
+              priority={typeof index === 'number' ? index < 6 : false}
               quality={60}
             />
           </div>
@@ -206,23 +211,25 @@ function CategorySidebar({
 
   // Memoized parent categories rendering
   const parentCategoriesElements = useMemo(() => 
-    parentCategories.map((cat) => 
+    parentCategories.map((cat, idx) => 
       renderCategoryButton(
         cat,
         selectedCategory === cat._id,
         () => handleParentCategoryClick(cat),
-        cat.name
+        cat.name,
+        idx
       )
     ), [parentCategories, selectedCategory, renderCategoryButton]);
 
   // Memoized subcategories rendering
   const subcategoriesElements = useMemo(() => 
-    subcategories.map((subcat) => 
+    subcategories.map((subcat, idx) => 
       renderCategoryButton(
         subcat,
         selectedSubcategory === subcat._id,
         () => handleSubcategoryClick(subcat),
-        subcat.name
+        subcat.name,
+        idx
       )
     ), [subcategories, selectedSubcategory, renderCategoryButton]);
 
