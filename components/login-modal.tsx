@@ -68,6 +68,16 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
     }
   }, [step]);
 
+  // Lock background scroll when modal is open
+  useEffect(() => {
+    if (!isOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const API_URL = `${process.env.NEXT_PUBLIC_API_URL}/auth`;
@@ -305,8 +315,8 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
               {step === "phone" 
                 ? "Log in or Sign up" 
                 : step === "password"
-                ? `Enter your password for +91-${phone}`
-                : `We have sent a verification code to +91-${phone}`}
+                ? `Enter your password for ${phone}`
+                : `We have sent a verification code}
             </p>
           </div>
           

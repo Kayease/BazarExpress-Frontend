@@ -91,7 +91,9 @@ export default function MobileDeliveryAdminLayout({ children }: MobileDeliveryAd
           {/* Logo and Title */}
           <div className="flex items-center space-x-3">
             <div className="flex items-center space-x-2">
-              <Image src="/logo.svg" alt="logo" width={48} height={48} className="rounded-full" />
+              <Link href="/">
+                <Image src="/logo.svg" alt="logo" width={48} height={48} className="rounded-full" />
+              </Link>
               <div>
                 <h1 className="text-lg font-bold text-gray-900">Delivery Agent</h1>
                 <p className="text-xs text-gray-500">BazarXpress</p>
@@ -123,7 +125,9 @@ export default function MobileDeliveryAdminLayout({ children }: MobileDeliveryAd
             {/* Sidebar Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <div className="flex items-center space-x-3">
-                <Image src="/logo-footer.svg" alt="logo" width={40} height={40} className="rounded-full" />
+                <Link href="/">
+                  <Image src="/logo-footer.svg" alt="logo" width={40} height={40} className="rounded-full" />
+                </Link>
                 <div>
                   <h2 className="text-lg font-bold text-gray-900">Delivery Agent</h2>
                   <p className="text-sm text-gray-500">BazarXpress</p>
