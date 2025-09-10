@@ -316,7 +316,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                 ? "Log in or Sign up" 
                 : step === "password"
                 ? `Enter your password for ${phone}`
-                : `We have sent a verification code}
+                : `We have sent a verification code}`}
             </p>
           </div>
           
