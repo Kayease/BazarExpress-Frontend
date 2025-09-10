@@ -546,6 +546,16 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
   const availableStatuses = useMemo(() => computeAvailableStatuses(data.status, role), [data.status, role]);
   const showAgentColumn = (role === 'admin' || role === 'order_warehouse_management') && ((data.status === 'pickup_assigned') || (newStatus === 'pickup_assigned' && data.status !== 'pickup_assigned'));
 
+  // Lock background scroll when modal is open
+  useEffect(() => {
+    if (!open) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow || '';
+    };
+  }, [open]);
+
   const handleStatusSubmit = async () => {
     if (!availableStatuses.includes(newStatus)) return;
     setSubmitting(true);
@@ -582,13 +592,13 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[1000]">
-      <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+      <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[80vh] sm:max-h-[85vh] md:max-h-[90vh] overflow-y-auto shadow-2xl">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-brand-primary to-brand-primary-dark text-white rounded-t-2xl">
+        <div className="sticky top-0 z-10 px-4 py-3 md:px-6 md:py-4 border-b border-gray-200 bg-gradient-to-r from-brand-primary to-brand-primary-dark text-white rounded-t-2xl">
           <div className="flex justify-between items-center">
             <div>
               <h3 className="text-xl font-bold">Return Details</h3>
-              <p className="text-white/80">#{data.returnId} • Order {data.orderId}</p>
+              <p className="text-white/80 text-sm md:text-base">#{data.returnId} • Order {data.orderId}</p>
             </div>
             <button onClick={onClose} className="text-white/80 hover:text-white p-2 hover:bg-white/10 rounded-lg transition-colors">
               <X className="h-5 w-5" />
@@ -596,10 +606,10 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
           </div>
         </div>
 
-        <div className="p-6 space-y-6">
+        <div className="p-4 md:p-6 space-y-4 md:space-y-6">
           {/* Top summary */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-gray-50 rounded-xl p-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+            <div className="bg-gray-50 rounded-xl p-3 md:p-4">
               <div className="flex items-center space-x-2 mb-2">
                 {(() => {
                   const Icon = (statusConfig[data.status]?.icon) || RefreshCw;
@@ -611,7 +621,7 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
                 {statusConfig[data.status]?.label || data.status}
               </span>
             </div>
-            <div className="bg-gray-50 rounded-xl p-4">
+            <div className="bg-gray-50 rounded-xl p-3 md:p-4">
               <div className="flex items-center space-x-2 mb-2">
                 <User className="w-4 h-4 text-brand-primary" />
                 <span className="text-sm font-medium text-gray-600">Customer</span>
@@ -620,7 +630,7 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
               <p className="text-xs text-gray-600">{data.customerInfo.phone}</p>
             </div>
 
-            <div className="bg-gray-50 rounded-xl p-4">
+            <div className="bg-gray-50 rounded-xl p-3 md:p-4">
               <div className="flex items-center space-x-2 mb-2">
                 <CreditCard className="w-4 h-4 text-brand-primary" />
                 <span className="text-sm font-medium text-gray-600">Refund Preference</span>
@@ -638,7 +648,7 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
           </div>
 
           {/* Address */}
-          <div className="bg-gray-50 rounded-xl p-4">
+          <div className="bg-gray-50 rounded-xl p-3 md:p-4">
             <div className="flex items-center space-x-2 mb-3">
               <MapPin className="w-5 h-5 text-brand-primary" />
               <h4 className="font-semibold text-gray-900">Pickup Address</h4>
@@ -647,7 +657,6 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
               <p className="font-medium">{data.pickupInfo.address.name}</p>
               <p>{data.pickupInfo.address.building}</p>
               <p>{data.pickupInfo.address.area}</p>
-              <p>{data.pickupInfo.address.city}, {data.pickupInfo.address.state} - {data.pickupInfo.address.pincode}</p>
               {data.pickupInfo.address.phone && (
                 <p className="text-gray-600 inline-flex items-center"><Phone className="w-4 h-4 mr-1" />{data.pickupInfo.address.phone}</p>
               )}
@@ -665,8 +674,8 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
             </h4>
             <div className="space-y-3">
               {data.items.map((item, index) => (
-                <div key={item._id || `item-${index}`} className="flex items-center p-4 border border-gray-200 rounded-xl hover:shadow-sm transition-shadow">
-                  <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
+                <div key={item._id || `item-${index}`} className="flex items-center p-3 md:p-4 border border-gray-200 rounded-xl hover:shadow-sm transition-shadow">
+                  <div className="w-12 h-12 md:w-16 md:h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
                     {item.image ? (
                       <Image src={item.image} alt={item.name} width={64} height={64} className="object-cover w-full h-full" />
                     ) : (
@@ -733,7 +742,7 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
           </div>
 
           {/* Return Order Summary */}
-          <div className="bg-gray-50 rounded-xl p-6">
+          <div className="bg-gray-50 rounded-xl p-4 md:p-6">
             <h4 className="font-semibold text-gray-900 mb-4 flex items-center">
               <CreditCard className="w-5 h-5 text-brand-primary mr-2" />
               Return Order Summary
@@ -742,7 +751,7 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
             {/* Items breakdown */}
             <div className="space-y-3 mb-6">
               {calculateRefundAmounts.map((item, index) => (
-                <div key={item._id || `refund-item-${index}`} className="bg-white rounded-lg p-4 border border-gray-200">
+                <div key={item._id || `refund-item-${index}`} className="bg-white rounded-lg p-3 md:p-4 border border-gray-200">
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex-1">
                       <h5 className="font-medium text-gray-900 text-sm">{item.name}</h5>
@@ -753,7 +762,7 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
                     </div>
                   </div>
                   
-                  <div className="grid grid-cols-2 gap-4 text-xs text-gray-600">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-xs text-gray-600">
                     <div>
                       <div className="flex justify-between">
                         <span>Taxable Value:</span>

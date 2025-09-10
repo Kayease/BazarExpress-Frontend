@@ -18,7 +18,7 @@ export default function SiteFrame({ children }: { children: React.ReactNode }) {
   const isAdmin = pathname?.startsWith("/admin");
   const isHomePage = pathname === "/";
   const { isLoginOpen, setIsLoginOpen } = useAppContext();
-  const { showOverlay, setShowOverlay } = useLocation();
+  const { showOverlay, setShowOverlay, locationState } = useLocation();
   const [showDeliveryOverlay, setShowDeliveryOverlay] = useState(false);
   
   // Guest info modal
@@ -53,60 +53,18 @@ export default function SiteFrame({ children }: { children: React.ReactNode }) {
     setShowDeliveryOverlay(showOverlay);
   }, [showOverlay]);
 
-  // Show guest modal on first visit
+  // Show guest modal only after pincode/location has been detected
   useEffect(() => {
-    // Debug logging
-    console.log('Guest Modal Debug:', {
-      shouldShowModal: shouldShowModal(),
-      isAdmin,
-      guestInfo: !!guestInfo,
-      hasShownModal: hasShownModal,
-      isReady,
-      user: !!user,
-      timerSet
-    });
+    // Guard until location/pincode is detected
+    if (!locationState?.isLocationDetected) return;
 
-    // Only show modal if all conditions are met and timer hasn't been set
+    // Only show modal if all conditions are met and it hasn't been shown yet
     if (shouldShowModal() && !isAdmin && !timerSet) {
-      console.log('Modal should show - setting timer');
       setTimerSet(true);
-      
-      // Show modal immediately (no delay) to ensure it's visible
       setShowGuestModal(true);
       markModalAsShown();
-
-      return () => {
-        // no timer to clean
-      };
-    } else if (!shouldShowModal() || isAdmin || timerSet) {
-      console.log('Modal will not show because:', {
-        shouldShowModal: shouldShowModal(),
-        isAdmin,
-        hasShownModal,
-        guestInfo: !!guestInfo,
-        isReady,
-        user: !!user,
-        timerSet
-      });
     }
-  }, [shouldShowModal, isAdmin, markModalAsShown, timerSet, guestInfo, hasShownModal, isReady, user]);
-
-  // Fallback timer - show modal after 3 seconds if conditions are met
-  useEffect(() => {
-    if (!isAdmin && !timerSet) {
-      const fallbackTimer = setTimeout(() => {
-        console.log('Fallback timer - checking if modal should show');
-        if (!guestInfo && !hasShownModal && isReady && !user) {
-          console.log('Fallback timer - showing modal');
-          setShowGuestModal(true);
-          markModalAsShown();
-          setTimerSet(true);
-        }
-      }, 3000);
-
-      return () => clearTimeout(fallbackTimer);
-    }
-  }, [isAdmin, timerSet, guestInfo, hasShownModal, isReady, user, markModalAsShown]);
+  }, [locationState?.isLocationDetected, shouldShowModal, isAdmin, timerSet, markModalAsShown]);
 
   const handleGuestInfoSubmit = (info: any) => {
     saveGuestInfo(info);

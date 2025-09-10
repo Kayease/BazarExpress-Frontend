@@ -79,18 +79,18 @@ export default function GuestInfoModal({ isOpen, onClose, onInfoSubmit }: GuestI
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-[95vw] max-w-md mx-auto p-4 sm:p-6 z-[999] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[92vw] sm:w-[95vw] max-w-sm sm:max-w-md mx-auto p-3 sm:p-5 z-[10050] pointer-events-auto max-h-[85vh] overflow-y-auto rounded-xl sm:rounded-2xl">
         <DialogHeader className="text-center">
-          <DialogTitle className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center justify-center gap-2 flex-wrap">
-            <Gift className="w-5 h-5 sm:w-6 sm:h-6 text-brand-primary flex-shrink-0" />
+          <DialogTitle className="text-lg sm:text-2xl font-bold text-gray-900 flex items-center justify-center gap-2 flex-wrap">
+            <Gift className="w-4 h-4 sm:w-6 sm:h-6 text-brand-primary flex-shrink-0" />
             <span className="text-center">Welcome to BazarXpress!</span>
           </DialogTitle>
-          <p className="text-sm sm:text-base text-gray-600 mt-2 px-2">
+          <p className="text-xs sm:text-base text-gray-600 mt-1 sm:mt-2 px-2">
             Get exclusive offers and track your shopping journey
           </p>
         </DialogHeader>
 
-        <div className="space-y-4 sm:space-y-6">
+        <div className="space-y-3 sm:space-y-6">
           {/* Benefits Section */}
           <div className="bg-gradient-to-r from-brand-primary/10 to-brand-primary/5 rounded-lg p-3 sm:p-4">
             <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2 text-sm sm:text-base">
@@ -127,7 +127,7 @@ export default function GuestInfoModal({ isOpen, onClose, onInfoSubmit }: GuestI
               </Label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <span className="text-gray-500 text-sm">+91</span>
+                  <span className="text-gray-500 text-xs sm:text-sm">+91</span>
                 </div>
                 <Input
                   id="phone"
@@ -152,7 +152,7 @@ export default function GuestInfoModal({ isOpen, onClose, onInfoSubmit }: GuestI
             <Button
               type="submit"
               disabled={isSubmitting || !phone.trim()}
-              className="w-full bg-brand-primary hover:bg-brand-primary-dark text-white py-2.5 sm:py-3 text-base sm:text-lg font-semibold"
+              className="w-full bg-brand-primary hover:bg-brand-primary-dark text-white py-2 sm:py-3 text-sm sm:text-lg font-semibold"
             >
               {isSubmitting ? 'Saving...' : 'Get Started'}
             </Button>
@@ -162,7 +162,7 @@ export default function GuestInfoModal({ isOpen, onClose, onInfoSubmit }: GuestI
               <button
                 type="button"
                 onClick={onClose}
-                className="text-sm text-gray-500 hover:text-gray-700 underline"
+                className="text-xs sm:text-sm text-gray-500 hover:text-gray-700 underline"
               >
                 Skip for now
               </button>

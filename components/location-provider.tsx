@@ -119,36 +119,29 @@ export function LocationProvider({ children }: LocationProviderProps) {
             setIsLoading(true);
             const pincode = await getPincodeFromGeolocation();
             
-            // Clear the fallback timer since we got a response
-            if (fallbackTimer) {
-              clearTimeout(fallbackTimer);
-              fallbackTimer = null;
-            }
+            // If we successfully detect and validate, we'll clear fallback below
             
             if (pincode) {
               const deliveryCheck = await checkPincodeDelivery(pincode);
               
               if (deliveryCheck.success) {
                 updateLocationState(deliveryCheck);
+                // Ensure modal is closed on success
+                setShowLocationModal(false);
+                // Clear the fallback timer since we succeeded
+                if (fallbackTimer) {
+                  clearTimeout(fallbackTimer);
+                  fallbackTimer = null;
+                }
               } else {
-                // If automatic detection got a pincode but delivery check failed,
-                // show the location modal for manual entry
-                setTimeout(() => setShowLocationModal(true), 1000);
+                // Keep fallback timer; do not show modal earlier than 10s
               }
             } else {
-              // If automatic detection failed completely,
-              // show the location modal after a short delay
-              setTimeout(() => setShowLocationModal(true), 2000);
+              // Keep fallback timer; do not show modal earlier than 10s
             }
           } catch (err) {
             console.error('Error with automatic location detection:', err);
-            // Clear the fallback timer since we got an error
-            if (fallbackTimer) {
-              clearTimeout(fallbackTimer);
-              fallbackTimer = null;
-            }
-            // Show location modal as fallback after automatic detection fails
-            setTimeout(() => setShowLocationModal(true), 2000);
+            // Keep fallback timer; do not show modal earlier than 10s
           } finally {
             setIsLoading(false);
           }
@@ -165,7 +158,7 @@ export function LocationProvider({ children }: LocationProviderProps) {
                 console.log('LocationProvider - Showing modal after failed auto-detection retry');
                 setShowLocationModal(true);
               }
-            }, 5000); // Show modal after 5 seconds if location is still not detected
+            }, 10000); // Show modal after 10 seconds if location is still not detected
             
             // Store the timer reference for cleanup
             fallbackTimer = retryTimer;
@@ -267,7 +260,7 @@ export function LocationProvider({ children }: LocationProviderProps) {
       showModalTimeout = setTimeout(() => {
         console.log('LocationProvider - Show modal timeout triggered');
         setShowLocationModal(true);
-      }, 8000); // Show modal after 8 seconds even if still loading
+      }, 10000); // Show modal after 10 seconds even if still loading
       
       const pincode = await getPincodeFromGeolocation();
       
@@ -423,6 +416,7 @@ export function LocationProvider({ children }: LocationProviderProps) {
       {children}
       <PincodeLocationModal
         isOpen={showLocationModal}
+        managedOpen={true}
         onClose={() => {
           setShowLocationModal(false);
           // Mark that user manually dismissed the modal in this session

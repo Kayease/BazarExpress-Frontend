@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import AdminLayout from "../../../components/AdminLayout"
+import MobileDeliveryAdminLayout from "../../../components/MobileDeliveryAdminLayout"
 import { useAppSelector } from '../../../lib/store'
 import { isAdminUser, hasAccessToSection } from '../../../lib/adminAuth'
 import { 
@@ -29,6 +30,7 @@ import {
 import toast from "react-hot-toast"
 import Image from "next/image"
 import ReturnDetailsModal from "../../../components/ReturnDetailsModal"
+import ReturnCard from "../../../components/ReturnCard"
 
 interface ReturnItem {
   _id: string
@@ -164,6 +166,7 @@ export default function AdminReturns() {
   const [rowAgent, setRowAgent] = useState<Record<string, string>>({})
   const [rowLoading, setRowLoading] = useState<Record<string, boolean>>({})
   const [rowResending, setRowResending] = useState<Record<string, boolean>>({})
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
   // Check access
   useEffect(() => {
@@ -282,6 +285,15 @@ export default function AdminReturns() {
       fetchReturns()
     }
   }, [filters.status, filters.warehouseId, filters.assignedAgent])
+
+  const handleRefresh = async () => {
+    try {
+      setIsRefreshing(true)
+      await fetchReturns()
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
 
   // Client-side search filter for returnId and customer name
   const displayReturns = React.useMemo(() => {
@@ -505,7 +517,16 @@ export default function AdminReturns() {
   }
 
   if (!user || !isAdminUser(user.role) || !hasAccessToSection(user.role, 'orders')) {
-    return (
+    return user?.role === 'delivery_boy' ? (
+      <MobileDeliveryAdminLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h2>
+            <p className="text-gray-600">You don't have permission to access this section.</p>
+          </div>
+        </div>
+      </MobileDeliveryAdminLayout>
+    ) : (
       <AdminLayout>
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
@@ -517,23 +538,24 @@ export default function AdminReturns() {
     )
   }
 
+  const LayoutComponent = user?.role === 'delivery_boy' ? MobileDeliveryAdminLayout : AdminLayout
+
   return (
-    <AdminLayout>
+    <LayoutComponent>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              {user?.role === 'delivery_boy' ? 'My Return Pickups' : 'Return Orders'}
-            </h1>
-            <p className="text-gray-600">
-              {user?.role === 'delivery_boy' 
-                ? 'Manage your assigned return pickups' 
-                : 'Manage customer return requests and refunds'
-              }
-            </p>
+        {user?.role !== 'delivery_boy' && (
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">
+                Return Orders
+              </h1>
+              <p className="text-gray-600">
+              Manage customer return requests and refunds
+              </p>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Stats Cards - Only for admin/warehouse managers */}
         {user?.role !== 'delivery_boy' && (
@@ -562,377 +584,519 @@ export default function AdminReturns() {
 
         {/* Filters - Admin/Warehouse Managers */}
         {user?.role !== 'delivery_boy' && (
-          <div className="bg-white rounded-lg border p-4">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <input
-                    type="text"
-                    value={filters.search}
-                    onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
-                    placeholder="Search by Return ID or Customer name"
-                    className="w-full h-[37px] pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+          <>
+            {/* Mobile-friendly */}
+            <div className="md:hidden bg-white rounded-xl border p-4 shadow-sm">
+              <div className="space-y-3">
+                {/* Row 1: Search + Refresh */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <input
+                        type="text"
+                        value={filters.search}
+                        onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                        placeholder="Search by Return ID or Customer name"
+                        className="w-full h-11 rounded-lg pl-10 pr-3 border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-xs"
+                      />
+                    </div>
+                    <button
+                      onClick={handleRefresh}
+                      disabled={isRefreshing}
+                      className="h-11 w-11 inline-flex items-center justify-center rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                      aria-label="Refresh"
+                    >
+                      <RefreshCw className={`${isRefreshing ? 'animate-spin' : ''} h-4 w-4`} />
+                    </button>
+                  </div>
+                </div>
+                {/* Row 2: Status + Warehouse */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                    <select
+                      value={filters.status}
+                      onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+                      className="w-full h-11 rounded-lg border border-gray-200 bg-white px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs"
+                    >
+                      <option value="all">All Statuses</option>
+                      <option value="requested">Requested</option>
+                      <option value="approved">Approved</option>
+                      <option value="pickup_assigned">Pickup Assigned</option>
+                      <option value="pickup_rejected">Pickup Rejected</option>
+                      <option value="picked_up">Picked Up</option>
+                      <option value="received">Received</option>
+                      <option value="partially_refunded">Partially Refunded</option>
+                      <option value="refunded">Refunded</option>
+                      <option value="rejected">Rejected</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Warehouse</label>
+                    <select
+                      value={filters.warehouseId}
+                      onChange={(e) => setFilters(prev => ({ ...prev, warehouseId: e.target.value }))}
+                      className="w-full h-11 rounded-lg border border-gray-200 bg-white px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs"
+                    >
+                      <option value="all">All Warehouses</option>
+                      {warehouses.map(warehouse => (
+                        <option key={warehouse._id} value={warehouse._id}>
+                          {warehouse.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                <select
-                  value={filters.status}
-                  onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All Statuses</option>
-                  <option value="requested">Requested</option>
-                  <option value="approved">Approved</option>
-                  <option value="pickup_assigned">Pickup Assigned</option>
-                  <option value="pickup_rejected">Pickup Rejected</option>
-                  <option value="picked_up">Picked Up</option>
-                  <option value="received">Received</option>
-                  <option value="partially_refunded">Partially Refunded</option>
-                  <option value="refunded">Refunded</option>
-                  <option value="rejected">Rejected</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Warehouse</label>
-                <select
-                  value={filters.warehouseId}
-                  onChange={(e) => setFilters(prev => ({ ...prev, warehouseId: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All Warehouses</option>
-                  {warehouses.map(warehouse => (
-                    <option key={warehouse._id} value={warehouse._id}>
-                      {warehouse.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Assigned Agent</label>
-                <select
-                  value={filters.assignedAgent}
-                  onChange={(e) => setFilters(prev => ({ ...prev, assignedAgent: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All Agents</option>
-                  <option value="unassigned">Unassigned</option>
-                  {deliveryAgents.map(agent => (
-                    <option key={agent._id} value={agent._id}>
-                      {agent.name}
-                    </option>
-                  ))}
-                </select>
+            </div>
+            {/* Desktop layout */}
+            <div className="hidden md:block bg-white rounded-lg border p-4">
+              <div className="flex flex-row items-stretch md:space-x-4">
+                <div className="flex-1">
+                  <label className="block text-xs text-gray-500 mb-1">Search</label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <input
+                      type="text"
+                      value={filters.search}
+                      onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                      placeholder="Search by Return ID or Customer name"
+                      className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+                <div className="min-w-[160px]">
+                  <label className="block text-xs text-gray-500 mb-1">Status</label>
+                  <select
+                    value={filters.status}
+                    onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="requested">Requested</option>
+                    <option value="approved">Approved</option>
+                    <option value="pickup_assigned">Pickup Assigned</option>
+                    <option value="pickup_rejected">Pickup Rejected</option>
+                    <option value="picked_up">Picked Up</option>
+                    <option value="received">Received</option>
+                    <option value="partially_refunded">Partially Refunded</option>
+                    <option value="refunded">Refunded</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                </div>
+                <div className="min-w-[180px]">
+                  <label className="block text-xs text-gray-500 mb-1">Warehouse</label>
+                  <select
+                    value={filters.warehouseId}
+                    onChange={(e) => setFilters(prev => ({ ...prev, warehouseId: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">All Warehouses</option>
+                    {warehouses.map(warehouse => (
+                      <option key={warehouse._id} value={warehouse._id}>
+                        {warehouse.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="min-w-[200px]">
+                  <label className="block text-xs text-gray-500 mb-1">Assigned Agent</label>
+                  <select
+                    value={filters.assignedAgent}
+                    onChange={(e) => setFilters(prev => ({ ...prev, assignedAgent: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">All Agents</option>
+                    <option value="unassigned">Unassigned</option>
+                    {deliveryAgents.map(agent => (
+                      <option key={agent._id} value={agent._id}>
+                        {agent.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="md:ml-auto md:self-center md:pt-4">
+                  <button
+                    onClick={handleRefresh}
+                    disabled={isRefreshing}
+                    className="w-full md:w-auto inline-flex items-center justify-center gap-2 px-4 py-3 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`h-5 w-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
+          </>
         )}
 
         {/* Filters - Delivery Agent (status + warehouse only) */}
         {user?.role === 'delivery_boy' && (
-          <div className="bg-white rounded-lg border p-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <input
-                    type="text"
-                    value={filters.search}
-                    onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
-                    placeholder="Search by Return ID or Customer name"
-                    className="w-full h-[37px] pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+          <>
+            {/* Mobile-friendly */}
+            <div className="md:hidden bg-white rounded-xl border p-4 shadow-sm">
+              <div className="space-y-3">
+                {/* Row 1: Search + Refresh */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <input
+                        type="text"
+                        value={filters.search}
+                        onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                        placeholder="Search by Return ID or Customer name"
+                        className="w-full h-11 rounded-lg pl-10 pr-3 border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-xs"
+                      />
+                    </div>
+                    <button
+                      onClick={handleRefresh}
+                      disabled={isRefreshing}
+                      className="h-11 w-11 inline-flex items-center justify-center rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                      aria-label="Refresh"
+                    >
+                      <RefreshCw className={`${isRefreshing ? 'animate-spin' : ''} h-4 w-4`} />
+                    </button>
+                  </div>
+                </div>
+                {/* Row 2: Status + Warehouse */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                    <select
+                      value={filters.status}
+                      onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+                      className="w-full h-11 rounded-lg border border-gray-200 bg-white px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs"
+                    >
+                      <option value="all">All Statuses</option>
+                      <option value="pickup_assigned">Pickup Assigned</option>
+                      <option value="pickup_rejected">Pickup Rejected</option>
+                      <option value="picked_up">Picked Up</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Warehouse</label>
+                    <select
+                      value={filters.warehouseId}
+                      onChange={(e) => setFilters(prev => ({ ...prev, warehouseId: e.target.value }))}
+                      className="w-full h-11 rounded-lg border border-gray-200 bg-white px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs"
+                    >
+                      <option value="all">All Warehouses</option>
+                      {warehouses.map(warehouse => (
+                        <option key={warehouse._id} value={warehouse._id}>
+                          {warehouse.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                <select
-                  value={filters.status}
-                  onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All Statuses</option>
-                  <option value="pickup_assigned">Pickup Assigned</option>
-                  <option value="pickup_rejected">Pickup Rejected</option>
-                  <option value="picked_up">Picked Up</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Warehouse</label>
-                <select
-                  value={filters.warehouseId}
-                  onChange={(e) => setFilters(prev => ({ ...prev, warehouseId: e.target.value }))}
-                  className="w-full h-10 border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All Warehouses</option>
-                  {warehouses.map(warehouse => (
-                    <option key={warehouse._id} value={warehouse._id}>
-                      {warehouse.name}
-                    </option>
-                  ))}
-                </select>
+            </div>
+            {/* Desktop layout */}
+            <div className="hidden md:block bg-white rounded-lg border p-4">
+              <div className="flex flex-row items-stretch md:space-x-4">
+                <div className="flex-1">
+                  <label className="block text-xs text-gray-500 mb-1">Search</label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <input
+                      type="text"
+                      value={filters.search}
+                      onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                      placeholder="Search by Return ID or Customer name"
+                      className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+                <div className="min-w-[160px]">
+                  <label className="block text-xs text-gray-500 mb-1">Status</label>
+                  <select
+                    value={filters.status}
+                    onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="pickup_assigned">Pickup Assigned</option>
+                    <option value="pickup_rejected">Pickup Rejected</option>
+                    <option value="picked_up">Picked Up</option>
+                  </select>
+                </div>
+                <div className="min-w-[180px]">
+                  <label className="block text-xs text-gray-500 mb-1">Warehouse</label>
+                  <select
+                    value={filters.warehouseId}
+                    onChange={(e) => setFilters(prev => ({ ...prev, warehouseId: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">All Warehouses</option>
+                    {warehouses.map(warehouse => (
+                      <option key={warehouse._id} value={warehouse._id}>
+                        {warehouse.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="md:ml-auto md:self-center md:pt-4">
+                  <button
+                    onClick={handleRefresh}
+                    disabled={isRefreshing}
+                    className="w-full md:w-auto inline-flex items-center justify-center gap-2 px-4 py-3 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`h-5 w-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
+          </>
         )}
 
-        {/* Returns Table */}
-        <div className="bg-white rounded-lg border overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Return Details
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Customer
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Items
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  {user?.role !== 'delivery_boy' && (
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Assigned Agent
-                    </th>
-                  )}
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Created
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {loading ? (
+        {/* Returns List */}
+        {user?.role === 'delivery_boy' ? (
+          <div>
+            <div className="space-y-3">
+              {loading ? (
+                <div className="py-8 text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                </div>
+              ) : displayReturns.length === 0 ? (
+                <div className="py-8 text-center text-gray-500">No return requests found</div>
+              ) : (
+                displayReturns.map((returnRequest) => (
+                  <ReturnCard
+                    key={returnRequest._id}
+                    data={returnRequest as any}
+                    onView={() => {
+                      setSelectedReturn(returnRequest)
+                      setShowDetailsModal(true)
+                    }}
+                  />
+                ))
+              )}
+            </div>
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="px-4 py-3 flex items-center justify-between sm:px-6">
+                <div className="flex-1 flex justify-between sm:hidden">
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                    disabled={currentPage === totalPages}
+                    className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
+                <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm text-gray-700">
+                      Showing <span className="font-medium">{((currentPage - 1) * 10) + 1}</span> to{' '}
+                      <span className="font-medium">{Math.min(currentPage * 10, totalCount)}</span> of{' '}
+                      <span className="font-medium">{totalCount}</span> results
+                    </p>
+                  </div>
+                  <div>
+                    <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                      <button
+                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                        disabled={currentPage === 1}
+                        className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                      >
+                        <ChevronLeft className="h-5 w-5" />
+                      </button>
+                      {(() => {
+                        const maxVisiblePages = 5;
+                        const pages = [];
+                        if (totalPages <= maxVisiblePages) {
+                          for (let i = 1; i <= totalPages; i++) pages.push(i);
+                        } else {
+                          const startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+                          const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+                          const adjustedStart = Math.max(1, endPage - maxVisiblePages + 1);
+                          for (let i = adjustedStart; i <= endPage; i++) pages.push(i);
+                          if (adjustedStart > 1) { pages.unshift('...'); pages.unshift(1); }
+                          if (endPage < totalPages) { pages.push('...'); pages.push(totalPages); }
+                        }
+                        return pages.map((page, index) => (
+                          page === '...'
+                            ? <span key={`ellipsis-${index}`} className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">...</span>
+                            : (
+                              <button
+                                key={page}
+                                onClick={() => setCurrentPage(page as number)}
+                                className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${currentPage === page ? 'z-10 bg-blue-50 border-blue-500 text-blue-600' : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'}`}
+                              >
+                                {page}
+                              </button>
+                            )
+                        ));
+                      })()}
+                      <button
+                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                        disabled={currentPage === totalPages}
+                        className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                      >
+                        <ChevronRight className="h-5 w-5" />
+                      </button>
+                    </nav>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Table view for non-delivery roles */
+          <div className="bg-white rounded-lg border overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
                   <tr>
-                    <td colSpan={user?.role === 'delivery_boy' ? 6 : 7} className="px-6 py-12 text-center">
-                      <div className="flex justify-center">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                      </div>
-                    </td>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Return Details</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned Agent</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
-                ) : displayReturns.length === 0 ? (
-                  <tr>
-                    <td colSpan={user?.role === 'delivery_boy' ? 6 : 7} className="px-6 py-12 text-center text-gray-500">
-                      No return requests found
-                    </td>
-                  </tr>
-                ) : (
-                  displayReturns.map((returnRequest) => {
-                    const statusInfo = getStatusInfo(returnRequest.status)
-                    const StatusIcon = statusInfo.icon
-                    
-                    return (
-                      <tr key={returnRequest._id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div>
-                            <div className="text-sm font-medium text-gray-900">
-                              {returnRequest.returnId}
-                            </div>
-                            <div className="text-sm text-gray-500">
-                              Order: {returnRequest.orderId}
-                            </div>
-                          </div>
-                        </td>
-                        
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div>
-                            <div className="text-sm font-medium text-gray-900">
-                              {returnRequest.customerInfo.name}
-                            </div>
-                            <div className="text-sm text-gray-500">
-                              {returnRequest.customerInfo.phone}
-                            </div>
-                          </div>
-                        </td>
-                        
-                        <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-codGray">{returnRequest.items.length}</p>
-                          <p className="text-xs text-gray-500">Item{returnRequest.items.length !== 1 ? 's' : ''}</p>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-12 text-center">
+                        <div className="flex justify-center">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                         </div>
-                        </td>
-                        
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusInfo.bgColor} ${statusInfo.color}`}>
-                            <StatusIcon className="w-3 h-3 mr-1" />
-                            {formatStatus(returnRequest.status)}
-                          </span>
-                        </td>
-                        
-                        {user?.role !== 'delivery_boy' && (
+                      </td>
+                    </tr>
+                  ) : displayReturns.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-12 text-center text-gray-500">No return requests found</td>
+                    </tr>
+                  ) : (
+                    displayReturns.map((returnRequest) => {
+                      const statusInfo = getStatusInfo(returnRequest.status)
+                      const StatusIcon = statusInfo.icon
+                      return (
+                        <tr key={returnRequest._id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">{returnRequest.returnId}</div>
+                              <div className="text-sm text-gray-500">Order: {returnRequest.orderId}</div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">{returnRequest.customerInfo.name}</div>
+                              <div className="text-sm text-gray-500">{returnRequest.customerInfo.phone}</div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-center">
+                              <p className="text-2xl font-bold text-codGray">{returnRequest.items.length}</p>
+                              <p className="text-xs text-gray-500">Item{returnRequest.items.length !== 1 ? 's' : ''}</p>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusInfo.bgColor} ${statusInfo.color}`}>
+                              <StatusIcon className="w-3 h-3 mr-1" />
+                              {formatStatus(returnRequest.status)}
+                            </span>
+                          </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             {returnRequest.assignedPickupAgent ? (
                               <div>
-                                <div className="text-sm font-medium text-gray-900">
-                                  {returnRequest.assignedPickupAgent.name}
-                                </div>
-                                <div className="text-sm text-gray-500">
-                                  {returnRequest.assignedPickupAgent.phone}
-                                </div>
+                                <div className="text-sm font-medium text-gray-900">{returnRequest.assignedPickupAgent.name}</div>
+                                <div className="text-sm text-gray-500">{returnRequest.assignedPickupAgent.phone}</div>
                               </div>
                             ) : (
                               <span className="text-sm text-gray-500">Not assigned</span>
                             )}
                           </td>
-                        )}
-                        
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {new Date(returnRequest.createdAt).toLocaleDateString()}
-                        </td>
-                        
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <div className="flex justify-end space-x-2 items-center">
-                            <button
-                              onClick={() => {
-                                setSelectedReturn(returnRequest)
-                                setShowDetailsModal(true)
-                              }}
-                              className="text-blue-600 hover:text-blue-900"
-                              title="View Details"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </button>
-                            {/* Map button to pickup location */}
-                            {returnRequest?.pickupInfo?.address?.lat && returnRequest?.pickupInfo?.address?.lng && (
-                              <a
-                                href={`https://www.google.com/maps?q=${returnRequest.pickupInfo.address.lat},${returnRequest.pickupInfo.address.lng}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-green-600 hover:text-green-800"
-                                title="Open in Maps"
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(returnRequest.createdAt).toLocaleDateString()}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <div className="flex justify-end space-x-2 items-center">
+                              <button
+                                onClick={() => { setSelectedReturn(returnRequest); setShowDetailsModal(true); }}
+                                className="text-blue-600 hover:text-blue-900"
+                                title="View Details"
                               >
-                                <MapPin className="h-4 w-4" />
-                              </a>
-                            )}
-                            {/* Refund actions removed: status updates are handled inside ReturnDetailsModal */}
-                            
-                            {/* Only View and Map should appear across all roles */}
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-          
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
-              <div className="flex-1 flex justify-between sm:hidden">
-                <button
-                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                  disabled={currentPage === 1}
-                  className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-                >
-                  Previous
-                </button>
-                <button
-                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                  disabled={currentPage === totalPages}
-                  className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-                >
-                  Next
-                </button>
-              </div>
-              <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm text-gray-700">
-                    Showing <span className="font-medium">{((currentPage - 1) * 10) + 1}</span> to{' '}
-                    <span className="font-medium">{Math.min(currentPage * 10, totalCount)}</span> of{' '}
-                    <span className="font-medium">{totalCount}</span> results
-                  </p>
-                </div>
-                <div>
-                  <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-                    <button
-                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                      disabled={currentPage === 1}
-                      className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-                    >
-                      <ChevronLeft className="h-5 w-5" />
-                    </button>
-                    
-                    {(() => {
-                      const maxVisiblePages = 5;
-                      const pages = [];
-
-                      if (totalPages <= maxVisiblePages) {
-                        // Show all pages if total is small
-                        for (let i = 1; i <= totalPages; i++) {
-                          pages.push(i);
-                        }
-                      } else {
-                        // Smart pagination logic
-                        const startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-                        const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-                        
-                        // Adjust start if we're near the end
-                        const adjustedStart = Math.max(1, endPage - maxVisiblePages + 1);
-                        
-                        for (let i = adjustedStart; i <= endPage; i++) {
-                          pages.push(i);
-                        }
-                        
-                        // Add ellipsis and first/last page if needed
-                        if (adjustedStart > 1) {
-                          pages.unshift('...');
-                          pages.unshift(1);
-                        }
-                        if (endPage < totalPages) {
-                          pages.push('...');
-                          pages.push(totalPages);
-                        }
-                      }
-
-                      return pages.map((page, index) => (
-                        page === '...' ? (
-                          <span key={`ellipsis-${index}`} className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
-                            ...
-                          </span>
-                        ) : (
-                          <button
-                            key={page}
-                            onClick={() => setCurrentPage(page as number)}
-                            className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
-                              currentPage === page
-                                ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
-                                : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
-                            }`}
-                          >
-                            {page}
-                          </button>
-                        )
-                      ));
-                    })()}
-                    
-                    <button
-                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                      disabled={currentPage === totalPages}
-                      className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-                    >
-                      <ChevronRight className="h-5 w-5" />
-                    </button>
-                  </nav>
-                </div>
-              </div>
+                                <Eye className="h-4 w-4" />
+                              </button>
+                              {returnRequest?.pickupInfo?.address?.lat && returnRequest?.pickupInfo?.address?.lng && (
+                                <a
+                                  href={`https://www.google.com/maps?q=${returnRequest.pickupInfo.address.lat},${returnRequest.pickupInfo.address.lng}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-green-600 hover:text-green-800"
+                                  title="Open in Maps"
+                                >
+                                  <MapPin className="h-4 w-4" />
+                                </a>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
             </div>
-          )}
-        </div>
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
+                <div className="flex-1 flex justify-between sm:hidden">
+                  <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50">Previous</button>
+                  <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50">Next</button>
+                </div>
+                <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm text-gray-700">Showing <span className="font-medium">{((currentPage - 1) * 10) + 1}</span> to <span className="font-medium">{Math.min(currentPage * 10, totalCount)}</span> of <span className="font-medium">{totalCount}</span> results</p>
+                  </div>
+                  <div>
+                    <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                      <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50">
+                        <ChevronLeft className="h-5 w-5" />
+                      </button>
+                      {(() => {
+                        const maxVisiblePages = 5;
+                        const pages = [];
+                        if (totalPages <= maxVisiblePages) {
+                          for (let i = 1; i <= totalPages; i++) pages.push(i);
+                        } else {
+                          const startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+                          const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+                          const adjustedStart = Math.max(1, endPage - maxVisiblePages + 1);
+                          for (let i = adjustedStart; i <= endPage; i++) pages.push(i);
+                          if (adjustedStart > 1) { pages.unshift('...'); pages.unshift(1); }
+                          if (endPage < totalPages) { pages.push('...'); pages.push(totalPages); }
+                        }
+                        return pages.map((page, index) => (
+                          page === '...'
+                            ? <span key={`ellipsis-${index}`} className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">...</span>
+                            : (
+                              <button key={page} onClick={() => setCurrentPage(page as number)} className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${currentPage === page ? 'z-10 bg-blue-50 border-blue-500 text-blue-600' : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'}`}>{page}</button>
+                            )
+                        ));
+                      })()}
+                      <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50">
+                        <ChevronRight className="h-5 w-5" />
+                      </button>
+                    </nav>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
 
       </div>
@@ -1202,6 +1366,6 @@ export default function AdminReturns() {
             </div>
           </div>
         )}
-    </AdminLayout>
+    </LayoutComponent>
   )
 }

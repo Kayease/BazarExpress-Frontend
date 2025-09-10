@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useState, useRef, useEffect } from "react";
 import { X, ChevronLeft } from "lucide-react";
 import toast from "react-hot-toast";
-import CompleteProfileModal from "./CompleteProfileModal";
+import { AnimatePresence, motion } from "framer-motion";
 import OTPInput from "./OTPInput";
 import { useAppDispatch } from '../lib/store';
 import { fetchProfile, setToken } from '../lib/slices/authSlice';
@@ -23,8 +23,9 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
   const [loading, setLoading] = useState(false);
   const [serverOtp, setServerOtp] = useState(""); // For demo, in real app, don't store OTP on frontend
   const [sessionId, setSessionId] = useState(""); // For backend session/OTP tracking
-  const [showCompleteProfile, setShowCompleteProfile] = useState(false);
-  const [loggedInUser, setLoggedInUser] = useState<any>(null);
+  // Inline Complete Profile state
+  const [profileName, setProfileName] = useState("");
+  const [profileEmail, setProfileEmail] = useState("");
   const [seconds, setSeconds] = useState(0);
   const [requiresPassword, setRequiresPassword] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -53,6 +54,8 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
       setUserRole(null);
       setSeconds(0);
       setLoading(false);
+      setProfileName("");
+      setProfileEmail("");
     }
   }, [isOpen]);
 
@@ -68,6 +71,37 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
   if (!isOpen) return null;
 
   const API_URL = `${process.env.NEXT_PUBLIC_API_URL}/auth`;
+
+  // Complete profile submit
+  const handleCompleteProfileSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!profileName || !profileEmail) {
+      toast.error("Name and email are required");
+      return;
+    }
+    setLoading(true);
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      const res = await fetch(`${API_URL}/profile`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ name: profileName, email: profileEmail }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || data.error || "Failed to update profile");
+      toast.success("Profile updated");
+      // Refresh profile in store and close modal
+      dispatch(fetchProfile());
+      handleClose();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update profile");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Handle modal close with form reset
   const handleClose = () => {
@@ -199,11 +233,13 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
       setUserRole(null);
       // Check if user needs to complete profile
       if (!data.user?.name || !data.user?.email) {
-        setLoggedInUser(data.user);
-        setShowCompleteProfile(true);
         if (data.token) {
           localStorage.setItem("token", data.token);
         }
+        // Prefill fields and show inline complete profile step
+        setProfileName(data.user?.name || "");
+        setProfileEmail(data.user?.email || "");
+        setStep("completeProfile" as any);
       } else {
         if (data.token) {
           localStorage.setItem("token", data.token);
@@ -244,43 +280,27 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
               width={64}
               height={64}
               style={{ height: 'auto' }}
-              className="mx-auto mb-3 sm:mb-4 w-16 h-16 sm:w-20 sm:h-20"
+              className="mx-auto w-16 h-16 sm:w-20 sm:h-20"
             />
-            <h2 
-              className="text-xl sm:text-2xl font-bold text-gray-800 mb-2 relative overflow-hidden"
-              style={{
-                transform: 'skew(-15deg)',
-                textShadow: '2px 2px 4px rgba(0,0,0,0.1)'
-              }}
-            >
-              <span className="relative inline-block">
-                {step === "phone" ? "Need. Click. Express" : 
-                 step === "password" ? "Enter Password" : "OTP Verification"}
-                {/* Enhanced motion blur lines */}
-                <div className="absolute inset-0 -z-10">
-                  {/* Primary motion blur - multiple layers for realism */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-gray-200 to-transparent transform -skew(-15deg) scale-x-200 blur-sm opacity-40"></div>
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-gray-300 to-transparent transform -skew(-15deg) scale-x-175 blur-md opacity-50"></div>
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-gray-400 to-transparent transform -skew(-15deg) scale-x-150 blur-lg opacity-60"></div>
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-gray-500 to-transparent transform -skew(-15deg) scale-x-125 blur-xl opacity-70"></div>
-                  
-                  {/* Secondary motion blur - different angles for depth */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-gray-300 to-transparent transform -skew(-20deg) scale-x-180 blur-sm opacity-30"></div>
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-gray-400 to-transparent transform -skew(-25deg) scale-x-160 blur-md opacity-40"></div>
-                  
-                  {/* Horizontal motion lines for speed effect */}
-                  <div className="absolute inset-0">
-                    <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-gray-400 to-transparent transform -skew(-15deg) scale-x-150 blur-sm opacity-60"></div>
-                    <div className="absolute top-1/4 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-gray-300 to-transparent transform -skew(-15deg) scale-x-140 blur-sm opacity-50"></div>
-                    <div className="absolute top-1/2 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-gray-400 to-transparent transform -skew(-15deg) scale-x-160 blur-sm opacity-40"></div>
-                    <div className="absolute top-3/4 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-gray-300 to-transparent transform -skew(-15deg) scale-x-130 blur-sm opacity-30"></div>
-                  </div>
-                  
-                  {/* Edge blur for realistic text edges */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-gray-100 via-transparent to-gray-100 transform -skew(-15deg) scale-x-110 blur-xs opacity-20"></div>
-                </div>
-              </span>
-            </h2>
+            {step === "phone" ? (
+              <div className="flex justify-center mb-2">
+                <Image
+                  src="/need_click_express.png"
+                  alt="Need Click Express"
+                  width={260}
+                  height={48}
+                  style={{ height: 'auto' }}
+                  className="w-56 sm:w-64 h-auto"
+                  priority
+                />
+              </div>
+            ) : (
+              <h2 
+                className="text-xl sm:text-2xl font-bold text-gray-800 mb-2"
+              >
+                {step === "password" ? "Enter Password" : "OTP Verification"}
+              </h2>
+            )}
             <p className="text-sm sm:text-base text-gray-600 px-2">
               {step === "phone" 
                 ? "Log in or Sign up" 
@@ -290,164 +310,79 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
             </p>
           </div>
           
-          {step === "phone" && (
-            <form onSubmit={handleSendOtp} className="space-y-4">
-              <div>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 sm:pl-4 flex items-center pointer-events-none">
-                    <span className="text-gray-500 text-sm sm:text-base">+91</span>
-                  </div>
-                  <input
-                    id="phone"
-                    name="phone"
-                    type="tel"
-                    value={phone}
-                    onChange={e => setPhone(e.target.value.replace(/[^\d]/g, ""))}
-                    className="w-full pl-10 sm:pl-12 pr-3 sm:pr-4 py-3 sm:py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent text-gray-800 text-base sm:text-lg"
-                    placeholder="Enter mobile number"
-                    maxLength={10}
-                    required
-                  />
-                </div>
-              </div>
-              <button
-                type="submit"
-                disabled={loading || phone.length !== 10}
-                className="w-full bg-brand-primary text-white py-3 sm:py-4 rounded-lg hover:bg-brand-primary-dark transition duration-200 font-semibold text-base sm:text-lg disabled:opacity-50 disabled:cursor-not-allowed mt-4"
-              >
-                {loading ? "Sending..." : "Continue"}
-              </button>
-              <p className="text-xs text-gray-500 text-center mt-4 px-2">
-                By continuing, you agree to our{" "}
-                <a href="/terms" className="text-brand-primary hover:underline">Terms of service</a>
-                {" "}& {" "}
-                <a href="/privacy" className="text-brand-primary hover:underline">Privacy policy</a>
-              </p>
-            </form>
-          )}
-          
-          {step === "password" && (
-            <form onSubmit={handleVerifyPassword} className="space-y-4">
-              <div>
-                <input
-                  ref={passwordInputRef}
-                  id="password"
-                  name="password"
-                  type="password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  className="w-full px-3 sm:px-4 py-3 sm:py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent text-gray-800 text-base sm:text-lg"
-                  placeholder="Enter your password"
-                  minLength={6}
-                  required
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={loading || password.length < 6}
-                className="w-full bg-brand-primary text-white py-3 sm:py-4 rounded-lg hover:bg-brand-primary-dark transition duration-200 font-semibold text-base sm:text-lg disabled:opacity-50 disabled:cursor-not-allowed mt-4"
-              >
-                {loading ? "Verifying..." : "Verify Password"}
-              </button>
-              <div className="text-center mt-4">
-                <button
-                  type="button"
-                  className="text-gray-600 hover:text-gray-700 text-sm font-medium flex items-center justify-center w-full"
-                  onClick={() => { 
-                    setStep("phone"); 
-                    setPassword(""); 
-                    setRequiresPassword(false);
-                    setUserRole(null);
-                  }}
-                  disabled={loading}
-                >
-                  <ChevronLeft size={16} className="mr-1" />
-                  Change phone number
-                </button>
-              </div>
-            </form>
-          )}
-          
-          {step === "otp" && (
-            <form onSubmit={handleVerifyOtp} className="space-y-4">
-              <div>
-                <div className="flex flex-col items-center space-y-4">
-                  <OTPInput
-                    value={otp}
-                    onChange={async (value) => {
-                    setOtp(value);
-                    // Only trigger auto-submit if we have all 6 digits and not already loading
-                    if (value.length === 6 && !loading) {
-                      // Use the new value directly instead of relying on state
-                      const verifyOtp = async () => {
-                        if (loading) return;
-                        
-                        setLoading(true);
-                        try {
-                          const res = await fetch(`${API_URL}/verify-otp`, {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ phone, otp: value, sessionId }),
-                          });
-                          const data = await res.json();
-                          if (!res.ok) throw new Error(data.message || data.error || "Invalid OTP");
-                          
-                          dispatch(setToken(data.token));
-                          toast.success("Login successful!");
-                          setStep("phone");
-                          setPhone("");
-                          setPassword("");
-                          setOtp("");
-                          setSessionId("");
-                          setRequiresPassword(false);
-                          setUserRole(null);
-                          
-                          if (!data.user?.name || !data.user?.email) {
-                            setLoggedInUser(data.user);
-                            setShowCompleteProfile(true);
-                            if (data.token) {
-                              localStorage.setItem("token", data.token);
-                            }
-                          } else {
-                            if (data.token) {
-                              localStorage.setItem("token", data.token);
-                            }
-                            dispatch(fetchProfile());
-                            handleClose();
-                          }
-                        } catch (err: any) {
-                          toast.error(err.message || "Invalid OTP");
-                          setOtp("");  // Clear OTP on error
-                        } finally {
-                          setLoading(false);
-                        }
-                      };
-                      
-                      verifyOtp();
-                    }
-                  }}
-                  disabled={loading}
-                />
-                </div>
-                
-                <div className="text-center space-y-4 mt-6">
-                  <button
-                    type="button"
-                    className="text-brand-primary hover:text-brand-primary-dark text-sm font-medium"
-                    onClick={requiresPassword ? handleVerifyPassword : handleSendOtp}
-                    disabled={loading || seconds > 0}
-                  >
-                    {`Resend ${requiresPassword ? 'Verification code' : 'Code'} ${seconds > 0 ? `(${seconds}s)` : ''}`}
-                  </button>
-                  
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={step}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.22, ease: "easeOut" }}
+            >
+              {step === "phone" && (
+                <form onSubmit={handleSendOtp} className="space-y-4">
                   <div>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 sm:pl-4 flex items-center pointer-events-none">
+                        <span className="text-gray-500 text-sm sm:text-base">+91</span>
+                      </div>
+                      <input
+                        id="phone"
+                        name="phone"
+                        type="tel"
+                        value={phone}
+                        onChange={e => setPhone(e.target.value.replace(/[^\d]/g, ""))}
+                        className="w-full pl-10 sm:pl-12 pr-3 sm:pr-4 py-3 sm:py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent text-gray-800 text-base sm:text-lg"
+                        placeholder="Enter mobile number"
+                        maxLength={10}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={loading || phone.length !== 10}
+                    className="w-full bg-brand-primary text-white py-3 sm:py-4 rounded-lg hover:bg-brand-primary-dark transition duration-200 font-semibold text-base sm:text-lg disabled:opacity-50 disabled:cursor-not-allowed mt-4"
+                  >
+                    {loading ? "Sending..." : "Continue"}
+                  </button>
+                  <p className="text-xs text-gray-500 text-center mt-4 px-2">
+                    By continuing, you agree to our{" "}
+                    <a href="/terms" className="text-brand-primary hover:underline">Terms of service</a>
+                    {" "}& {" "}
+                    <a href="/privacy" className="text-brand-primary hover:underline">Privacy policy</a>
+                  </p>
+                </form>
+              )}
+              {step === "password" && (
+                <form onSubmit={handleVerifyPassword} className="space-y-4">
+                  <div>
+                    <input
+                      ref={passwordInputRef}
+                      id="password"
+                      name="password"
+                      type="password"
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      className="w-full px-3 sm:px-4 py-3 sm:py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent text-gray-800 text-base sm:text-lg"
+                      placeholder="Enter your password"
+                      minLength={6}
+                      required
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={loading || password.length < 6}
+                    className="w-full bg-brand-primary text-white py-3 sm:py-4 rounded-lg hover:bg-brand-primary-dark transition duration-200 font-semibold text-base sm:text-lg disabled:opacity-50 disabled:cursor-not-allowed mt-4"
+                  >
+                    {loading ? "Verifying..." : "Verify Password"}
+                  </button>
+                  <div className="text-center mt-4">
                     <button
                       type="button"
                       className="text-gray-600 hover:text-gray-700 text-sm font-medium flex items-center justify-center w-full"
                       onClick={() => { 
                         setStep("phone"); 
-                        setOtp(""); 
-                        setPassword("");
+                        setPassword(""); 
                         setRequiresPassword(false);
                         setUserRole(null);
                       }}
@@ -457,24 +392,153 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                       Change phone number
                     </button>
                   </div>
-                </div>
-              </div>
-            </form>
-          )}
+                </form>
+              )}
+              {step === "otp" && (
+                <form onSubmit={handleVerifyOtp} className="space-y-4">
+                  <div>
+                    <div className="flex flex-col items-center space-y-4">
+                      <OTPInput
+                        value={otp}
+                        onChange={async (value) => {
+                        setOtp(value);
+                        if (value.length === 6 && !loading) {
+                          const verifyOtp = async () => {
+                            if (loading) return;
+                            setLoading(true);
+                            try {
+                              const res = await fetch(`${API_URL}/verify-otp`, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ phone, otp: value, sessionId }),
+                              });
+                              const data = await res.json();
+                              if (!res.ok) throw new Error(data.message || data.error || "Invalid OTP");
+                              dispatch(setToken(data.token));
+                              toast.success("Login successful!");
+                              setStep("phone");
+                              setPhone("");
+                              setPassword("");
+                              setOtp("");
+                              setSessionId("");
+                              setRequiresPassword(false);
+                              setUserRole(null);
+                              if (!data.user?.name || !data.user?.email) {
+                                if (data.token) {
+                                  localStorage.setItem("token", data.token);
+                                }
+                                setProfileName(data.user?.name || "");
+                                setProfileEmail(data.user?.email || "");
+                                setStep("completeProfile" as any);
+                              } else {
+                                if (data.token) {
+                                  localStorage.setItem("token", data.token);
+                                }
+                                dispatch(fetchProfile());
+                                handleClose();
+                              }
+                            } catch (err: any) {
+                              toast.error(err.message || "Invalid OTP");
+                              setOtp("");
+                            } finally {
+                              setLoading(false);
+                            }
+                          };
+                          verifyOtp();
+                        }
+                      }}
+                      disabled={loading}
+                    />
+                    </div>
+                    <div className="text-center space-y-4 mt-6">
+                      <button
+                        type="button"
+                        className="text-brand-primary hover:text-brand-primary-dark text-sm font-medium"
+                        onClick={requiresPassword ? handleVerifyPassword : handleSendOtp}
+                        disabled={loading || seconds > 0}
+                      >
+                        {`Resend ${requiresPassword ? 'Verification code' : 'Code'} ${seconds > 0 ? `(${seconds}s)` : ''}`}
+                      </button>
+                      <div>
+                        <button
+                          type="button"
+                          className="text-gray-600 hover:text-gray-700 text-sm font-medium flex items-center justify-center w-full"
+                          onClick={() => { 
+                            setStep("phone"); 
+                            setOtp(""); 
+                            setPassword("");
+                            setRequiresPassword(false);
+                            setUserRole(null);
+                          }}
+                          disabled={loading}
+                        >
+                          <ChevronLeft size={16} className="mr-1" />
+                          Change phone number
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </form>
+              )}
+            </motion.div>
+          </AnimatePresence>
         </div>
       </div>
-      <CompleteProfileModal
-        isOpen={showCompleteProfile}
-        onClose={() => { setShowCompleteProfile(false); handleClose(); }}
-        user={loggedInUser}
-        onProfileUpdated={(updated) => {
-          setShowCompleteProfile(false);
-          setLoggedInUser(null);
-          // Fetch and update user profile in Redux
-          dispatch(fetchProfile());
-          handleClose();
-        }}
-      />
+      <AnimatePresence>
+        {step === ("completeProfile" as any) && (
+          <div className="fixed inset-0 flex items-center justify-center bg-black/20 z-[999] p-4">
+            <motion.div
+              key="complete-profile"
+              initial={{ opacity: 0, y: 12, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -12, scale: 0.98 }}
+              transition={{ duration: 0.22, ease: "easeOut" }}
+              className="bg-white rounded-xl p-4 sm:p-6 w-full max-w-md relative shadow-xl max-h-[90vh] overflow-y-auto"
+            >
+            <button
+              onClick={handleClose}
+              className="absolute top-3 right-3 sm:top-4 sm:right-4 text-gray-500 hover:text-gray-700 z-10"
+              aria-label="Close modal"
+            >
+              <X size={20} />
+            </button>
+            <div className="mb-6 sm:mb-8 text-center">
+              <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-2">Complete Your Profile</h2>
+              <p className="text-sm sm:text-base text-gray-600 px-2">Please provide your details to continue</p>
+            </div>
+            <form onSubmit={handleCompleteProfileSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Full Name</label>
+                <input
+                  type="text"
+                  value={profileName}
+                  onChange={(e) => setProfileName(e.target.value)}
+                  className="w-full px-3 sm:px-4 py-3 sm:py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent text-gray-800 text-base sm:text-lg"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Email</label>
+                <input
+                  type="email"
+                  value={profileEmail}
+                  onChange={(e) => setProfileEmail(e.target.value)}
+                  className="w-full px-3 sm:px-4 py-3 sm:py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent text-gray-800 text-base sm:text-lg"
+                  required
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-brand-primary text-white py-3 sm:py-4 rounded-lg hover:bg-brand-primary-dark transition duration-200 font-semibold text-base sm:text-lg disabled:opacity-50 disabled:cursor-not-allowed mt-2"
+              >
+                {loading ? "Saving..." : "Save"}
+              </button>
+            </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </>
   );
 }

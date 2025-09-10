@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import AdminLayout from "../../components/AdminLayout"
+import MobileDeliveryAdminLayout from "../../components/MobileDeliveryAdminLayout"
 import { useAppSelector } from '../../lib/store'
 import { isAdminUser } from '../../lib/adminAuth'
 import { apiGet } from "../../lib/api-client"
@@ -446,20 +447,39 @@ export default function AdminDashboard() {
 
   if (loading) {
     return (
-      <AdminLayout>
-        {renderSkeleton()}
-      </AdminLayout>
+      <>
+        {role === 'delivery_boy' ? (
+          <MobileDeliveryAdminLayout>
+            {renderSkeleton()}
+          </MobileDeliveryAdminLayout>
+        ) : (
+          <AdminLayout>
+            {renderSkeleton()}
+          </AdminLayout>
+        )}
+      </>
     )
   }
 
   if (error) {
     return (
-      <AdminLayout>
-        <div className="max-w-3xl mx-auto mt-10 p-6 bg-red-50 border border-red-200 rounded-lg">
-          <h2 className="text-red-700 font-semibold mb-2">Unable to load dashboard</h2>
-          <p className="text-red-600 text-sm">{error}</p>
-        </div>
-      </AdminLayout>
+      <>
+        {role === 'delivery_boy' ? (
+          <MobileDeliveryAdminLayout>
+            <div className="max-w-3xl mx-auto mt-10 p-6 bg-red-50 border border-red-200 rounded-lg">
+              <h2 className="text-red-700 font-semibold mb-2">Unable to load dashboard</h2>
+              <p className="text-red-600 text-sm">{error}</p>
+            </div>
+          </MobileDeliveryAdminLayout>
+        ) : (
+          <AdminLayout>
+            <div className="max-w-3xl mx-auto mt-10 p-6 bg-red-50 border border-red-200 rounded-lg">
+              <h2 className="text-red-700 font-semibold mb-2">Unable to load dashboard</h2>
+              <p className="text-red-600 text-sm">{error}</p>
+            </div>
+          </AdminLayout>
+        )}
+      </>
     )
   }
 
@@ -1258,71 +1278,6 @@ export default function AdminDashboard() {
           </div>
         </SectionCard>
       </div>
-
-      <SectionCard title="Today's Deliveries" className="col-span-full">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b-2 border-gray-200 bg-gray-50">
-                <th className="text-left py-3 px-4 font-semibold text-gray-700">Order ID</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-700">Customer</th>
-                <th className="text-center py-3 px-4 font-semibold text-gray-700">Delivery Address</th>
-                <th className="text-center py-3 px-4 font-semibold text-gray-700">Amount</th>
-                <th className="text-center py-3 px-16 font-semibold text-gray-700">Delivered At</th>
-                <th className="text-center py-3 px-4 font-semibold text-gray-700">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(data?.todayDeliveries || []).map((delivery: any) => (
-                <tr key={delivery._id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                  <td className="py-3 px-4 font-medium text-blue-600">
-                  <div>
-                      <p className="font-medium text-gray-900">{delivery.orderId}</p>
-                      <p className="text-sm text-gray-500">{delivery.items.length} items</p>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4">
-                    <div>
-                      <p className="font-medium text-gray-900">{delivery.customerInfo?.name}</p>
-                      <p className="text-sm text-gray-500">{delivery.customerInfo?.phone}</p>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 text-center">
-                    <div className="max-w-md">
-                      <p className="text-sm text-gray-600">{delivery.deliveryInfo?.address?.area}, {delivery.deliveryInfo?.address?.city}</p>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 text-center font-medium text-green-600">{currency(delivery.pricing?.total || 0)}</td>
-                  <td className="py-3 px-4 text-center text-sm text-gray-600">
-                    {delivery.actualDeliveryDate ? (
-                      <div>
-                        <p className="font-medium">{new Date(delivery.actualDeliveryDate).toLocaleDateString()}</p>
-                        <p className="text-xs text-gray-500">{new Date(delivery.actualDeliveryDate).toLocaleTimeString()}</p>
-                      </div>
-                    ) : '-'}
-                  </td>
-                  <td className="py-3 px-4 text-center">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                      <CheckCircle className="h-3 w-3 mr-1" />
-                      Delivered
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {(!data?.todayDeliveries || data?.todayDeliveries.length === 0) && (
-                <tr>
-                  <td colSpan={7} className="py-8 text-center">
-                    <div className="flex flex-col items-center">
-                      <CheckCircle className="h-12 w-12 text-gray-400 mb-2" />
-                      <p className="text-gray-500 text-sm">No deliveries completed today</p>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </SectionCard>
     </div>
   )
 
@@ -1350,8 +1305,16 @@ export default function AdminDashboard() {
   }
 
   return (
-    <AdminLayout>
-      {renderContent()}
-    </AdminLayout>
+    <>
+      {role === 'delivery_boy' ? (
+        <MobileDeliveryAdminLayout>
+          {renderContent()}
+        </MobileDeliveryAdminLayout>
+      ) : (
+        <AdminLayout>
+          {renderContent()}
+        </AdminLayout>
+      )}
+    </>
   )
 }

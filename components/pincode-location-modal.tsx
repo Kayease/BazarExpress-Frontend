@@ -12,9 +12,10 @@ interface PincodeLocationModalProps {
   isOpen: boolean;
   onClose: () => void;
   showOnMount?: boolean;
+  managedOpen?: boolean; // when true, disable internal auto-show logic and rely on isOpen
 }
 
-export function PincodeLocationModal({ isOpen, onClose, showOnMount = false }: PincodeLocationModalProps) {
+export function PincodeLocationModal({ isOpen, onClose, showOnMount = false, managedOpen = true }: PincodeLocationModalProps) {
   const {
     locationState,
     isLoading,
@@ -31,13 +32,15 @@ export function PincodeLocationModal({ isOpen, onClose, showOnMount = false }: P
   const [autoShowTimer, setAutoShowTimer] = useState<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
+    if (managedOpen) return;
     if (showOnMount && !locationState.isLocationDetected) {
       setShouldShow(true);
     }
-  }, [showOnMount, locationState.isLocationDetected]);
+  }, [managedOpen, showOnMount, locationState.isLocationDetected]);
 
   // Auto-show modal after failed location detection
   useEffect(() => {
+    if (managedOpen) return;
     // Clear any existing timer
     if (autoShowTimer) {
       clearTimeout(autoShowTimer);
@@ -69,11 +72,11 @@ export function PincodeLocationModal({ isOpen, onClose, showOnMount = false }: P
       
       console.log('PincodeLocationModal - Setting up auto-show timer due to failed location detection');
       
-      // Show modal after 3 seconds delay
+      // Show modal after 10 seconds delay (allow more time for auto-detect)
       const timer = setTimeout(() => {
         console.log('PincodeLocationModal - Auto-showing modal after failed location detection');
         setShouldShow(true);
-      }, 3000);
+      }, 10000);
       
       setAutoShowTimer(timer);
     }
@@ -85,7 +88,7 @@ export function PincodeLocationModal({ isOpen, onClose, showOnMount = false }: P
         setAutoShowTimer(null);
       }
     };
-  }, [locationState.isLocationDetected, isLoading, error, isOpen, shouldShow, autoShowTimer]);
+  }, [managedOpen, locationState.isLocationDetected, isLoading, error, isOpen, shouldShow, autoShowTimer]);
 
   // Cleanup timer on component unmount
   useEffect(() => {
@@ -152,11 +155,11 @@ export function PincodeLocationModal({ isOpen, onClose, showOnMount = false }: P
     sessionStorage.setItem('modalDismissedAt', Date.now().toString());
   };
 
-  const modalOpen = isOpen || shouldShow;
+  const modalOpen = managedOpen ? isOpen : (isOpen || shouldShow);
 
   return (
     <Dialog open={modalOpen} onOpenChange={handleClose}>
-      <DialogContent className="w-[95vw] max-w-md mx-auto p-4 sm:p-6 max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[95vw] max-w-md mx-auto p-4 sm:p-6 max-h-[90vh] overflow-y-auto rounded-xl sm:rounded-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base sm:text-lg font-semibold">
             <MapPin className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600 flex-shrink-0" />

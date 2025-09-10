@@ -1,12 +1,13 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { Search, Eye, Package, Truck, CheckCircle, X, RefreshCw, Loader2, Calendar, CreditCard, MapPin, User, Warehouse, Download } from "lucide-react"
+import { Search, Eye, Package, Phone, Truck, CheckCircle, X, RefreshCw, Loader2, Calendar, CreditCard, MapPin, User, Warehouse, Download } from "lucide-react"
 import { useAppSelector } from '../lib/store'
 import toast from 'react-hot-toast'
 import { useDebounce } from '../hooks/use-debounce'
 import { useAdminStatsRefresh } from '../lib/hooks/useAdminStatsRefresh'
 import WarehousePickingModal from './WarehousePickingModal'
+import { useRef } from 'react'
 
 interface OrderItem {
   productId: string
@@ -129,6 +130,9 @@ interface OrdersTableProps {
   showStatsCards?: boolean // Control whether to show stats cards
   endpoint?: string // Custom endpoint for different pages
   filterByWarehouse?: boolean // For warehouse-specific filtering
+  // New: allow hiding columns per role/section
+  hideWarehouseColumn?: boolean
+  hideStatusColumn?: boolean
 }
 
 export default function OrdersTable({
@@ -140,7 +144,9 @@ export default function OrdersTable({
   showAssignedColumn = true,
   showStatsCards = false,
   endpoint,
-  filterByWarehouse = false
+  filterByWarehouse = false,
+  hideWarehouseColumn = false,
+  hideStatusColumn = false
 }: OrdersTableProps) {
   const token = useAppSelector((state) => state.auth.token)
   const user = useAppSelector((state) => state.auth.user)
@@ -195,6 +201,16 @@ export default function OrdersTable({
     setResendSecondsLeft(seconds)
   }
 
+  // Lock background scroll when modal is open
+  useEffect(() => {
+    if (!viewing) return
+    const originalOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = originalOverflow || ''
+    }
+  }, [viewing])
+
   useEffect(() => {
     if (resendSecondsLeft <= 0) return
     const timer = setInterval(() => {
@@ -221,6 +237,10 @@ export default function OrdersTable({
   
   // Track if search is being processed
   const isSearching = searchTerm !== debouncedSearchTerm
+
+  // Manual refresh placeholder (defined later after callbacks)
+  const handleManualRefreshRef = useRef<() => Promise<void>>()
+  const [manualRefreshing, setManualRefreshing] = useState(false)
 
   const fetchOrders = useCallback(async (page = 1) => {
     // Avoid refreshing orders while OTP modal is active to prevent modal remount/flicker
@@ -374,6 +394,20 @@ export default function OrdersTable({
       // Don't show error toast for stats as it's not critical
     }
   }, [token, shouldShowStatsCards])
+
+  // Now that fetchOrders and fetchOrderStats are defined, set the manual refresh handler
+  handleManualRefreshRef.current = async () => {
+    if (loading || manualRefreshing) return
+    setManualRefreshing(true)
+    try {
+      await Promise.all([
+        fetchOrders(currentPage),
+        shouldShowStatsCards ? fetchOrderStats() : Promise.resolve()
+      ])
+    } finally {
+      setManualRefreshing(false)
+    }
+  }
 
   // Function to fetch order with product location details
   const fetchOrderWithProductLocations = useCallback(async (order: Order): Promise<Order> => {
@@ -1092,26 +1126,103 @@ export default function OrdersTable({
         )}
 
         {/* Filters */}
-        <div className="bg-white rounded-lg p-6 shadow-md border border-gray-200">
+        {/* Mobile-friendly layout for delivery agents */}
+        {isDeliveryAgent && (
+          <div className="md:hidden bg-white rounded-xl border p-4 shadow-sm mb-4">
+            <div className="space-y-3">
+              {/* Row 1: Search + Refresh */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    {isSearching && (
+                      <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 animate-spin" />
+                    )}
+                    <input
+                      type="text"
+                      placeholder={isSearching ? "Searching..." : "Search by order ID, customer name, or phone..."}
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className={`w-full h-11 rounded-lg pl-10 pr-3 border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-xs ${isSearching ? 'pr-10' : ''}`}
+                    />
+                  </div>
+                  <button
+                    onClick={() => handleManualRefreshRef.current && handleManualRefreshRef.current()}
+                    className="h-11 w-11 inline-flex items-center justify-center rounded-lg bg-brand-primary text-white hover:bg-brand-primary-dark disabled:opacity-50"
+                    disabled={loading || manualRefreshing}
+                    title="Refresh orders"
+                    aria-label="Refresh orders"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${(loading || manualRefreshing) ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
+              </div>
+              {/* Row 2: Status (optional) + Warehouse */}
+              <div className={`grid ${showStatusFilter ? 'grid-cols-2' : 'grid-cols-1'} gap-3`}>
+                {showStatusFilter && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                    <select
+                      value={filterStatus}
+                      onChange={(e) => setFilterStatus(e.target.value)}
+                      className="w-full h-11 rounded-lg border border-gray-200 bg-white px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs"
+                    >
+                      <option value="all">All Status</option>
+                      <option value="new">New</option>
+                      <option value="processing">Processing</option>
+                      <option value="shipped">Shipped</option>
+                      <option value="delivered">Delivered</option>
+                      <option value="cancelled">Cancelled</option>
+                      <option value="refunded">Refunded</option>
+                    </select>
+                  </div>
+                )}
+                {showWarehouseFilter && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Warehouse</label>
+                    <select
+                      value={filterWarehouse}
+                      onChange={(e) => setFilterWarehouse(e.target.value)}
+                      className="w-full h-11 rounded-lg border border-gray-200 bg-white px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs"
+                    >
+                      <option value="all">All Warehouses</option>
+                      {warehouseOptions.map((warehouse) => (
+                        <option key={warehouse._id} value={warehouse._id}>
+                          {warehouse.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+        <div className={`bg-white rounded-lg p-6 shadow-md border border-gray-200 ${isDeliveryAgent ? 'hidden md:block' : ''}`}>
           <div className="flex flex-col space-y-4 md:flex-row md:space-y-0 md:space-x-4">
             {/* Search */}
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              {isSearching && (
-                <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 animate-spin" />
-              )}
-              <input
-                type="text"
-                placeholder={isSearching ? "Searching..." : "Search by order ID, customer name, or phone..."}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className={`w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm ${isSearching ? 'pr-10' : ''}`}
-              />
+            <div className="flex-1">
+              <label className="block text-xs text-gray-500 mb-1">Search</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                {isSearching && (
+                  <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 animate-spin" />
+                )}
+                <input
+                  type="text"
+                  placeholder={isSearching ? "Searching..." : "Search by order ID, customer name, or phone..."}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className={`w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm ${isSearching ? 'pr-10' : ''}`}
+                />
+              </div>
             </div>
             
             {/* Status Filter */}
             {showStatusFilter && (
               <div className="min-w-[160px]">
+                <label className="block text-xs text-gray-500 mb-1">Status</label>
                 <select
                   value={filterStatus}
                   onChange={(e) => setFilterStatus(e.target.value)}
@@ -1131,6 +1242,7 @@ export default function OrdersTable({
             {/* Warehouse Filter */}
             {showWarehouseFilter && (
               <div className="min-w-[180px]">
+                <label className="block text-xs text-gray-500 mb-1">Warehouse</label>
                 <select
                   value={filterWarehouse}
                   onChange={(e) => setFilterWarehouse(e.target.value)}
@@ -1149,6 +1261,7 @@ export default function OrdersTable({
             {/* Delivery Agent Filter */}
             {shouldShowDeliveryAgentFilterForUser && (
               <div className="min-w-[200px]">
+                <label className="block text-xs text-gray-500 mb-1">Assigned Agent</label>
                 <select
                   value={filterDeliveryAgent}
                   onChange={(e) => setFilterDeliveryAgent(e.target.value)}
@@ -1166,227 +1279,398 @@ export default function OrdersTable({
                 </select>
               </div>
             )}
+
+            {/* Refresh Button */}
+            <div className="md:ml-auto md:self-center md:pt-4">
+              <button
+                onClick={() => handleManualRefreshRef.current && handleManualRefreshRef.current()}
+                className="w-full md:w-auto inline-flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-brand-primary text-white text-sm font-medium hover:bg-brand-primary-dark transition-colors disabled:opacity-50"
+                disabled={loading || manualRefreshing}
+                title="Refresh orders"
+              >
+                <RefreshCw className={`h-5 w-5 ${(loading || manualRefreshing) ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Orders Table */}
-<div className="bg-white rounded-lg shadow-md overflow-hidden">
-  <div className="overflow-x-auto">
-    <table className="w-full">
-      <thead className="bg-gray-50 border-b border-gray-200">
-        <tr>
-          <th className="text-left py-3 px-3 font-semibold text-xs text-gray-700 w-24">Order ID</th>
-          <th className="text-left py-3 px-3 font-semibold text-xs text-gray-700 w-28">Customer</th>
-          <th className="text-left py-3 px-3 font-semibold text-xs text-gray-700 w-20">Amount</th>
-          <th className="text-center py-3 px-3 font-semibold text-xs text-gray-700 w-24">Status</th>
-          <th className="text-center py-3 px-3 font-semibold text-xs text-gray-700 w-28">Warehouse</th>
-          {showAssignedColumn && (
-            <th className="py-3 px-3 font-semibold text-xs text-gray-700 w-28 text-center">Assigned to</th>
-          )}
-          <th className="text-center py-3 px-3 font-semibold text-xs text-gray-700 w-32">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {paginatedOrders.length === 0 ? (
-          <tr>
-            <td colSpan={showAssignedColumn ? 7 : 6} className="py-8 text-center text-gray-500">
-              {orders.length === 0 ? "No orders found" : "No orders on this page"}
-            </td>
-          </tr>
-        ) : (
-          paginatedOrders.map((order) => {
-            const StatusIcon = statusConfig[order.status as keyof typeof statusConfig].icon
-            const statusColor = statusConfig[order.status as keyof typeof statusConfig].color
-            const statusBg = statusConfig[order.status as keyof typeof statusConfig].bg
-
-            const formatAddress = (address: any) => {
-              return `${address.building ? address.building + ', ' : ''}${address.city || ''}`
-            }
-
-            return (
-              <tr key={order._id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                {/* Order ID */}
-                <td className="py-3 px-3">
-                          <div className="text-xs font-medium text-gray-900 truncate">
-                            <p className="font-semibold text-xs text-gray-900">{order.orderId}</p>
-                          <p className="text-xs text-gray-500">{new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year:'numeric' })}</p>
-                            <p className="text-xs text-gray-500">{order.items.length} items</p>
-                          </div>
-                </td>
-                
-                {/* Customer */}
-                <td className="py-3 px-3">
-                  <div className="space-y-1">
-                    <div className="text-xs font-medium text-gray-900 truncate" title={order.customerInfo.name}>
-                      {order.customerInfo.name}
-                    </div>
-                    <div className="text-xs text-gray-500 truncate" title={order.customerInfo.email}>
-                              {order.customerInfo.email}
-                            </div>
-                    <div className="text-xs text-gray-500 truncate" title={order.customerInfo.phone}>
-                      {order.customerInfo.phone}
-                    </div>
-                  </div>
-                </td>
-                
-                {/* Amount */}
-                <td className="py-3 px-3">
-                  <div className="text-xs font-semibold text-gray-900">
-                    ₹{Math.ceil(order.pricing.total)}
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    {order.paymentInfo.method === 'cod' ? 'COD' : 'Online'}
-                  </div>
-                </td>
-                
-                {/* Status */}
-                <td className="py-3 px-3 text-center">
-                  <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs ${statusBg} ${statusColor}`}>
-                    <StatusIcon className="h-3 w-3 mr-1" />
-                    {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-                  </div>
-                </td>
-
-                
-                {/* Warehouse */}
-                <td className="py-3 px-3 text-center">
-                  <div className="text-xs text-gray-600 truncate" title={order.warehouseInfo.warehouseName}>
-                    {order.warehouseInfo.warehouseName}
-                  </div>
-                </td>
-                
-                {/* Assigned to */}
-                {showAssignedColumn && (
-                  <td className="py-3 px-3 text-center">
-                    {order.assignedDeliveryBoy ? (
-                      <div className="text-xs text-gray-600 truncate" title={`${order.assignedDeliveryBoy.name} - ${order.assignedDeliveryBoy.phone}`}>
-                        {order.assignedDeliveryBoy.name}
+        {/* Orders List */}
+        {isDeliveryAgent ? (
+          <div className="space-y-3">
+            {paginatedOrders.length === 0 ? (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 text-center text-gray-500">
+                No orders found
+              </div>
+            ) : (
+              paginatedOrders.map((order) => {
+                const StatusIcon = statusConfig[order.status as keyof typeof statusConfig].icon
+                const statusColor = statusConfig[order.status as keyof typeof statusConfig].color
+                const statusBg = statusConfig[order.status as keyof typeof statusConfig].bg
+                const hideStatusPill = (statusFilter === 'shipped' || statusFilter === 'delivered')
+                return (
+                  <div key={order._id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-gray-900">{order.orderId}</span>
+                        </div>
+                        <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-2">
+                          <span>{new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year:'numeric' })}</span>
+                          {!hideStatusPill && (
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] ${statusBg} ${statusColor}`}>
+                              <StatusIcon className="h-3 w-3 mr-1" />
+                              {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    ) : (
-                      <span className="text-gray-400 text-xs">---</span>
-                    )}
-                  </td>
-                )}
-                
-                {/* Actions */}
-                <td className="py-3 px-3 text-center">
-                  <div className="flex items-center justify-center space-x-1">
-                    <button
-                      onClick={() => openView(order)}
-                      className="inline-flex items-center px-2 py-2 text-xs font-medium text-white bg-purple-600 hover:bg-purple-700 rounded transition-colors"
-                      title="View Details"
-                    >
-                      <Eye className="h-3 w-3" />
-                    </button>
-                    <button
-                      onClick={() => openMap(order)}
-                      className="inline-flex items-center px-2 py-2 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded transition-colors"
-                      title="View Location on Map"
-                    >
-                      <MapPin className="h-3 w-3" />
-                    </button>
-                    {/* Download Invoice Button - Only for warehouse managers and admins */}
-                    {(user?.role === 'order_warehouse_management' || user?.role === 'admin') && (
+                      <div className="text-right">
+                        <div className="text-sm font-bold text-gray-900">₹{Math.ceil(order.pricing.total)}</div>
+                        <div className="text-xs text-gray-500">{order.paymentInfo.method === 'cod' ? 'COD' : 'Online'}</div>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1 text-gray-700">
+                          <User className="h-3.5 w-3.5" />
+                          <span className="truncate" title={order.customerInfo.name}>{order.customerInfo.name}</span>
+                        </div>
+                        <div className="text-gray-500 truncate" title={order.customerInfo.phone}>{order.customerInfo.phone}</div>
+                      </div>
+                      <div className="space-y-1 text-right">
+                        <div className="flex items-center justify-end gap-1 text-gray-700">
+                          <Warehouse className="h-3.5 w-3.5" />
+                          <span className="truncate" title={order.warehouseInfo.warehouseName}>{order.warehouseInfo.warehouseName}</span>
+                        </div>
+                        {order.deliveryInfo?.address?.city && (
+                          <div className="flex items-center justify-end gap-1 text-gray-500">
+                            <MapPin className="h-3.5 w-3.5" />
+                            <span className="truncate">{order.deliveryInfo.address.city}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-between">
+                      <div className="flex items-center gap-1 text-xs text-gray-500">
+                        <Calendar className="h-3.5 w-3.5" />
+                        <span>{`${order.items.length} ${order.items.length === 1 ? 'item' : 'items'}`}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
                       <button
-                        onClick={() => handleOpenPickingModal(order)}
-                        className="inline-flex items-center px-2 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded transition-colors"
-                        title="Generate Warehouse Picking List"
+                        onClick={() => openView(order)}
+                        className="inline-flex items-center px-3 py-2 text-xs font-medium text-white bg-purple-600 hover:bg-purple-700 rounded"
+                        title="View Details"
                       >
-                        <Download className="h-3 w-3" />
+                        <Eye className="h-3.5 w-3.5" />
                       </button>
-                    )}
+                      <a
+                        href={`tel:${order.customerInfo.phone}`}
+                        className="inline-flex items-center px-3 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded"
+                        title="Call Customer"
+                      >
+                        <Phone className="h-3.5 w-3.5" />
+                      </a>
+                      <button
+                        onClick={() => openMap(order)}
+                        className="inline-flex items-center px-3 py-2 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded"
+                        title="View Location on Map"
+                      >
+                        <MapPin className="h-3.5 w-3.5" />
+                      </button>
+                      </div>
+                    </div>
                   </div>
-                </td>
-              </tr>
-            )
-          })
-        )}
-      </tbody>
-    </table>
-  </div>
+                )
+              })
+            )}
 
-          {/* Pagination */}
-          {paginatedOrders.length > 0 && (
-            <div className="flex justify-between items-center px-6 py-4 border-t border-gray-200">
-              <p className="text-sm text-gray-600">
-                Showing {((currentPage - 1) * ORDERS_PER_PAGE) + 1} to {Math.min(currentPage * ORDERS_PER_PAGE, totalOrders)} of {totalOrders} orders
-              </p>
-              {totalPages > 1 && (
-                <div className="flex items-center space-x-2">
-                  <button
-                    className="px-3 py-1 rounded border text-sm font-medium bg-gray-50 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                    onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
-                    disabled={currentPage === 1}
-                  >
-                    Previous
-                  </button>
-                  {(() => {
-                    const maxVisiblePages = 5;
-                    const pages = [];
-
-                    if (totalPages <= maxVisiblePages) {
-                      // Show all pages if total is small
-                      for (let i = 1; i <= totalPages; i++) {
-                        pages.push(i);
+            {paginatedOrders.length > 0 && (
+              <div className="flex justify-between items-center px-1 py-2">
+                <p className="text-sm text-gray-600">
+                  Showing {((currentPage - 1) * ORDERS_PER_PAGE) + 1} to {Math.min(currentPage * ORDERS_PER_PAGE, totalOrders)} of {totalOrders} orders
+                </p>
+                {totalPages > 1 && (
+                  <div className="flex items-center space-x-2">
+                    <button
+                      className="px-3 py-1 rounded border text-sm font-medium bg-gray-50 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      Previous
+                    </button>
+                    {(() => {
+                      const maxVisiblePages = 5; const pages: (number | string)[] = [];
+                      if (totalPages <= maxVisiblePages) {
+                        for (let i = 1; i <= totalPages; i++) pages.push(i);
+                      } else {
+                        const startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+                        const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+                        const adjustedStart = Math.max(1, endPage - maxVisiblePages + 1);
+                        for (let i = adjustedStart; i <= endPage; i++) pages.push(i);
+                        if (adjustedStart > 1) { pages.unshift('...'); pages.unshift(1); }
+                        if (endPage < totalPages) { pages.push('...'); pages.push(totalPages); }
                       }
-                    } else {
-                      // Smart pagination logic
-                      const startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-                      const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+                      return pages.map((page, index) => (
+                        page === '...'
+                          ? <span key={`ellipsis-${index}`} className="px-3 py-1 text-sm text-gray-500">...</span>
+                          : (
+                            <button
+                              key={page as number}
+                              className={`px-3 py-1 rounded text-sm font-medium border ${currentPage === page ? 'bg-brand-primary text-white border-brand-primary' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
+                              onClick={() => handlePageChange(page as number)}
+                            >
+                              {page}
+                            </button>
+                          )
+                      ));
+                    })()}
+                    <button
+                      className="px-3 py-1 rounded border text-sm font-medium bg-gray-50 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
+                      disabled={currentPage === totalPages}
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="bg-white rounded-lg shadow-md overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="text-left py-3 px-3 font-semibold text-xs text-gray-700 w-24">Order ID</th>
+                    <th className="text-left py-3 px-3 font-semibold text-xs text-gray-700 w-28">Customer</th>
+                    <th className="text-left py-3 px-3 font-semibold text-xs text-gray-700 w-20">Amount</th>
+                    {!hideStatusColumn && (
+                      <th className="text-center py-3 px-3 font-semibold text-xs text-gray-700 w-24">Status</th>
+                    )}
+                    {!hideWarehouseColumn && (
+                      <th className="text-center py-3 px-3 font-semibold text-xs text-gray-700 w-28">Warehouse</th>
+                    )}
+                    {showAssignedColumn && (
+                      <th className="py-3 px-3 font-semibold text-xs text-gray-700 w-28 text-center">Assigned to</th>
+                    )}
+                    <th className="text-center py-3 px-3 font-semibold text-xs text-gray-700 w-32">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedOrders.length === 0 ? (
+                    <tr>
+                      {(() => {
+                        const assignedCol = showAssignedColumn ? 1 : 0
+                        const statusCol = hideStatusColumn ? 0 : 1
+                        const warehouseCol = hideWarehouseColumn ? 0 : 1
+                        const totalCols = 4 + assignedCol + statusCol + warehouseCol
+                        return (
+                          <td colSpan={totalCols} className="py-8 text-center text-gray-500">
+                            {orders.length === 0 ? "No orders found" : "No orders on this page"}
+                          </td>
+                        )
+                      })()}
+                    </tr>
+                  ) : (
+                    paginatedOrders.map((order) => {
+                      const StatusIcon = statusConfig[order.status as keyof typeof statusConfig].icon
+                      const statusColor = statusConfig[order.status as keyof typeof statusConfig].color
+                      const statusBg = statusConfig[order.status as keyof typeof statusConfig].bg
 
-                      // Adjust start if we're near the end
-                      const adjustedStart = Math.max(1, endPage - maxVisiblePages + 1);
-
-                      for (let i = adjustedStart; i <= endPage; i++) {
-                        pages.push(i);
+                      const formatAddress = (address: any) => {
+                        return `${address.building ? address.building + ', ' : ''}${address.city || ''}`
                       }
 
-                      // Add ellipsis and first/last page if needed
-                      if (adjustedStart > 1) {
-                        pages.unshift('...');
-                        pages.unshift(1);
-                      }
-                      if (endPage < totalPages) {
-                        pages.push('...');
-                        pages.push(totalPages);
-                      }
-                    }
+                      return (
+                        <tr key={order._id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                          {/* Order ID */}
+                          <td className="py-3 px-3">
+                                    <div className="text-xs font-medium text-gray-900 truncate">
+                                      <p className="font-semibold text-xs text-gray-900">{order.orderId}</p>
+                                    <p className="text-xs text-gray-500">{new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year:'numeric' })}</p>
+                                      <p className="text-xs text-gray-500">{order.items.length} items</p>
+                                    </div>
+                          </td>
+                          
+                          {/* Customer */}
+                          <td className="py-3 px-3">
+                            <div className="space-y-1">
+                              <div className="text-xs font-medium text-gray-900 truncate" title={order.customerInfo.name}>
+                                {order.customerInfo.name}
+                              </div>
+                              <div className="text-xs text-gray-500 truncate" title={order.customerInfo.email}>
+                                        {order.customerInfo.email}
+                                      </div>
+                              <div className="text-xs text-gray-500 truncate" title={order.customerInfo.phone}>
+                                {order.customerInfo.phone}
+                              </div>
+                            </div>
+                          </td>
+                          
+                          {/* Amount */}
+                          <td className="py-3 px-3">
+                            <div className="text-xs font-semibold text-gray-900">
+                              ₹{Math.ceil(order.pricing.total)}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {order.paymentInfo.method === 'cod' ? 'COD' : 'Online'}
+                            </div>
+                          </td>
+                          
+                          {/* Status */}
+                          {!hideStatusColumn && (
+                            <td className="py-3 px-3 text-center">
+                              <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs ${statusBg} ${statusColor}`}>
+                                <StatusIcon className="h-3 w-3 mr-1" />
+                                {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                              </div>
+                            </td>
+                          )}
 
-                    return pages.map((page, index) => (
-                      page === '...' ? (
-                        <span key={`ellipsis-${index}`} className="px-3 py-1 text-sm text-gray-500">...</span>
-                      ) : (
-                        <button
-                          key={page}
-                          className={`px-3 py-1 rounded text-sm font-medium border ${currentPage === page ? 'bg-brand-primary text-white border-brand-primary' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
-                          onClick={() => handlePageChange(page as number)}
-                        >
-                          {page}
-                        </button>
+                          
+                          {/* Warehouse */}
+                          {!hideWarehouseColumn && (
+                            <td className="py-3 px-3 text-center">
+                              <div className="text-xs text-gray-600 truncate" title={order.warehouseInfo.warehouseName}>
+                                {order.warehouseInfo.warehouseName}
+                              </div>
+                            </td>
+                          )}
+                          
+                          {/* Assigned to */}
+                          {showAssignedColumn && (
+                            <td className="py-3 px-3 text-center">
+                              {order.assignedDeliveryBoy ? (
+                                <div className="text-xs text-gray-600 truncate" title={`${order.assignedDeliveryBoy.name} - ${order.assignedDeliveryBoy.phone}`}>
+                                  {order.assignedDeliveryBoy.name}
+                                </div>
+                              ) : (
+                                <span className="text-gray-400 text-xs">---</span>
+                              )}
+                            </td>
+                          )}
+                          
+                          {/* Actions */}
+                          <td className="py-3 px-3 text-center">
+                            <div className="flex items-center justify-center space-x-1">
+                              <button
+                                onClick={() => openView(order)}
+                                className="inline-flex items-center px-2 py-2 text-xs font-medium text-white bg-purple-600 hover:bg-purple-700 rounded transition-colors"
+                                title="View Details"
+                              >
+                                <Eye className="h-3 w-3" />
+                              </button>
+                              <button
+                                onClick={() => openMap(order)}
+                                className="inline-flex items-center px-2 py-2 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded transition-colors"
+                                title="View Location on Map"
+                              >
+                                <MapPin className="h-3 w-3" />
+                              </button>
+                              {/* Download Invoice Button - Only for warehouse managers and admins */}
+                              {(user?.role === 'order_warehouse_management' || user?.role === 'admin') && (
+                                <button
+                                  onClick={() => handleOpenPickingModal(order)}
+                                  className="inline-flex items-center px-2 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded transition-colors"
+                                  title="Generate Warehouse Picking List"
+                                >
+                                  <Download className="h-3 w-3" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
                       )
-                    ));
-                  })()}
-                  <button
-                    className="px-3 py-1 rounded border text-sm font-medium bg-gray-50 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                    onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
-                    disabled={currentPage === totalPages}
-                  >
-                    Next
-                  </button>
-                </div>
-              )}
+                    })
+                  )}
+                </tbody>
+              </table>
             </div>
-          )}
-        </div>
 
+            {/* Pagination */}
+            {paginatedOrders.length > 0 && (
+              <div className="flex justify-between items-center px-6 py-4 border-t border-gray-200">
+                <p className="text-sm text-gray-600">
+                  Showing {((currentPage - 1) * ORDERS_PER_PAGE) + 1} to {Math.min(currentPage * ORDERS_PER_PAGE, totalOrders)} of {totalOrders} orders
+                </p>
+                {totalPages > 1 && (
+                  <div className="flex items-center space-x-2">
+                    <button
+                      className="px-3 py-1 rounded border text-sm font-medium bg-gray-50 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      Previous
+                    </button>
+                    {(() => {
+                      const maxVisiblePages = 5;
+                      const pages = [];
 
+                      if (totalPages <= maxVisiblePages) {
+                        // Show all pages if total is small
+                        for (let i = 1; i <= totalPages; i++) {
+                          pages.push(i);
+                        }
+                      } else {
+                        // Smart pagination logic
+                        const startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+                        const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+                        // Adjust start if we're near the end
+                        const adjustedStart = Math.max(1, endPage - maxVisiblePages + 1);
+
+                        for (let i = adjustedStart; i <= endPage; i++) {
+                          pages.push(i);
+                        }
+
+                        // Add ellipsis and first/last page if needed
+                        if (adjustedStart > 1) {
+                          pages.unshift('...');
+                          pages.unshift(1);
+                        }
+                        if (endPage < totalPages) {
+                          pages.push('...');
+                          pages.push(totalPages);
+                        }
+                      }
+
+                      return pages.map((page, index) => (
+                        page === '...' ? (
+                          <span key={`ellipsis-${index}`} className="px-3 py-1 text-sm text-gray-500">...</span>
+                        ) : (
+                          <button
+                            key={page}
+                            className={`px-3 py-1 rounded text-sm font-medium border ${currentPage === page ? 'bg-brand-primary text-white border-brand-primary' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
+                            onClick={() => handlePageChange(page as number)}
+                          >
+                            {page}
+                          </button>
+                        )
+                      ));
+                    })()}
+                    <button
+                      className="px-3 py-1 rounded border text-sm font-medium bg-gray-50 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
+                      disabled={currentPage === totalPages}
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
       {/* Modern Order Details Modal */}
       {viewing && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[999]">
-          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[80vh] sm:max-h-[85vh] md:max-h-[90vh] overflow-y-auto shadow-2xl">
             {/* Header */}
-            <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-brand-primary to-brand-primary-dark text-white rounded-t-2xl">
+            <div className="sticky top-0 z-10 px-4 py-3 md:px-6 md:py-4 border-b border-gray-200 bg-gradient-to-r from-brand-primary to-brand-primary-dark text-white rounded-t-2xl">
               <div className="flex justify-between items-center">
                 <div>
                   <h3 className="text-xl font-bold">Order Details</h3>
@@ -1401,10 +1685,10 @@ export default function OrdersTable({
               </div>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="p-4 md:p-6 space-y-4 md:space-y-6">
               {/* Order Status and Info */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-gray-50 rounded-xl p-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 md:gap-4">
+                <div className="bg-gray-50 rounded-xl p-3 md:p-4">
                   <div className="flex items-center space-x-2 mb-2">
                     {(() => {
                       const StatusIcon = statusConfig[viewing.status as keyof typeof statusConfig].icon;
@@ -1417,7 +1701,7 @@ export default function OrdersTable({
                   </span>
                 </div>
 
-                <div className="bg-gray-50 rounded-xl p-4">
+                <div className="bg-gray-50 rounded-xl p-3 md:p-4">
                   <div className="flex items-center space-x-2 mb-2">
                     <Calendar className="w-4 h-4 text-brand-primary" />
                     <span className="text-sm font-medium text-gray-600">Order Date</span>
@@ -1431,7 +1715,7 @@ export default function OrdersTable({
                   </p>
                 </div>
 
-                <div className="bg-gray-50 rounded-xl p-4">
+                <div className="bg-gray-50 rounded-xl p-3 md:p-4">
                   <div className="flex items-center space-x-2 mb-2">
                     <CreditCard className="w-4 h-4 text-brand-primary" />
                     <span className="text-sm font-medium text-gray-600">Payment</span>
@@ -1453,7 +1737,7 @@ export default function OrdersTable({
               </div>
 
               {/* Delivery Address */}
-              <div className="bg-gray-50 rounded-xl p-4">
+              <div className="bg-gray-50 rounded-xl p-3 md:p-4">
                 <div className="flex items-center space-x-2 mb-3">
                   <MapPin className="w-5 h-5 text-brand-primary" />
                   <h4 className="font-semibold text-gray-900">Delivery Address</h4>
@@ -1462,7 +1746,6 @@ export default function OrdersTable({
                   <p className="font-medium">{viewing.customerInfo.name}</p>
                   <p>{viewing.deliveryInfo.address.building}</p>
                   <p>{viewing.deliveryInfo.address.area}</p>
-                  <p>{viewing.deliveryInfo.address.city}, {viewing.deliveryInfo.address.state} - {viewing.deliveryInfo.address.pincode}</p>
                   {viewing.deliveryInfo.address.landmark && (
                     <p className="text-gray-500">Near {viewing.deliveryInfo.address.landmark}</p>
                   )}
@@ -1477,9 +1760,9 @@ export default function OrdersTable({
                 </h4>
                 <div className="space-y-3">
                   {viewing.items.map((item: OrderItem, index: number) => (
-                    <div key={`${item.productId}-${index}`} className="flex items-center p-4 border border-gray-200 rounded-xl hover:shadow-sm transition-shadow">
+                    <div key={`${item.productId}-${index}`} className="flex items-center p-3 md:p-4 border border-gray-200 rounded-xl hover:shadow-sm transition-shadow">
                       {/* Product Image */}
-                      <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
+                      <div className="w-12 h-12 md:w-16 md:h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
                         {item.image ? (
                           <img
                             src={item.image}
