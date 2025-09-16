@@ -168,6 +168,28 @@ function extractStateFromAddress(address: string): string {
   return '';
 }
 
+// Format machine codes like "defective" or "wrong_item" to human-readable messages
+function formatReturnReason(reason?: string): string {
+  if (!reason) return 'Not provided';
+  const mapping: Record<string, string> = {
+    defective: 'Defective item',
+    damaged: 'Damaged item',
+    wrong_item: 'Wrong item received',
+    wrongproduct: 'Wrong product received',
+    size_issue: 'Size/fit issue',
+    not_needed: 'No longer needed',
+    changed_mind: 'Changed my mind',
+    expired: 'Expired product',
+    missing_parts: 'Missing parts/accessories',
+    not_as_described: 'Not as described',
+  };
+  const key = reason.toLowerCase().trim().replace(/\s+/g, '_').replace(/-/g, '_');
+  const mapped = mapping[key];
+  if (mapped) return mapped;
+  const cleaned = reason.replace(/[_-]+/g, ' ').trim();
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+}
+
 const statusConfig: Record<string, { label: string; color: string; bg: string; icon: any }> = {
   requested: { label: 'Requested', color: 'text-blue-600', bg: 'bg-blue-100', icon: Calendar },
   approved: { label: 'Approved', color: 'text-green-600', bg: 'bg-green-100', icon: CheckCircle },
@@ -664,6 +686,12 @@ export default function ReturnDetailsModal({ open, onClose, data, role, onUpdate
                 <p className="text-gray-500">Instructions: {data.pickupInfo.pickupInstructions}</p>
               )}
             </div>
+          </div>
+
+          {/* Return Reason */}
+          <div className="bg-gray-50 rounded-xl p-3 md:p-4">
+            <h4 className="font-semibold text-gray-900 mb-2">Return Reason</h4>
+            <p className="text-sm text-gray-700">{formatReturnReason(data.returnReason)}</p>
           </div>
 
           {/* Items */}

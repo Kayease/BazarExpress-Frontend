@@ -376,7 +376,8 @@ export default function InvoiceSettingsPage() {
 
           </div>
         </div>
-
+      </div>
+      
         {/* Settings Modal */}
         <InvoiceSettings
           isOpen={showSettings}
@@ -391,7 +392,6 @@ export default function InvoiceSettingsPage() {
           onClose={() => setShowPreview(false)}
           orderData={sampleOrderData}
         />
-      </div>
     </AdminLayout>
   );
 }
