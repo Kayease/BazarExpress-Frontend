@@ -455,6 +455,14 @@ export default function AdminReviews() {
                   )}
                 </div>
                 <div className="flex items-center space-x-1 ml-3 flex-shrink-0">
+                  {/* View Product button - available for all review statuses */}
+                  <button 
+                    onClick={() => window.open(`/products/${review.product._id}`, '_blank')}
+                    className="p-1.5 text-gray-400 hover:text-blue-500 transition-colors"
+                    title="View Product Page"
+                  >
+                    <Eye className="h-4 w-4" />
+                  </button>
                   {review.status === "pending" && (
                     <>
                       <button 

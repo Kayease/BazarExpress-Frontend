@@ -815,37 +815,35 @@ export default function CustomerAnalyticsPage() {
                 </div>
 
                 {/* Order Status Breakdown */}
-                {selectedCustomer.orderStatuses && (
-                  <div>
-                    <h4 className="text-lg font-semibold text-gray-900 mb-4">Order Status Breakdown</h4>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                      <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-                        <span className="text-sm font-medium text-blue-800">New</span>
-                        <span className="text-lg font-bold text-blue-900">{selectedCustomer.orderStatuses.new || 0}</span>
-                      </div>
-                      <div className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg">
-                        <span className="text-sm font-medium text-yellow-800">Processing</span>
-                        <span className="text-lg font-bold text-yellow-900">{selectedCustomer.orderStatuses.processing || 0}</span>
-                      </div>
-                      <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
-                        <span className="text-sm font-medium text-purple-800">Shipped</span>
-                        <span className="text-lg font-bold text-purple-900">{selectedCustomer.orderStatuses.shipped || 0}</span>
-                      </div>
-                      <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                        <span className="text-sm font-medium text-green-800">Delivered</span>
-                        <span className="text-lg font-bold text-green-900">{selectedCustomer.orderStatuses.delivered || 0}</span>
-                      </div>
-                      <div className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
-                        <span className="text-sm font-medium text-red-800">Cancelled</span>
-                        <span className="text-lg font-bold text-red-900">{selectedCustomer.orderStatuses.cancelled || 0}</span>
-                      </div>
-                      <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                        <span className="text-sm font-medium text-gray-800">Refunded</span>
-                        <span className="text-lg font-bold text-gray-900">{selectedCustomer.orderStatuses.refunded || 0}</span>
-                      </div>
+                <div>
+                  <h4 className="text-lg font-semibold text-gray-900 mb-4">Order Status Breakdown</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                      <span className="text-sm font-medium text-blue-800">New</span>
+                      <span className="text-lg font-bold text-blue-900">{selectedCustomer.orderStatuses?.new || 0}</span>
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg">
+                      <span className="text-sm font-medium text-yellow-800">Processing</span>
+                      <span className="text-lg font-bold text-yellow-900">{selectedCustomer.orderStatuses?.processing || 0}</span>
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
+                      <span className="text-sm font-medium text-purple-800">Shipped</span>
+                      <span className="text-lg font-bold text-purple-900">{selectedCustomer.orderStatuses?.shipped || 0}</span>
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                      <span className="text-sm font-medium text-green-800">Delivered</span>
+                      <span className="text-lg font-bold text-green-900">{selectedCustomer.orderStatuses?.delivered || 0}</span>
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
+                      <span className="text-sm font-medium text-red-800">Cancelled</span>
+                      <span className="text-lg font-bold text-red-900">{selectedCustomer.orderStatuses?.cancelled || 0}</span>
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <span className="text-sm font-medium text-gray-800">Refunded</span>
+                      <span className="text-lg font-bold text-gray-900">{selectedCustomer.orderStatuses?.refunded || 0}</span>
                     </div>
                   </div>
-                )}
+                </div>
               </div>
             </div>
           </div>
