@@ -126,6 +126,28 @@ const getRoleBasedMenuItems = (userRole: string) => {
             );
           }, roles: ['admin', 'order_warehouse_management', 'delivery_boy'] },
         { name: "Stock Transfer", href: "/admin/stock-transfer", icon: Building2, roles: ['admin', 'order_warehouse_management'] },
+        { name: "Customer Analytics", href: "/admin/customer-analytics", icon: function CustomerAnalyticsIcon(props: any) {
+            return (
+              <svg
+                width={20}
+                height={20}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                {...props}
+              >
+                <path d="M3 3v18h18" />
+                <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" />
+                <circle cx="18" cy="8" r="2" />
+                <circle cx="13" cy="13" r="2" />
+                <circle cx="10" cy="10" r="2" />
+                <circle cx="7" cy="14" r="2" />
+              </svg>
+            );
+          }, roles: ['admin', 'customer_support_executive'] },
       ],
     },
 
