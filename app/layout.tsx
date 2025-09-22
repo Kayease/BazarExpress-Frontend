@@ -3,6 +3,7 @@ import './globals.css'
 import { AppProvider } from '@/components/app-provider'
 import SiteFrame from '@/components/SiteFrame'
 import { Toaster } from 'react-hot-toast'
+import ChatWidget from '@/components/chatbot/ChatWidget'
 import Script from 'next/script'
 
 export const metadata: Metadata = {
@@ -22,6 +23,7 @@ export default function RootLayout({
           <SiteFrame>
             {children}
           </SiteFrame>
+          <ChatWidget />
           <Toaster 
             position="top-right"
             toastOptions={{

@@ -7,7 +7,6 @@ import { usePathname } from "next/navigation"
 import {
   Home,
   Users,
-  UserCheck,
   BarChart3,
   Bell,
   Package,
@@ -22,27 +21,24 @@ import {
   X,
   RefreshCw,
   ImageIcon,
-  Sparkles,
   BookOpen,
   HelpCircle,
   Mail,
-  Phone,
-  UserPlus,
   Star,
   Menu,
   ChevronLeft,
   LogOut,
   Send,
-  Warehouse,
-  FileText,
-  Settings,
-  Receipt
+  Receipt, 
+  Bot
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useAppSelector, useAppDispatch } from '../lib/store'
 import { logout as reduxLogout } from '../lib/slices/authSlice'
 import Image from "next/image"
 import { initializeGlobalToastInterceptor } from '../lib/utils/globalToastInterceptor'
+import dynamic from 'next/dynamic'
+const ChatbotSettingsPanel = dynamic(() => import('./admin/ChatbotSettingsPanel'), { ssr: false })
 
 interface AdminLayoutProps {
   children: React.ReactNode
@@ -161,6 +157,7 @@ const getRoleBasedMenuItems = (userRole: string) => {
         { name: "Rating & Reviews", href: "/admin/reviews", icon: Star, roles: ['admin', 'customer_support_executive'] },
         { name: "Invoice Settings", href: "/admin/invoice-settings", icon: Receipt, roles: ['admin', 'report_finance_analyst'] },
         { name: "Abandoned Cart", href: "/admin/abandoned-cart", icon: ShoppingCart, roles: ['admin'] },
+        { name: "Chatbot", href: "/admin/chatbot", icon: Bot, roles: ['admin', 'customer_support_executive', 'marketing_content_manager'] },
       ],
     },
   ];
@@ -345,7 +342,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col bg-gradient-to-br from-white via-purple-50 to-white overflow-x-hidden">
+      <div className="flex-1 flex flex-col bg-gradient-to-br from-white via-purple-50 to-white overflow-x-hidden relative">
         {/* Top Bar */}
         <header className="bg-white/80 shadow-sm border-b border-purple-200 px-8 py-5 backdrop-blur-md">
           <div className="flex items-center justify-between">
