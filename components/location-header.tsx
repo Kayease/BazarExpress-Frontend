@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState } from 'react';
+import React from 'react';
 import { MapPin, ChevronDown, Store, Clock, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useLocation } from '@/components/location-provider';
-import { PincodeLocationModal } from '@/components/pincode-location-modal';
+// Modal is rendered once in LocationProvider; use context to open it
 import { useCartContext } from '@/components/app-provider';
 
 export function LocationHeader() {
@@ -13,12 +13,11 @@ export function LocationHeader() {
     deliveryMessage,
     isGlobalMode,
     switchToGlobalMode,
-    switchToCustomMode
+    switchToCustomMode,
+    setShowLocationModal
   } = useLocation();
   
   const { cartItems } = useCartContext();
-
-  const [showLocationModal, setShowLocationModal] = useState(false);
 
   const handleLocationClick = () => {
     setShowLocationModal(true);
@@ -53,11 +52,7 @@ export function LocationHeader() {
           </div>
         </div>
         
-        <PincodeLocationModal
-          isOpen={showLocationModal}
-          onClose={() => setShowLocationModal(false)}
-          showOnMount={true}
-        />
+        {/* Modal is managed and rendered by LocationProvider */}
       </>
     );
   }
@@ -139,10 +134,7 @@ export function LocationHeader() {
         </div>
       </div>
       
-      <PincodeLocationModal
-        isOpen={showLocationModal}
-        onClose={() => setShowLocationModal(false)}
-      />
+      {/* Modal is managed and rendered by LocationProvider */}
     </>
   );
 }

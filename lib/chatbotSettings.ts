@@ -9,23 +9,24 @@ export type ChatbotSettings = {
   fallbackMessage?: string
 }
 
-export type FaqDoc = {
-  _id?: string
-  id: string
-  filename: string
-  content: string
-  url?: string
-}
+// FAQ Documents type removed
 
 export type FaqQA = {
   _id?: string
   id: string
   question: string
   answer: string
+  categoryId?: string
+}
+export type ChatbotCategory = {
+  _id?: string
+  id?: string
+  name: string
 }
 
+const CATEGORY_KEY = 'bx_chatbot_categories'
+
 const SETTINGS_KEY = 'bx_chatbot_settings'
-const FAQ_DOCS_KEY = 'bx_chatbot_docs'
 const FAQ_QAS_KEY = 'bx_chatbot_qas'
 
 function safeParse<T>(raw: string | null, fallback: T): T {
@@ -57,27 +58,7 @@ export function saveChatbotSettings(settings: ChatbotSettings) {
   window.dispatchEvent(new StorageEvent('storage', { key: SETTINGS_KEY }))
 }
 
-export function getFaqDocs(): FaqDoc[] {
-  return safeParse<FaqDoc[]>(
-    typeof window !== 'undefined' ? localStorage.getItem(FAQ_DOCS_KEY) : null,
-    []
-  )
-}
-
-export function addFaqDoc(doc: FaqDoc) {
-  if (typeof window === 'undefined') return
-  const docs = getFaqDocs()
-  const next = [...docs, doc]
-  localStorage.setItem(FAQ_DOCS_KEY, JSON.stringify(next))
-  window.dispatchEvent(new StorageEvent('storage', { key: FAQ_DOCS_KEY }))
-}
-
-export function removeFaqDoc(id: string) {
-  if (typeof window === 'undefined') return
-  const docs = getFaqDocs().filter(d => d.id !== id)
-  localStorage.setItem(FAQ_DOCS_KEY, JSON.stringify(docs))
-  window.dispatchEvent(new StorageEvent('storage', { key: FAQ_DOCS_KEY }))
-}
+// FAQ documents local storage helpers removed
 
 export function getFaqQAs(): FaqQA[] {
   return safeParse<FaqQA[]>(
@@ -102,3 +83,31 @@ export function removeFaqQA(id: string) {
 }
 
 
+export function getCategories(): ChatbotCategory[] {
+  return safeParse<ChatbotCategory[]>(
+    typeof window !== 'undefined' ? localStorage.getItem(CATEGORY_KEY) : null,
+    []
+  )
+}
+
+export function addCategory(cat: ChatbotCategory) {
+  if (typeof window === 'undefined') return
+  const cats = getCategories()
+  const next = [...cats, cat]
+  localStorage.setItem(CATEGORY_KEY, JSON.stringify(next))
+  window.dispatchEvent(new StorageEvent('storage', { key: CATEGORY_KEY }))
+}
+
+export function updateCategoryLocal(id: string, name: string) {
+  if (typeof window === 'undefined') return
+  const cats = getCategories().map(c => (c.id === id ? { ...c, name } : c))
+  localStorage.setItem(CATEGORY_KEY, JSON.stringify(cats))
+  window.dispatchEvent(new StorageEvent('storage', { key: CATEGORY_KEY }))
+}
+
+export function removeCategoryLocal(id: string) {
+  if (typeof window === 'undefined') return
+  const cats = getCategories().filter(c => c.id !== id)
+  localStorage.setItem(CATEGORY_KEY, JSON.stringify(cats))
+  window.dispatchEvent(new StorageEvent('storage', { key: CATEGORY_KEY }))
+}

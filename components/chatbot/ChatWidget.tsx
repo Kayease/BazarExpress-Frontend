@@ -1,19 +1,21 @@
 "use client"
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { getChatbotSettings, saveChatbotSettings, type ChatbotSettings, getFaqDocs, getFaqQAs, type FaqDoc, type FaqQA } from '@/lib/chatbotSettings'
+import { usePathname } from 'next/navigation'
+import { getChatbotSettings, saveChatbotSettings, type ChatbotSettings, getFaqQAs, type FaqQA, type ChatbotCategory } from '@/lib/chatbotSettings'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Send } from 'lucide-react'
-import { fetchChatbotSettings, fetchQAs, fetchDocs } from '@/lib/api/chatbot'
+import { Send, ChevronRight, ChevronDown, CheckCheck } from 'lucide-react'
+import { fetchChatbotSettings, fetchQAs, fetchCategories } from '@/lib/api/chatbot'
 
 type ChatMessage = {
   id: string
   role: 'user' | 'bot'
   content: string
+  createdAt: number
 }
 
 type ConversationMode = 'idle' | 'orders' | 'refunds' | 'other'
@@ -47,6 +49,11 @@ function jaccard(a: Set<string>, b: Set<string>): number {
 }
 
 export default function ChatWidget() {
+  const pathname = usePathname()
+  return pathname === '/contact' ? <ChatWidgetInner /> : null
+}
+
+function ChatWidgetInner() {
   const settings = useChatbotConfig()
   const [serverSettings, setServerSettings] = useState<ChatbotSettings | null>(null)
   const [settingsLoaded, setSettingsLoaded] = useState<boolean>(!process.env.NEXT_PUBLIC_API_URL)
@@ -58,9 +65,15 @@ export default function ChatWidget() {
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [isTyping, setIsTyping] = useState(false)
   const endRef = useRef<HTMLDivElement | null>(null)
+  const triggerRef = useRef<HTMLDivElement | null>(null)
+  const cardRef = useRef<HTMLDivElement | null>(null)
   const [qaItems, setQaItems] = useState<FaqQA[]>(process.env.NEXT_PUBLIC_API_URL ? [] : getFaqQAs())
-  const [docItems, setDocItems] = useState<FaqDoc[]>(process.env.NEXT_PUBLIC_API_URL ? [] : getFaqDocs())
+  const [categories, setCategories] = useState<ChatbotCategory[]>([])
+  const [categoryPageStart, setCategoryPageStart] = useState<number>(0)
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null)
+  const [otherView, setOtherView] = useState<'categories' | 'questions' | 'post_answer'>('categories')
   const [showOptions, setShowOptions] = useState(false)
+  const [postAnswerOrigin, setPostAnswerOrigin] = useState<'orders' | 'refunds' | 'return' | 'other' | null>(null)
 
   const activeSettings: ChatbotSettings = serverSettings || settings
 
@@ -84,33 +97,16 @@ export default function ChatWidget() {
     async function loadInitial() {
       try {
         if (process.env.NEXT_PUBLIC_API_URL) {
-          const [s, qas, docs] = await Promise.all([
+          const [s, qas, cats] = await Promise.all([
             fetchChatbotSettings(),
             fetchQAs().catch(() => []),
-            fetchDocs().catch(() => []),
+            fetchCategories().catch(() => []),
           ])
           if (cancelled) return
           setServerSettings(s)
           setSettingsLoaded(true)
-          // Load knowledge base; if doc has only url, attempt to fetch its text
-          let hydratedDocs = docs as FaqDoc[]
-          const toFetch = hydratedDocs.filter(d => (!d.content || d.content.length === 0) && d.url)
-          if (toFetch.length > 0) {
-            const fetched = await Promise.all(toFetch.map(async d => {
-              try {
-                const res = await fetch(d.url as string)
-                const text = await res.text()
-                return { ...d, content: text }
-              } catch { return d }
-            }))
-            const map = new Map(hydratedDocs.map(d => [d.id || (d as any)._id || d.filename, d]))
-            for (const fd of fetched) {
-              map.set((fd as any).id || (fd as any)._id || fd.filename, fd)
-            }
-            hydratedDocs = Array.from(map.values())
-          }
           setQaItems(qas as FaqQA[])
-          setDocItems(hydratedDocs as FaqDoc[])
+          setCategories(cats as ChatbotCategory[])
         }
       } catch (_) {
         setSettingsLoaded(true)
@@ -128,9 +124,10 @@ export default function ChatWidget() {
       // Show typing dots briefly before first messages
       setIsTyping(true)
       const t = setTimeout(() => {
+        const now = Date.now()
         setMessages([
-          { id: generateId(), role: 'bot', content: greeting },
-          { id: generateId(), role: 'bot', content: followUp },
+          { id: generateId(), role: 'bot', content: greeting, createdAt: now },
+          { id: generateId(), role: 'bot', content: followUp, createdAt: now },
         ])
         setShowOptions(true)
         setIsTyping(false)
@@ -139,6 +136,23 @@ export default function ChatWidget() {
     }
   }, [open, activeSettings, messages.length])
 
+  // Close on outside click (outside card and trigger button)
+  useEffect(() => {
+    function handlePointerDown(e: MouseEvent | TouchEvent) {
+      if (!open) return
+      const target = e.target as Node
+      if (cardRef.current && cardRef.current.contains(target)) return
+      if (triggerRef.current && triggerRef.current.contains(target)) return
+      setOpen(false)
+    }
+    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('touchstart', handlePointerDown, { passive: true })
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('touchstart', handlePointerDown)
+    }
+  }, [open])
+
   const quickOptions = useMemo(() => ['Orders', 'Refunds', 'Return', 'Other'], [])
   const showQuickOptions = open && mode === 'idle' && !awaitingOrderId && showOptions
 
@@ -146,7 +160,7 @@ export default function ChatWidget() {
     const trimmed = text.trim()
     if (!trimmed) return
     setShowOptions(false)
-    const next: ChatMessage[] = [...messages, { id: generateId(), role: 'user', content: trimmed }]
+    const next: ChatMessage[] = [...messages, { id: generateId(), role: 'user', content: trimmed, createdAt: Date.now() }]
     setMessages(next)
     respond(trimmed, next)
     setInput('')
@@ -155,7 +169,7 @@ export default function ChatWidget() {
   function handleQuickSelection(option: string) {
     setShowOptions(false)
     // Echo the user's choice into the chat
-    setMessages(prev => [...prev, { id: generateId(), role: 'user', content: option }])
+  setMessages(prev => [...prev, { id: generateId(), role: 'user', content: option, createdAt: Date.now() }])
     // Hide quick options after selection
     if (option === 'Orders') {
       setMode('orders')
@@ -166,20 +180,25 @@ export default function ChatWidget() {
     if (option === 'Refunds') {
       setMode('refunds')
       setAwaitingOrderId(true)
-      const summary = searchDocsLocalOrServer('refund policy') || 'You can initiate a return from <a href="/account?tab=orders" class="underline" target="_self" rel="noopener">Account → Orders</a> after delivery if the item is eligible. Share your Return ID (e.g., RET-00000000-UVWXYZ) to check status.'
       botReply('For refunds/returns, please provide your Return ID (e.g., RET-00000000-UVWXYZ).', 200)
-      botReply(summary, 300)
+      botReply('You can initiate a return from <a href="/account?tab=orders" class="underline text-brand-primary hover:text-brand-primary-dark" target="_self" rel="noopener">Account → Orders</a> after delivery if the item is eligible. Share your Return ID (e.g., RET-00000000-UVWXYZ) to check status.', 300)
       return
     }
     if (option === 'Return') {
-      botReply('You can initiate a return from <a href="/account?tab=orders" class="underline" target="_self" rel="noopener">Account → Orders</a> once the order is delivered and eligible for return.', 200)
-      setMode('idle')
-      setTimeout(() => setShowOptions(true), 250)
+      botReply('You can initiate a return from <a href="/account?tab=orders" class="underline text-brand-primary hover:text-brand-primary-dark" target="_self" rel="noopener">Account → Orders</a> once the order is delivered and eligible for return.', 200)
+      // After guidance, show post-answer prompt instead of main options
+      setMode('other')
+      setOtherView('post_answer')
+      setPostAnswerOrigin('orders')
+      setShowOptions(false)
       return
     }
     if (option === 'Other') {
+      // Enter Other flow; only snapshot after the next specific selection
       setMode('other')
-      botReply('Certainly—please type your question, and I’ll be glad to help.', 200)
+      setOtherView('categories')
+      setCategoryPageStart(0)
+      setSelectedCategoryId(null)
       return
     }
   }
@@ -211,7 +230,7 @@ export default function ChatWidget() {
         }
         const parsedOrder = foundOrder || parseOrderId(raw)
         if (parsedOrder) {
-          botReply('I detected an Order ID. To initiate or track a return, open <a href="/account" class="underline" target="_self" rel="noopener">Account → Orders</a>, select the order, and choose Return/Refund. If you already have a Return ID (RET-00000000-UVWXYZ), share that and I’ll check its status.', 200)
+          botReply('I detected an Order ID. To initiate or track a return, open <a href="/account" class="underline  text-brand-primary hover:text-brand-primary-dark" target="_self" rel="noopener">Account → Orders</a>, select the order, and choose Return/Refund. If you already have a Return ID (RET-00000000-UVWXYZ), share that and I’ll check its status.', 200)
           return
         }
         botReply('That reference looks incorrect. For returns, please provide a Return ID like RET-00000000-UVWXYZ.', 200)
@@ -234,11 +253,17 @@ export default function ChatWidget() {
     // Branching flows
     if (lower === 'other') {
       setMode('other')
-      botReply('Certainly—please type your question, and I’ll be glad to help.', 250)
+      setOtherView('categories')
+      setCategoryPageStart(0)
+      setSelectedCategoryId(null)
       return
     }
     if (lower === 'return') {
-      botReply('You can initiate a return from <a href="/account?tab=orders" class="underline" target="_self" rel="noopener">Account → Orders</a> once your order is delivered and eligible for return.', 250)
+      botReply('You can initiate a return from <a href="/account?tab=orders" class="underline text-brand-primary hover:text-brand-primary-dark" target="_self" rel="noopener">Account → Orders</a> once your order is delivered and eligible for return.', 250)
+      setMode('other')
+      setOtherView('post_answer')
+      setPostAnswerOrigin('refunds')
+      setShowOptions(false)
       return
     }
     if (lower.includes('order')) {
@@ -250,9 +275,8 @@ export default function ChatWidget() {
     if (lower.includes('refund') || lower.includes('return')) {
       setMode('refunds')
       setAwaitingOrderId(true)
-      const summary = searchDocsLocalOrServer('refund policy') || 'You can initiate a return from <a href="/account?tab=orders" class="underline" target="_self" rel="noopener">Account → Orders</a> after delivery if the item is eligible. Share your Return ID (e.g., RET-00000000-UVWXYZ) to check status.'
       botReply('For refunds/returns, please provide your Return ID (e.g., RET-00000000-UVWXYZ).', 250)
-      botReply(summary, 350)
+      botReply('You can initiate a return from <a href="/account?tab=orders" class="underline  text-brand-primary hover:text-brand-primary-dark" target="_self" rel="noopener">Account → Orders</a> after delivery if the item is eligible. Share your Return ID (e.g., RET-00000000-UVWXYZ) to check status.', 350)
       return
     }
 
@@ -262,11 +286,7 @@ export default function ChatWidget() {
       botReply(qaAns, 250)
       return
     }
-    const faq = searchDocsLocalOrServer(lower)
-    if (faq) {
-      botReply(faq, 250)
-      return
-    }
+    // Documents search removed
 
     botReply(activeSettings.fallbackMessage || "I'm not sure about that. Try asking about orders, refunds, or general info.", 250)
     setMode('idle')
@@ -274,17 +294,69 @@ export default function ChatWidget() {
   }
 
   function enqueue(content: string) {
-    setMessages(prev => [...prev, { id: generateId(), role: 'bot', content }])
+    setMessages(prev => [...prev, { id: generateId(), role: 'bot', content, createdAt: Date.now() }])
   }
 
   // (CTA row removed by request; we now include inline links in bot messages.)
 
-  function botReply(content: string, delayMs = 800) {
-    setIsTyping(true)
+  function botReply(content: string, delayMs = 800, showTyping: boolean = true) {
+    if (showTyping) setIsTyping(true)
     setTimeout(() => {
       enqueue(content)
-      setIsTyping(false)
+      if (showTyping) setIsTyping(false)
     }, delayMs)
+  }
+
+  // Helpers to snapshot the options the user saw into the chat (no typing indicator)
+  function buildCategoriesContent(startIndex: number = categoryPageStart): string {
+    const slice = categories.slice(startIndex, startIndex + 5)
+    const lines: string[] = []
+    lines.push(`Sure, what's your question about?`)
+    lines.push('')
+    for (const c of slice) {
+      lines.push(c.name)
+    }
+    lines.push('Go Back')
+    if (startIndex + 5 < categories.length) {
+      lines.push('Load More...')
+    }
+    return lines.join('<br/>')
+  }
+
+  function snapshotCategoriesToChat(startIndex?: number) {
+    const content = buildCategoriesContent(typeof startIndex === 'number' ? startIndex : categoryPageStart)
+    // Post immediately without typing
+    enqueue(content)
+  }
+
+  function buildQuestionsContent(categoryId: string): string {
+    const items = qaItems.filter(q => (q as any).categoryId === categoryId)
+    const lines: string[] = []
+    lines.push('Sure, what\'s your question about?')
+    lines.push('')
+    for (const q of items) {
+      lines.push(q.question)
+    }
+    lines.push('Go Back')
+    return lines.join('<br/>')
+  }
+
+  function snapshotQuestionsToChat(categoryId: string) {
+    const content = buildQuestionsContent(categoryId)
+    enqueue(content)
+  }
+
+  function formatTime(ts: number): string {
+    try {
+      const d = new Date(ts)
+      const hours = d.getHours()
+      const minutes = d.getMinutes().toString().padStart(2, '0')
+      const ampm = hours >= 12 ? 'pm' : 'am'
+      const h12 = ((hours + 11) % 12) + 1
+      return `${h12}:${minutes} ${ampm}`
+    } catch {
+      return ''
+    }
   }
 
   // Auto-scroll to bottom when messages or typing indicator changes
@@ -347,9 +419,10 @@ export default function ChatWidget() {
     const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
     if (!token) {
-      botReply(`To view details for ${orderId}, please sign in and try again. You can also see all orders under <a href="/account" class="underline" target="_self" rel="noopener">Account → Orders</a>.`, 200)
-      setMode('idle')
-      setTimeout(() => setShowOptions(true), 250)
+      botReply(`To view details for ${orderId}, please sign in and try again. You can also see all orders under <a href="/account" class="underline  text-brand-primary hover:text-brand-primary-dark" target="_self" rel="noopener">Account → Orders</a>.`, 200)
+      setMode('other')
+      setOtherView('post_answer')
+      setShowOptions(false)
       return
     }
     botReply(`Checking status for ${orderId} ...`, 200)
@@ -362,20 +435,26 @@ export default function ChatWidget() {
       })
       if (res.status === 404) {
         botReply(`I couldn’t find an order with ID ${orderId}. Please confirm the ID and try again. If you recently placed it, it may take a minute to appear.`, 200)
-        setMode('idle')
-        setTimeout(() => setShowOptions(true), 250)
+        setMode('other')
+        setOtherView('post_answer')
+        setPostAnswerOrigin('orders')
+        setShowOptions(false)
         return
       }
       if (res.status === 403) {
         botReply(`This order doesn’t belong to the signed-in account. Please ensure you’re signed in with the correct account.`, 200)
-        setMode('idle')
-        setTimeout(() => setShowOptions(true), 250)
+        setMode('other')
+        setOtherView('post_answer')
+        setPostAnswerOrigin('orders')
+        setShowOptions(false)
         return
       }
       if (!res.ok) {
         botReply(`Sorry, I couldn’t retrieve that order right now. Please try again in a moment.`, 200)
-        setMode('idle')
-        setTimeout(() => setShowOptions(true), 250)
+        setMode('other')
+        setOtherView('post_answer')
+        setPostAnswerOrigin('refunds')
+        setShowOptions(false)
         return
       }
       const json = await res.json()
@@ -387,13 +466,17 @@ export default function ChatWidget() {
       if (placed) line += ` Order Placed on ${placed}.`
       if (eta) line += ` Estimated delivery: ${eta}.`
       botReply(line, 150)
-      botReply('You can see complete details under <a href="/account?tab=orders" class="underline" target="_self" rel="noopener">Account → Orders</a>.', 200)
-      setMode('idle')
-      setTimeout(() => setShowOptions(true), 250)
+      botReply('You can see complete details under <a href="/account?tab=orders" class="underline  text-brand-primary hover:text-brand-primary-dark" target="_self" rel="noopener">Account → Orders</a>.', 200)
+      setMode('other')
+      setOtherView('post_answer')
+      setPostAnswerOrigin('orders')
+      setShowOptions(false)
     } catch (_) {
       botReply(`Sorry, something went wrong while checking that order. Please try again.`, 200)
-      setMode('idle')
-      setTimeout(() => setShowOptions(true), 250)
+      setMode('other')
+      setOtherView('post_answer')
+      setPostAnswerOrigin('orders')
+      setShowOptions(false)
     }
   }
 
@@ -401,9 +484,10 @@ export default function ChatWidget() {
     const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
     if (!token) {
-      botReply(`To view details for ${returnId}, please sign in and try again. You can manage returns under <a href="/account" class="underline" target="_self" rel="noopener">Account → Orders</a>.`, 200)
-      setMode('idle')
-      setTimeout(() => setShowOptions(true), 250)
+      botReply(`To view details for ${returnId}, please sign in and try again. You can manage returns under <a href="/account" class="underline  text-brand-primary hover:text-brand-primary-dark" target="_self" rel="noopener">Account → Orders</a>.`, 200)
+      setMode('other')
+      setOtherView('post_answer')
+      setShowOptions(false)
       return
     }
     botReply(`Checking return ${returnId} ...`, 200)
@@ -416,20 +500,24 @@ export default function ChatWidget() {
       })
       if (res.status === 404) {
         botReply(`I couldn’t find a return with ID ${returnId}. Please verify the Return ID (e.g., RET-00000000-UVWXYZ) and try again.`, 200)
-        setMode('idle')
-        setTimeout(() => setShowOptions(true), 250)
+        setMode('other')
+        setOtherView('post_answer')
+        setPostAnswerOrigin('refunds')
+        setShowOptions(false)
         return
       }
       if (res.status === 403) {
         botReply(`This return doesn’t belong to the signed-in account. Please ensure you’re signed in with the correct account.`, 200)
-        setMode('idle')
-        setTimeout(() => setShowOptions(true), 250)
+        setMode('other')
+        setOtherView('post_answer')
+        setShowOptions(false)
         return
       }
       if (!res.ok) {
         botReply(`Sorry, I couldn’t retrieve that return right now. Please try again in a moment.`, 200)
-        setMode('idle')
-        setTimeout(() => setShowOptions(true), 250)
+        setMode('other')
+        setOtherView('post_answer')
+        setShowOptions(false)
         return
       }
       const json = await res.json()
@@ -440,13 +528,17 @@ export default function ChatWidget() {
       if (created) line += ` Created on ${created}.`
       // Basic guidance
       botReply(line, 150)
-      botReply('You can view full details under <a href="/account?tab=returns" class="underline" target="_self" rel="noopener">Account → Returns</a>.', 200)
-      setMode('idle')
-      setTimeout(() => setShowOptions(true), 250)
+      botReply('You can view full details under <a href="/account?tab=returns" class="underline text-brand-primary hover:text-brand-primary-dark" target="_self" rel="noopener">Account → Returns</a>.', 200)
+      setMode('other')
+      setOtherView('post_answer')
+      setPostAnswerOrigin('refunds')
+      setShowOptions(false)
     } catch (_) {
       botReply(`Sorry, something went wrong while checking that return. Please try again.`, 200)
-      setMode('idle')
-      setTimeout(() => setShowOptions(true), 250)
+      setMode('other')
+      setOtherView('post_answer')
+      setPostAnswerOrigin('refunds')
+      setShowOptions(false)
     }
   }
 
@@ -466,19 +558,7 @@ export default function ChatWidget() {
     return best && best.score >= 0.28 ? best.answer : null
   }
 
-  function searchDocsLocalOrServer(query: string): string | null {
-    const qTokens = tokenize(query)
-    let best: { score: number; content: string } | null = null
-    for (const d of docItems) {
-      if (!d.content) continue
-      const score = jaccard(qTokens, tokenize(d.content))
-      if (!best || score > best.score) best = { score, content: d.content }
-    }
-    if (best && best.score >= 0.18) {
-      return best.content.slice(0, 600)
-    }
-    return null
-  }
+  // FAQ documents search removed
 
   return (
     <>
@@ -494,6 +574,7 @@ export default function ChatWidget() {
         style={{ width: 56, height: 56, backgroundColor: activeSettings.primaryColor || '#111827' }}
         onClick={() => setOpen(v => !v)}
         aria-label="Open chatbot"
+        ref={triggerRef}
       >
         {activeSettings.iconType === 'emoji' ? (
           <span style={{ fontSize: 24 }} aria-hidden>
@@ -508,7 +589,7 @@ export default function ChatWidget() {
 
       {/* Chat Window */}
       {open && (
-        <Card className="fixed z-50 bottom-20 right-5 w-[340px] overflow-hidden bg-white/80 backdrop-blur-md border border-gray-200 shadow-xl rounded-xl">
+        <Card ref={cardRef} className="fixed z-50 bottom-20 right-5 w-[350px] h-[580px] flex flex-col overflow-hidden bg-black/5 backdrop-blur-lg border border-white/60 shadow-xl rounded-xl">
           <div className="flex items-center gap-2 px-3 py-2" style={{ background: activeSettings.primaryColor || '#111827', color: '#fff' }}>
             <div className="flex items-center justify-center w-6 h-6 rounded bg-white/10">
               {activeSettings.iconType === 'emoji' ? (
@@ -523,28 +604,50 @@ export default function ChatWidget() {
             <div className="ml-auto text-xs opacity-80">Online 🟢</div>
           </div>
 
-          <ScrollArea className="h-72 p-3">
+          <ScrollArea className="flex-1 p-3">
             <div className="space-y-2">
               {messages.map(m => (
                 <div key={m.id} className={cn('flex', m.role === 'user' ? 'justify-end' : 'justify-start')}>
-                  {m.role === 'user' ? (
-                    <div
-                      className={cn(
-                        'px-3 py-2 rounded text-sm max-w-[80%] whitespace-pre-wrap border text-white',
-                      )}
-                      style={{ backgroundColor: activeSettings.primaryColor || '#111827', borderColor: 'transparent' }}
-                    >
-                      {m.content}
-                    </div>
-                  ) : (
-                    <div
-                      className={cn(
-                        'px-3 py-2 rounded text-sm max-w-[80%] border bg-white text-gray-900'
-                      )}
-                      style={{ borderColor: '#e5e7eb' }}
-                      dangerouslySetInnerHTML={{ __html: m.content }}
-                    />
-                  )}
+                  {/* Bubble container for tail positioning */}
+                  <div className="relative max-w-[80%]">
+                    {m.role === 'user' ? (
+                      <div className="relative">
+                        <div
+                          className={cn(
+                            'px-3 py-2 rounded text-sm whitespace-pre-wrap border text-white',
+                          )}
+                          style={{ backgroundColor: activeSettings.primaryColor || '#111827', borderColor: 'transparent' }}
+                        >
+                          <div dangerouslySetInnerHTML={{ __html: m.content }} />
+                          <div className="mt-1 flex items-center justify-end gap-1 text-[10px] opacity-80">
+                            <span>{formatTime(m.createdAt)}</span>
+                            <CheckCheck className="h-3 w-3" />
+                          </div>
+                        </div>
+                        {/* Right tail */}
+                        <div
+                          className="absolute -bottom-1 -right-1 w-2 h-2 rotate-45"
+                          style={{ backgroundColor: activeSettings.primaryColor || '#111827' }}
+                        />
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <div
+                          className={cn(
+                            'px-3 py-2 rounded text-sm whitespace-pre-wrap border bg-white text-gray-900'
+                          )}
+                          style={{ borderColor: '#ffffff' }}
+                        >
+                          <div dangerouslySetInnerHTML={{ __html: m.content }} />
+                          <div className="mt-1 flex items-center justify-start gap-1 text-[10px] text-gray-500">
+                            <span>{formatTime(m.createdAt)}</span>
+                          </div>
+                        </div>
+                        {/* Left tail with border */}
+                        <div className="absolute -bottom-1 -left-1 w-2 h-2 rotate-45 bg-white border" style={{ borderColor: '#ffffff' }} />
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))}
               {isTyping && (
@@ -572,20 +675,188 @@ export default function ChatWidget() {
                 ))}
               </div>
             )}
-            <div className="flex gap-2 pb-3">
-              <Input
-                ref={inputRef}
-                placeholder="Type your message..."
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') handleUserSend(input)
-                }}
-              />
-              <Button onClick={() => handleUserSend(input)} size="icon" className="text-white" style={{ backgroundColor: activeSettings.primaryColor || '#111827' }} aria-label="Send message" title="Send">
-                <Send className="h-4 w-4" />
-              </Button>
-            </div>
+            {/* Guided Other flow: categories / questions / post-answer */}
+            {mode === 'other' && otherView === 'categories' && (
+              <div className="mb-2 space-y-2">
+                <div className="text-xs text-gray-600">Sure, what's your question about?</div>
+                <div className="rounded-lg border border-purple-100 bg-purple-50/60 p-2">
+                  <div className="flex flex-col gap-2">
+                    {categories.slice(categoryPageStart, categoryPageStart + 5).map(c => (
+                      <Button
+                        key={(c._id || c.id) as string}
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          // Snapshot the questions visible for this category
+                          const cid = (c._id || c.id) as string
+                          snapshotQuestionsToChat(cid)
+                          // Record user selection
+                          setMessages(prev => [...prev, { id: generateId(), role: 'user', content: c.name, createdAt: Date.now() }])
+                          setSelectedCategoryId(cid)
+                          setOtherView('questions')
+                        }}
+                        className="w-full justify-between rounded-lg border-purple-200 bg-white text-purple-600 hover:text-purple-700"
+                      >
+                        <span className="truncate text-left">{c.name}</span>
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    ))}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full justify-between rounded-lg border-purple-200 bg-white text-purple-600 hover:text-purple-700"
+                      onClick={() => {
+                        // Snapshot current category list then record user action
+                        snapshotCategoriesToChat(categoryPageStart)
+                        setMessages(prev => [...prev, { id: generateId(), role: 'user', content: 'Go Back', createdAt: Date.now() }])
+                        if (categoryPageStart > 0) {
+                          const nextStart = Math.max(0, categoryPageStart - 5)
+                          setCategoryPageStart(nextStart)
+                        } else {
+                          setMode('idle')
+                          setShowOptions(true)
+                        }
+                      }}
+                    >
+                      <span>Go Back</span>
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                    {categoryPageStart + 5 < categories.length && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full justify-between rounded-lg border-purple-200 bg-white text-purple-600 hover:text-purple-700"
+                        onClick={() => {
+                          // Snapshot current view then record user action
+                          snapshotCategoriesToChat(categoryPageStart)
+                          setMessages(prev => [...prev, { id: generateId(), role: 'user', content: 'Load More...', createdAt: Date.now() }])
+                          const nextStart = categoryPageStart + 5
+                          setCategoryPageStart(nextStart)
+                        }}
+                      >
+                        <span>Load More...</span>
+                        <ChevronDown className="h-4 w-4" />
+                      </Button>
+                    )}
+
+                  </div>
+                </div>
+              </div>
+            )}
+            {mode === 'other' && otherView === 'questions' && selectedCategoryId && (
+              <div className="mb-2 space-y-2">
+                <div className="text-xs text-gray-600">Sure, what would you like to know?</div>
+                <div className="rounded-lg border border-purple-100 bg-purple-50/60 p-2">
+                  <div className="flex flex-col gap-2">
+                    {qaItems.filter(q => (q as any).categoryId === selectedCategoryId).map((q, idx) => (
+                      <Button
+                        key={(q._id || q.id || idx) as string}
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          // Snapshot the questions list the user saw
+                          if (selectedCategoryId) {
+                            snapshotQuestionsToChat(selectedCategoryId)
+                          }
+                          // Record the user's chosen question, then answer
+                          setMessages(prev => [...prev, { id: generateId(), role: 'user', content: q.question, createdAt: Date.now() }])
+                          botReply(q.answer, 150)
+                          setOtherView('post_answer')
+                        }}
+                        className="w-full justify-between rounded-lg border-purple-200 bg-white text-purple-600 hover:text-purple-700"
+                      >
+                        <span className="truncate text-left">{q.question}</span>
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    ))}
+                    {qaItems.filter(q => (q as any).categoryId === selectedCategoryId).length === 0 && (
+                      <div className="text-xs text-gray-500">No questions in this category yet.</div>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full justify-between rounded-lg border-purple-200 bg-white text-purple-600 hover:text-purple-700"
+                      onClick={() => {
+                        // Snapshot categories then record action
+                        snapshotCategoriesToChat(0)
+                        setMessages(prev => [...prev, { id: generateId(), role: 'user', content: 'Go Back', createdAt: Date.now() }])
+                        setOtherView('categories');
+                        setSelectedCategoryId(null);
+                      }}
+                    >
+                      <span>Go Back</span>
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+            {mode === 'other' && otherView === 'post_answer' && (
+              <div className="mb-2 space-y-2">
+                <div className="text-xs text-gray-500">Anything else I can help with?</div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setMessages(prev => [...prev, { id: generateId(), role: 'user', content: 'Yes, I still need help', createdAt: Date.now() }])
+                      if (postAnswerOrigin === 'orders' || postAnswerOrigin === 'refunds' || postAnswerOrigin === 'return') {
+                        // Restart from beginning: show greeting + main options
+                        const now = Date.now()
+                        const followUp = activeSettings.followUpMessage || 'Please choose an option to get started: Orders, Refunds, Returns, or Other.'
+                        setMessages(prev => [...prev, { id: generateId(), role: 'bot', content: followUp, createdAt: now }])
+                        setMode('idle')
+                        setShowOptions(true)
+                        setOtherView('categories')
+                        setCategoryPageStart(0)
+                        setSelectedCategoryId(null)
+                        setPostAnswerOrigin(null)
+                      } else {
+                        // Continue in Other flow from categories
+                        setOtherView('categories')
+                        setCategoryPageStart(0)
+                        setSelectedCategoryId(null)
+                        setPostAnswerOrigin(null)
+                      }
+                    }}
+                  >
+                    Yes, I still need help
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setMessages(prev => [...prev, { id: generateId(), role: 'user', content: "No, I'm done", createdAt: Date.now() }])
+                      botReply('Bye!', 150)
+                      setTimeout(() => setOpen(false), 800)
+                      setMode('idle')
+                      setShowOptions(true)
+                      setOtherView('categories')
+                      setCategoryPageStart(0)
+                      setSelectedCategoryId(null)
+                    }}
+                  >
+                    No, I'm done
+                  </Button>
+                </div>
+              </div>
+            )}
+            {(mode === 'orders' || mode === 'refunds' || awaitingOrderId) && (
+              <div className="flex gap-2 pb-3">
+                <Input
+                  ref={inputRef}
+                  placeholder="Type your message..."
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') handleUserSend(input)
+                  }}
+                />
+                <Button onClick={() => handleUserSend(input)} size="icon" className="text-white" style={{ backgroundColor: activeSettings.primaryColor || '#111827' }} aria-label="Send message" title="Send">
+                  <Send className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
           </div>
         </Card>
       )}

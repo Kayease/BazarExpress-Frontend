@@ -1,6 +1,6 @@
 import { API_URL } from '@/lib/config'
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api-client'
-import type { ChatbotSettings, FaqDoc, FaqQA } from '@/lib/chatbotSettings'
+import type { ChatbotSettings, FaqQA, ChatbotCategory } from '@/lib/chatbotSettings'
 
 const base = `${API_URL}/chatbot`
 
@@ -16,7 +16,7 @@ export async function fetchQAs(): Promise<FaqQA[]> {
   return apiGet(`${base}/qas`)
 }
 
-export async function createQA(payload: { question: string; answer: string }): Promise<FaqQA> {
+export async function createQA(payload: { question: string; answer: string; categoryId?: string }): Promise<FaqQA> {
   return apiPost(`${base}/qas`, payload)
 }
 
@@ -24,16 +24,23 @@ export async function deleteQA(id: string): Promise<{ success: boolean }> {
   return apiDelete(`${base}/qas/${id}`)
 }
 
-export async function fetchDocs(): Promise<FaqDoc[]> {
-  return apiGet(`${base}/docs`)
+// FAQ Documents API removed
+
+// Categories
+export async function fetchCategories(): Promise<ChatbotCategory[]> {
+  return apiGet(`${base}/categories`)
 }
 
-export async function uploadDocText(payload: { filename: string; content: string; url?: string }): Promise<FaqDoc> {
-  return apiPost(`${base}/docs`, payload)
+export async function createCategory(payload: { name: string }): Promise<ChatbotCategory> {
+  return apiPost(`${base}/categories`, payload)
 }
 
-export async function deleteDocById(id: string): Promise<{ success: boolean }> {
-  return apiDelete(`${base}/docs/${id}`)
+export async function updateCategory(id: string, payload: { name: string }): Promise<ChatbotCategory> {
+  return apiPut(`${base}/categories/${id}`, payload)
+}
+
+export async function deleteCategory(id: string): Promise<{ success: boolean }> {
+  return apiDelete(`${base}/categories/${id}`)
 }
 
 
