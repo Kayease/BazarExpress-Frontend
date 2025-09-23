@@ -157,22 +157,39 @@ function ChatWidgetInner() {
   useEffect(() => {
     if (!open) return
     const { body, documentElement } = document
-    const previousBodyOverflow = body.style.overflow
-    const previousBodyPaddingRight = body.style.paddingRight
-    const previousHtmlOverscroll = documentElement.style.overscrollBehavior
-
-    // Compensate for scrollbar to avoid layout shift on desktop
-    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
-    if (scrollbarWidth > 0) {
-      body.style.paddingRight = `${scrollbarWidth}px`
+    const scrollY = window.scrollY || window.pageYOffset
+    const prev = {
+      overflow: body.style.overflow,
+      paddingRight: body.style.paddingRight,
+      position: body.style.position,
+      top: body.style.top,
+      width: body.style.width,
+      touchAction: body.style.touchAction,
+      htmlOverscroll: documentElement.style.overscrollBehavior,
     }
+
+    // Compensate desktop scrollbar to avoid layout shift
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
+    if (scrollbarWidth > 0) body.style.paddingRight = `${scrollbarWidth}px`
+
     body.style.overflow = 'hidden'
-    documentElement.style.overscrollBehavior = 'contain'
+    body.style.position = 'fixed'
+    body.style.top = `-${scrollY}px`
+    body.style.width = '100%'
+    body.style.touchAction = 'none'
+    documentElement.style.overscrollBehavior = 'none'
 
     return () => {
-      body.style.overflow = previousBodyOverflow
-      body.style.paddingRight = previousBodyPaddingRight
-      documentElement.style.overscrollBehavior = previousHtmlOverscroll
+      body.style.overflow = prev.overflow
+      body.style.paddingRight = prev.paddingRight
+      body.style.position = prev.position
+      body.style.top = prev.top
+      body.style.width = prev.width
+      body.style.touchAction = prev.touchAction
+      documentElement.style.overscrollBehavior = prev.htmlOverscroll
+      // restore scroll position
+      const y = Math.abs(parseInt(prev.top || '0', 10)) || scrollY
+      window.scrollTo(0, y)
     }
   }, [open])
 
@@ -612,6 +629,14 @@ function ChatWidgetInner() {
 
       {/* Chat Window */}
       {open && (
+        <>
+          {/* Transparent overlay to capture touch and prevent background scroll on mobile */}
+          <div
+            className="fixed inset-0 z-[9998]"
+            style={{ touchAction: 'none' }}
+            aria-hidden
+            onClick={() => setOpen(false)}
+          />
         <Card ref={cardRef} className="fixed z-[9999] bottom-20 right-5 w-[350px] h-[580px] flex flex-col overflow-hidden bg-black/5 backdrop-blur-lg border border-white/60 shadow-xl rounded-xl">
           <div className="flex items-center gap-2 px-3 py-2" style={{ background: activeSettings.primaryColor || '#111827', color: '#fff' }}>
             <div className="flex items-center justify-center w-6 h-6 rounded bg-white/10">
@@ -882,6 +907,7 @@ function ChatWidgetInner() {
             )}
           </div>
         </Card>
+        </>
       )}
       <style jsx>{`
         @keyframes chatDots {
