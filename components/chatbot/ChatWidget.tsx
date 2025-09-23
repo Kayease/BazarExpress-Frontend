@@ -153,6 +153,29 @@ function ChatWidgetInner() {
     }
   }, [open])
 
+  // Lock background scroll when widget is open
+  useEffect(() => {
+    if (!open) return
+    const { body, documentElement } = document
+    const previousBodyOverflow = body.style.overflow
+    const previousBodyPaddingRight = body.style.paddingRight
+    const previousHtmlOverscroll = documentElement.style.overscrollBehavior
+
+    // Compensate for scrollbar to avoid layout shift on desktop
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
+    if (scrollbarWidth > 0) {
+      body.style.paddingRight = `${scrollbarWidth}px`
+    }
+    body.style.overflow = 'hidden'
+    documentElement.style.overscrollBehavior = 'contain'
+
+    return () => {
+      body.style.overflow = previousBodyOverflow
+      body.style.paddingRight = previousBodyPaddingRight
+      documentElement.style.overscrollBehavior = previousHtmlOverscroll
+    }
+  }, [open])
+
   const quickOptions = useMemo(() => ['Orders', 'Refunds', 'Return', 'Other'], [])
   const showQuickOptions = open && mode === 'idle' && !awaitingOrderId && showOptions
 
@@ -567,7 +590,7 @@ function ChatWidgetInner() {
       <div
         className={
           cn(
-            'fixed z-50 bottom-5 right-5 flex items-center justify-center rounded-full shadow-lg cursor-pointer',
+            'fixed z-[9999] bottom-5 right-5 flex items-center justify-center rounded-full shadow-lg cursor-pointer',
             'transition-transform hover:scale-105',
           )
         }
@@ -589,7 +612,7 @@ function ChatWidgetInner() {
 
       {/* Chat Window */}
       {open && (
-        <Card ref={cardRef} className="fixed z-50 bottom-20 right-5 w-[350px] h-[580px] flex flex-col overflow-hidden bg-black/5 backdrop-blur-lg border border-white/60 shadow-xl rounded-xl">
+        <Card ref={cardRef} className="fixed z-[9999] bottom-20 right-5 w-[350px] h-[580px] flex flex-col overflow-hidden bg-black/5 backdrop-blur-lg border border-white/60 shadow-xl rounded-xl">
           <div className="flex items-center gap-2 px-3 py-2" style={{ background: activeSettings.primaryColor || '#111827', color: '#fff' }}>
             <div className="flex items-center justify-center w-6 h-6 rounded bg-white/10">
               {activeSettings.iconType === 'emoji' ? (
